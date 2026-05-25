@@ -45,28 +45,37 @@ CONTENT_TYPE_FILES = {
 
 
 def get_references_dir() -> Path:
-    """Find the references directory — works both in dev and bundled (PyInstaller) mode."""
-    # PyInstaller sets sys._MEIPASS when bundled
+    """
+    Find the references directory — works both in dev and bundled (PyInstaller) mode.
+    Returns None if not found rather than crashing — the app handles missing refs gracefully.
+    """
     import sys
-    if hasattr(sys, "_MEIPASS"):
-        base = Path(sys._MEIPASS)
-    else:
-        # Dev mode: references are relative to this file
-        base = Path(__file__).parent
 
-    candidates = [
-        base / "references",
-        base.parent / "references",
+    candidates = []
+
+    # PyInstaller unpacks to sys._MEIPASS at runtime
+    if hasattr(sys, "_MEIPASS"):
+        candidates.append(Path(sys._MEIPASS) / "aceforge" / "references")
+        candidates.append(Path(sys._MEIPASS) / "references")
+
+    # Dev mode and fallbacks
+    candidates += [
         Path(__file__).parent / "references",
+        Path(__file__).parent.parent / "references",
+        Path(__file__).parent.parent / "aceforge" / "references",
+        Path.cwd() / "aceforge" / "references",
+        Path.cwd() / "references",
     ]
+
     for path in candidates:
-        if path.exists():
+        if path.exists() and path.is_dir():
             return path
 
-    raise FileNotFoundError(
-        "Could not find the references/ directory. "
-        "Make sure it is bundled alongside the application."
-    )
+    # No references found — return a placeholder path
+    # The app will run in manual-only mode, AI mode will warn the user
+    fallback = Path(__file__).parent / "references"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
 
 
 class SkillLoader:
@@ -77,15 +86,28 @@ class SkillLoader:
     def _read(self, filename: str) -> str:
         if filename in self._cache:
             return self._cache[filename]
-        path = self._refs_dir / filename
-        if not path.exists():
-            # Try parent (for SKILL.md which lives one level up)
-            path = self._refs_dir.parent / filename
-        if not path.exists():
-            return f"[{filename} not found]"
-        content = path.read_text(encoding="utf-8", errors="replace")
-        self._cache[filename] = content
-        return content
+
+        # Try references dir first, then parent dir (for SKILL.md)
+        candidates = [
+            self._refs_dir / filename,
+            self._refs_dir.parent / filename,
+        ]
+        for path in candidates:
+            if path.exists():
+                content = path.read_text(encoding="utf-8", errors="replace")
+                self._cache[filename] = content
+                return content
+
+        # File missing — return a soft warning embedded in the prompt
+        # so the model knows context is limited rather than getting nothing
+        warning = (
+            f"[REFERENCE FILE MISSING: {filename}]\n"
+            f"This reference file was not bundled with the application.\n"
+            f"AI Mode may have reduced accuracy for content requiring this data.\n"
+            f"See the README for how to add reference files."
+        )
+        self._cache[filename] = warning
+        return warning
 
     def build_system_prompt(
         self,

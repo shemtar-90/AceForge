@@ -38,31 +38,48 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # ── 4. Verify reference files ────────────────────────────────────────
-      #    Reference files must be committed to the repo inside
-      #    aceforge/references/ for AI Mode to work in the release.
-      #    If they are too large for git, use Git LFS or a release asset.
-      - name: Check reference files
+      # ── 4. Prepare reference files ───────────────────────────────────────
+      # Reference files must be committed to aceforge/references/ for AI
+      # Mode to work. Manual Mode always works without them.
+      # The folder is always created so PyInstaller never crashes on it.
+      - name: Prepare reference files
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force -Path "aceforge/references" | Out-Null
+
           $refs = @(
             "aceforge/references/enums.md",
             "aceforge/references/spells.md",
+            "aceforge/references/all_spells.txt",
             "aceforge/references/did_values.md",
-            "aceforge/references/icons.md"
+            "aceforge/references/icons.md",
+            "aceforge/references/armor.md",
+            "aceforge/references/clothing.md",
+            "aceforge/references/melee_weapons.md",
+            "aceforge/references/missile_weapons.md",
+            "aceforge/references/casters.md",
+            "aceforge/references/quests.md",
+            "aceforge/references/lore.md",
+            "aceforge/references/schema.md"
           )
-          $missing = $false
+
+          $missing = @()
+          $present = @()
           foreach ($f in $refs) {
-            if (-not (Test-Path $f)) {
-              Write-Warning "Missing reference file: $f"
-              $missing = $true
-            }
+            if (Test-Path $f) { $present += $f } else { $missing += $f }
           }
-          if ($missing) {
-            Write-Warning "Some reference files are missing. AI Mode will have limited context."
-            Write-Warning "See README.md for how to add reference files."
+
+          Write-Host "Reference files present: $($present.Count)"
+          Write-Host "Reference files missing: $($missing.Count)"
+
+          if ($missing.Count -gt 0) {
+            Write-Warning "Missing files (AI Mode limited) — commit them from ace-content-generator.skill:"
+            foreach ($f in $missing) { Write-Warning "  $f" }
+
+            $txt = "To enable full AI Mode, add the reference files from ace-content-generator.skill`ninto aceforge/references/ and push a new release.`n`nMissing:`n" + ($missing -join "`n")
+            Set-Content -Path "aceforge/references/README_AI_MODE.txt" -Value $txt
           } else {
-            Write-Host "All core reference files present."
+            Write-Host "All reference files present."
           }
 
       # ── 5. Build with PyInstaller ────────────────────────────────────────
@@ -80,7 +97,7 @@ jobs:
           $size = (Get-Item "dist/ACEForge/ACEForge.exe").Length / 1MB
           Write-Host "ACEForge.exe built successfully ($([math]::Round($size, 1)) MB)"
 
-      # ── 7. Get version from tag or default ───────────────────────────────
+      # ── 7. Get version from tag or run number ────────────────────────────
       - name: Get version
         id: version
         shell: pwsh
@@ -94,24 +111,15 @@ jobs:
           echo "ZIP_NAME=ACEForge_${version}_Windows.zip" >> $env:GITHUB_OUTPUT
           Write-Host "Building version: $version"
 
-      # ── 8. Write version file into the build ─────────────────────────────
-      - name: Write version info
+      # ── 8. Write version file and copy README into build ─────────────────
+      - name: Finalize build folder
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.VERSION }}"
-          Set-Content -Path "dist/ACEForge/VERSION.txt" -Value @"
-          ACEForge v$version
-          Built: $(Get-Date -Format 'yyyy-MM-dd HH:mm UTC')
-          Platform: Windows x64
-          "@
-
-      # ── 9. Write README into the release zip ─────────────────────────────
-      - name: Copy README to build
-        shell: pwsh
-        run: |
+          Set-Content -Path "dist/ACEForge/VERSION.txt" -Value "ACEForge v$version`nBuilt: $(Get-Date -Format 'yyyy-MM-dd HH:mm UTC')`nPlatform: Windows x64"
           Copy-Item "README.md" -Destination "dist/ACEForge/README.md"
 
-      # ── 10. Zip the build output ─────────────────────────────────────────
+      # ── 9. Zip the build output ──────────────────────────────────────────
       - name: Create release zip
         shell: pwsh
         run: |
@@ -120,7 +128,7 @@ jobs:
           $size = (Get-Item $zipName).Length / 1MB
           Write-Host "Created $zipName ($([math]::Round($size, 1)) MB)"
 
-      # ── 11. Upload zip as workflow artifact (always) ─────────────────────
+      # ── 10. Upload as workflow artifact (always available) ───────────────
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -128,7 +136,7 @@ jobs:
           path: ${{ steps.version.outputs.ZIP_NAME }}
           retention-days: 30
 
-      # ── 12. Create GitHub Release (tag pushes only) ──────────────────────
+      # ── 11. Create GitHub Release (tag pushes only) ──────────────────────
       - name: Create GitHub Release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
@@ -142,32 +150,31 @@ jobs:
           body: |
             ## ACEForge ${{ steps.version.outputs.VERSION }}
 
-            ### Installation
+            ### How to install
 
-            1. Download `${{ steps.version.outputs.ZIP_NAME }}` below
-            2. Extract the zip anywhere (e.g. `C:\ACEForge\`)
-            3. Double-click `ACEForge.exe`
-            4. Open **Settings** to configure your server name and WCID ranges
-            5. Manual Mode works immediately — no API key needed
-            6. For AI Mode, add your [Anthropic API key](https://console.anthropic.com) in Settings
+            1. Download **`${{ steps.version.outputs.ZIP_NAME }}`** below
+            2. Extract the zip anywhere — e.g. `C:\ACEForge\`
+            3. Double-click **`ACEForge.exe`**
+            4. Open **Settings** to enter your server name and WCID ranges
+            5. **Manual Mode** works immediately — no API key needed
+            6. For **AI Mode**, add your [Anthropic API key](https://console.anthropic.com) in Settings
 
             ### Requirements
 
             - Windows 10 or 11 (64-bit)
             - No Python installation needed — everything is bundled
 
-            ### What's included
+            ### Features
 
-            - ✏ **Manual Mode** — Full weenie editor, no internet required
+            - ✏ **Manual Mode** — Full weenie editor with 14 property tabs, no internet required
             - ✨ **AI Mode** — Claude-powered SQL generation (requires Anthropic API key)
-            - 14 property tabs per weenie (Int, Bool, Float, String, DID, Attributes, Skills, Body Parts, Spells, Emotes, Create List, Generator, Events)
-            - Multi-weenie session support with JSON save/load
+            - Multi-weenie sessions with JSON save/load
             - Live SQL preview as you edit
             - Configurable WCID ranges for any ACEmulator server
 
-            ### Settings are preserved on upgrade
+            ### Your settings are preserved on upgrade
 
-            Your settings (`%APPDATA%\ACEForge\config.json`) are not touched by
-            reinstalling — your API key, server name, and WCID ranges carry over.
+            Reinstalling does not touch `%APPDATA%\ACEForge\config.json` —
+            your API key, server name, and WCID ranges carry over automatically.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
