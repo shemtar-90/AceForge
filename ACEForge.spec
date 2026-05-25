@@ -1,41 +1,41 @@
 # ACEForge PyInstaller build spec
-# Build: pyinstaller ACEForge.spec
-#
-# Requirements before building:
-#   pip install pyinstaller customtkinter anthropic
-#   Place all references/ files in aceforge/references/ directory
+# Build: pyinstaller ACEForge.spec --noconfirm --clean
 
 import os
 from pathlib import Path
 
 block_cipher = None
 
-# Collect all reference files to bundle
+# ── Collect reference files ───────────────────────────────────────────────────
+# Each entry is (source_path, destination_folder_inside_bundle)
+# source_path must be the actual file path on disk
+# destination is where it lands relative to the bundle root
 refs_dir = Path('aceforge/references')
-ref_datas = [
-    (str(refs_dir / f), 'aceforge/references')
-    for f in refs_dir.iterdir()
-    if f.is_file()
-] if refs_dir.exists() else []
+ref_datas = []
 
-# Bundle SKILL.md from skill root too
+if refs_dir.exists():
+    for f in refs_dir.iterdir():
+        if f.is_file():
+            # f is e.g. Path('aceforge/references/enums.md')
+            # destination 'aceforge/references' puts it at
+            # _internal/aceforge/references/enums.md inside the bundle
+            ref_datas.append((str(f), 'aceforge/references'))
+
+# Bundle SKILL.md one level up from references/
 skill_md = Path('aceforge/SKILL.md')
 if skill_md.exists():
     ref_datas.append((str(skill_md), 'aceforge'))
+
+# ── CustomTkinter assets ──────────────────────────────────────────────────────
+import customtkinter
+ctk_assets = os.path.join(os.path.dirname(customtkinter.__file__), 'assets')
 
 a = Analysis(
     ['aceforge/main.py'],
     pathex=['.'],
     binaries=[],
     datas=[
-        # CustomTkinter assets (required for the UI framework)
-        (
-            os.path.join(
-                __import__('customtkinter').__path__[0],
-                'assets'
-            ),
-            'customtkinter/assets'
-        ),
+        (ctk_assets, 'customtkinter/assets'),
     ] + ref_datas,
     hiddenimports=[
         'customtkinter',
@@ -44,6 +44,7 @@ a = Analysis(
         'tkinter.filedialog',
         'tkinter.messagebox',
         'PIL',
+        'PIL._tkinter_finder',
     ],
     hookspath=[],
     hooksconfig={},
@@ -67,13 +68,13 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,          # No console window (GUI app)
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,              # Add path to .ico file here if you have one
+    icon=None,
 )
 
 coll = COLLECT(
