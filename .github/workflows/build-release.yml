@@ -1,0 +1,173 @@
+name: Build and Release ACEForge
+
+# Triggers:
+#   - Push a tag like v1.0.0  → builds and publishes a GitHub Release
+#   - Manual trigger          → builds but does not publish (for testing)
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish as a release?'
+        required: false
+        default: 'false'
+
+jobs:
+  build:
+    name: Build on Windows
+    runs-on: windows-latest
+
+    steps:
+      # ── 1. Checkout source ────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python ─────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # ── 3. Install dependencies ──────────────────────────────────────────
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      # ── 4. Verify reference files ────────────────────────────────────────
+      #    Reference files must be committed to the repo inside
+      #    aceforge/references/ for AI Mode to work in the release.
+      #    If they are too large for git, use Git LFS or a release asset.
+      - name: Check reference files
+        shell: pwsh
+        run: |
+          $refs = @(
+            "aceforge/references/enums.md",
+            "aceforge/references/spells.md",
+            "aceforge/references/did_values.md",
+            "aceforge/references/icons.md"
+          )
+          $missing = $false
+          foreach ($f in $refs) {
+            if (-not (Test-Path $f)) {
+              Write-Warning "Missing reference file: $f"
+              $missing = $true
+            }
+          }
+          if ($missing) {
+            Write-Warning "Some reference files are missing. AI Mode will have limited context."
+            Write-Warning "See README.md for how to add reference files."
+          } else {
+            Write-Host "All core reference files present."
+          }
+
+      # ── 5. Build with PyInstaller ────────────────────────────────────────
+      - name: Build executable
+        run: pyinstaller ACEForge.spec --noconfirm --clean
+
+      # ── 6. Verify the build output ───────────────────────────────────────
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/ACEForge/ACEForge.exe")) {
+            Write-Error "Build failed — ACEForge.exe not found in dist/ACEForge/"
+            exit 1
+          }
+          $size = (Get-Item "dist/ACEForge/ACEForge.exe").Length / 1MB
+          Write-Host "ACEForge.exe built successfully ($([math]::Round($size, 1)) MB)"
+
+      # ── 7. Get version from tag or default ───────────────────────────────
+      - name: Get version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $version = "${{ github.ref_name }}" -replace '^v', ''
+          } else {
+            $version = "dev-${{ github.run_number }}"
+          }
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "ZIP_NAME=ACEForge_${version}_Windows.zip" >> $env:GITHUB_OUTPUT
+          Write-Host "Building version: $version"
+
+      # ── 8. Write version file into the build ─────────────────────────────
+      - name: Write version info
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.VERSION }}"
+          Set-Content -Path "dist/ACEForge/VERSION.txt" -Value @"
+          ACEForge v$version
+          Built: $(Get-Date -Format 'yyyy-MM-dd HH:mm UTC')
+          Platform: Windows x64
+          "@
+
+      # ── 9. Write README into the release zip ─────────────────────────────
+      - name: Copy README to build
+        shell: pwsh
+        run: |
+          Copy-Item "README.md" -Destination "dist/ACEForge/README.md"
+
+      # ── 10. Zip the build output ─────────────────────────────────────────
+      - name: Create release zip
+        shell: pwsh
+        run: |
+          $zipName = "${{ steps.version.outputs.ZIP_NAME }}"
+          Compress-Archive -Path "dist/ACEForge/*" -DestinationPath $zipName
+          $size = (Get-Item $zipName).Length / 1MB
+          Write-Host "Created $zipName ($([math]::Round($size, 1)) MB)"
+
+      # ── 11. Upload zip as workflow artifact (always) ─────────────────────
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ACEForge-Windows
+          path: ${{ steps.version.outputs.ZIP_NAME }}
+          retention-days: 30
+
+      # ── 12. Create GitHub Release (tag pushes only) ──────────────────────
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ACEForge ${{ steps.version.outputs.VERSION }}
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: ${{ steps.version.outputs.ZIP_NAME }}
+          body: |
+            ## ACEForge ${{ steps.version.outputs.VERSION }}
+
+            ### Installation
+
+            1. Download `${{ steps.version.outputs.ZIP_NAME }}` below
+            2. Extract the zip anywhere (e.g. `C:\ACEForge\`)
+            3. Double-click `ACEForge.exe`
+            4. Open **Settings** to configure your server name and WCID ranges
+            5. Manual Mode works immediately — no API key needed
+            6. For AI Mode, add your [Anthropic API key](https://console.anthropic.com) in Settings
+
+            ### Requirements
+
+            - Windows 10 or 11 (64-bit)
+            - No Python installation needed — everything is bundled
+
+            ### What's included
+
+            - ✏ **Manual Mode** — Full weenie editor, no internet required
+            - ✨ **AI Mode** — Claude-powered SQL generation (requires Anthropic API key)
+            - 14 property tabs per weenie (Int, Bool, Float, String, DID, Attributes, Skills, Body Parts, Spells, Emotes, Create List, Generator, Events)
+            - Multi-weenie session support with JSON save/load
+            - Live SQL preview as you edit
+            - Configurable WCID ranges for any ACEmulator server
+
+            ### Settings are preserved on upgrade
+
+            Your settings (`%APPDATA%\ACEForge\config.json`) are not touched by
+            reinstalling — your API key, server name, and WCID ranges carry over.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
