@@ -1,5 +1,5 @@
 # ACEForge PyInstaller build spec — one-file mode
-import os
+import os, sys
 from pathlib import Path
 
 block_cipher = None
@@ -16,13 +16,16 @@ skill_md = Path('aceforge/SKILL.md')
 if skill_md.exists():
     ref_datas.append((str(skill_md), 'aceforge'))
 
-# ── Web UI ────────────────────────────────────────────────────────────────────
+# ── Web UI — index.html must land at aceforge/web/index.html in the bundle ───
 web_dir = Path('aceforge/web')
 web_datas = []
 if web_dir.exists():
     for f in web_dir.iterdir():
         if f.is_file():
             web_datas.append((str(f), 'aceforge/web'))
+
+print(f"[spec] Bundling {len(web_datas)} web file(s): {[d[0] for d in web_datas]}")
+print(f"[spec] Bundling {len(ref_datas)} reference file(s)")
 
 a = Analysis(
     ['aceforge/main.py'],
@@ -40,7 +43,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['customtkinter','tkinter','PIL'],
+    excludes=['customtkinter', 'tkinter', 'PIL'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

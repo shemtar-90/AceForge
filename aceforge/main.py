@@ -1,7 +1,6 @@
 """
 ACEForge — Entry Point
 Launches the full app as a pywebview desktop window.
-No tkinter/customtkinter required at runtime.
 """
 
 import sys
@@ -9,29 +8,76 @@ import os
 from pathlib import Path
 
 
-def get_web_dir() -> Path:
-    """Find the web/ directory — works in dev and PyInstaller one-file mode."""
+def get_index_html() -> Path:
+    """
+    Find index.html in all the places PyInstaller might put it.
+    PyInstaller one-file mode extracts to a temp folder at sys._MEIPASS.
+    We search exhaustively and print every candidate so errors are debuggable.
+    """
+    candidates = []
+
     if hasattr(sys, "_MEIPASS"):
         base = Path(sys._MEIPASS)
-    else:
-        base = Path(__file__).parent
-    for candidate in [base / "web", Path(__file__).parent / "web"]:
-        if (candidate / "index.html").exists():
-            return candidate
-    return Path(__file__).parent / "web"
+        candidates += [
+            base / "aceforge" / "web" / "index.html",
+            base / "web" / "index.html",
+            base / "index.html",
+        ]
+
+    # Dev mode — relative to this file
+    here = Path(__file__).parent
+    candidates += [
+        here / "web" / "index.html",
+        here.parent / "aceforge" / "web" / "index.html",
+        Path.cwd() / "aceforge" / "web" / "index.html",
+        Path.cwd() / "web" / "index.html",
+    ]
+
+    for path in candidates:
+        if path.exists():
+            return path
+
+    # None found — write a debug report beside the exe so the user can send it
+    debug_lines = ["ACEForge could not find index.html\n", f"sys._MEIPASS: {getattr(sys,'_MEIPASS','not set')}\n", f"__file__: {__file__}\n", f"cwd: {os.getcwd()}\n", "\nSearched:\n"]
+    debug_lines += [f"  {'EXISTS' if p.exists() else 'missing'}: {p}\n" for p in candidates]
+
+    # Also list what IS in _MEIPASS so we can see where files landed
+    if hasattr(sys, "_MEIPASS"):
+        debug_lines.append("\nContents of _MEIPASS:\n")
+        for root, dirs, files in os.walk(sys._MEIPASS):
+            for f in files:
+                debug_lines.append(f"  {os.path.join(root, f)}\n")
+
+    debug_path = Path(sys.executable).parent / "aceforge_debug.txt" if not hasattr(sys, "_MEIPASS") else Path(sys._MEIPASS).parent / "aceforge_debug.txt"
+    try:
+        with open(debug_path, "w") as fh:
+            fh.writelines(debug_lines)
+    except Exception:
+        pass
+
+    raise FileNotFoundError(
+        f"index.html not found. A debug report was written to: {debug_path}\n"
+        f"Searched {len(candidates)} locations."
+    )
 
 
 def main():
     try:
         import webview
     except ImportError:
-        import webbrowser
-        html = get_web_dir() / "index.html"
-        if html.exists():
+        # Fallback: open in browser
+        try:
+            html = get_index_html()
+            import webbrowser
             webbrowser.open(html.as_uri())
-        else:
-            print("ERROR: pywebview not installed and index.html not found.")
-            print("Run: pip install pywebview")
+        except Exception as e:
+            _show_error_window(str(e))
+        return
+
+    try:
+        html_path = get_index_html()
+    except FileNotFoundError as e:
+        _show_error_window(str(e))
         return
 
     from aceforge.app_api import AppAPI
@@ -39,9 +85,6 @@ def main():
 
     config = Config()
     api = AppAPI(config)
-
-    web_dir = get_web_dir()
-    html_path = web_dir / "index.html"
 
     window = webview.create_window(
         title="ACEForge — Weenie Workbench",
@@ -55,8 +98,20 @@ def main():
     )
 
     api.set_window(window)
-
     webview.start(debug=False, private_mode=False)
+
+
+def _show_error_window(message: str):
+    """Last-resort: show the error in a basic tkinter window if pywebview fails."""
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("ACEForge — Startup Error", message)
+        root.destroy()
+    except Exception:
+        print("ACEForge ERROR:", message)
 
 
 if __name__ == "__main__":

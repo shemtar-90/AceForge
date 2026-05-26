@@ -85,6 +85,17 @@ jobs:
           }
           $mb = [math]::Round((Get-Item "dist/ACEForge.exe").Length / 1MB, 1)
           Write-Host "ACEForge.exe built successfully - $mb MB"
+          
+          # Verify index.html was bundled — this is the most common failure point
+          Write-Host "Verifying web assets bundled correctly..."
+          $found = $false
+          Get-ChildItem -Path (Split-Path "dist/ACEForge.exe") -Recurse -ErrorAction SilentlyContinue | Where-Object {$_.Name -eq "index.html"} | ForEach-Object {
+            Write-Host "FOUND index.html at: $($_.FullName)"
+            $found = $true
+          }
+          if (-not $found) {
+            Write-Warning "index.html NOT found in bundle — check ACEForge.spec web_datas section"
+          }
 
       - name: Get version
         id: version
