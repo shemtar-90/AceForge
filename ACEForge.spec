@@ -1,7 +1,4 @@
-# ACEForge PyInstaller build spec
-# One-file mode: everything packed into a single ACEForge.exe
-# This avoids the python311.dll path issue on end-user machines.
-
+# ACEForge PyInstaller build spec — one-file mode
 import os
 from pathlib import Path
 
@@ -19,32 +16,31 @@ skill_md = Path('aceforge/SKILL.md')
 if skill_md.exists():
     ref_datas.append((str(skill_md), 'aceforge'))
 
-# ── CustomTkinter assets ──────────────────────────────────────────────────────
-import customtkinter
-ctk_path = os.path.dirname(customtkinter.__file__)
-ctk_assets = os.path.join(ctk_path, 'assets')
+# ── Web UI ────────────────────────────────────────────────────────────────────
+web_dir = Path('aceforge/web')
+web_datas = []
+if web_dir.exists():
+    for f in web_dir.iterdir():
+        if f.is_file():
+            web_datas.append((str(f), 'aceforge/web'))
 
 a = Analysis(
     ['aceforge/main.py'],
     pathex=['.'],
     binaries=[],
-    datas=[
-        (ctk_assets, 'customtkinter/assets'),
-    ] + ref_datas,
+    datas=ref_datas + web_datas,
     hiddenimports=[
-        'customtkinter',
         'anthropic',
-        'tkinter',
-        'tkinter.filedialog',
-        'tkinter.messagebox',
-        'PIL',
-        'PIL._tkinter_finder',
-        '_tkinter',
+        'webview',
+        'webview.platforms.winforms',
+        'webview.platforms.edgechromium',
+        'clr',
+        'pythonnet',
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['customtkinter','tkinter','PIL'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -53,8 +49,6 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# ── One-file EXE ──────────────────────────────────────────────────────────────
-# exclude_binaries=False and no COLLECT = single self-contained .exe
 exe = EXE(
     pyz,
     a.scripts,

@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACEForge</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=IM+Fell+English:ital@0;1&family=Source+Code+Pro:wght@400;500&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --parch:#ede4ce;--parch-lt:#f5eedf;--parch-dk:#d6c9a8;
+  --ink:#2a1e0a;--ink-mid:#5a4a28;--ink-dim:#8a7a58;--ink-faint:#b8a888;
+  --crimson:#7a1515;--crimson-dk:#5a0d0d;--crimson-lt:#c04040;
+  --sql:#14100a;--sql2:#1e1808;
+  --gold:#c8a040;--gold-lt:#e8c060;
+  --border:#c8b898;--border-lt:#ddd0b8;
+  --green:#3a8a3a;--red:#8a1a1a;
+}
+html,body{height:100%;overflow:hidden;font-family:'Crimson Text',serif;background:var(--parch);color:var(--ink);font-size:15px;user-select:none}
+
+/* ── TOPBAR ── */
+.topbar{height:52px;background:var(--parch);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:0;flex-shrink:0}
+.logo{display:flex;align-items:center;gap:10px;margin-right:24px}
+.logo-x{color:var(--crimson);font-size:17px}
+.logo-name{font-family:'Cinzel',serif;font-size:17px;font-weight:700;letter-spacing:.15em}
+.logo-sub{font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:12px}
+.top-divider{width:1px;height:28px;background:var(--border);margin:0 16px}
+.top-info{display:flex;flex-direction:column}
+.top-info-label{font-family:'Cinzel',serif;font-size:8px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-dim)}
+.top-info-val{font-family:'Cinzel',serif;font-size:11px;font-weight:700;color:var(--ink)}
+.top-spacer{flex:1}
+.top-btn{font-family:'Cinzel',serif;font-size:9px;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--border);background:transparent;color:var(--ink-mid);padding:5px 13px;cursor:pointer;transition:all .15s;margin-left:6px}
+.top-btn:hover{background:var(--parch-dk);border-color:var(--ink-mid)}
+.top-btn.danger:hover{border-color:var(--crimson);color:var(--crimson);background:rgba(122,21,21,.06)}
+
+/* ── MODE TABS ── */
+.mode-tabs{display:flex;gap:0;border-bottom:2px solid var(--border);background:var(--parch-lt);padding:0 20px;flex-shrink:0}
+.mode-tab{font-family:'Cinzel',serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:12px 20px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--ink-dim);background:none;border-top:none;border-left:none;border-right:none;display:flex;align-items:center;gap:7px;transition:all .15s}
+.mode-tab:hover{color:var(--ink)}
+.mode-tab.active{color:var(--crimson);border-bottom-color:var(--crimson)}
+
+/* ── LAYOUT ── */
+.app{display:flex;flex-direction:column;height:100vh}
+.workspace{flex:1;overflow:hidden;display:none}
+.workspace.active{display:flex}
+
+/* ── MANUAL: LEFT FORM PANEL ── */
+.form-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--parch-lt)}
+.sql-panel{width:400px;flex-shrink:0;background:var(--sql);display:flex;flex-direction:column}
+
+/* ── WORKBENCH HEADER ── */
+.wb-header{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;background:var(--parch);flex-shrink:0}
+.wb-title{font-family:'Cinzel',serif;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--crimson)}
+.wb-title span{color:var(--ink-dim);font-weight:400}
+.wb-desc{font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:12px;margin-top:2px}
+.wcid-label{font-family:'Cinzel',serif;font-size:8px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-dim);text-align:right}
+.wcid-row{display:flex;align-items:center;gap:5px;margin-top:3px}
+.wcid-inp{font-family:'Source Code Pro',monospace;font-size:12px;color:var(--ink);background:var(--parch-lt);border:1px solid var(--border);padding:3px 7px;width:74px;text-align:center;outline:none}
+.wcid-sep{color:var(--ink-dim);font-size:12px}
+
+/* ── CONTENT TABS ── */
+.content-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--parch);padding:0 18px;flex-shrink:0}
+.ctab{font-family:'Cinzel',serif;font-size:9px;letter-spacing:.12em;text-transform:uppercase;padding:9px 13px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;color:var(--ink-dim);background:none;border-top:none;border-left:none;border-right:none;display:flex;align-items:center;gap:5px;transition:all .15s}
+.ctab:hover{color:var(--ink)}
+.ctab.active{color:var(--crimson);border-bottom-color:var(--crimson)}
+
+/* ── INNER TABS (content type) ── */
+.inner-tabs{display:flex;border-bottom:2px solid var(--border);background:var(--parch);padding:0 18px;flex-shrink:0;overflow-x:auto}
+.itab{font-family:'Cinzel',serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:12px 16px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--ink-dim);background:none;border-top:none;border-left:none;border-right:none;white-space:nowrap;transition:all .15s}
+.itab:hover{color:var(--ink)}
+.itab.active{color:var(--crimson);border-bottom-color:var(--crimson)}
+
+/* ── FORM SCROLL ── */
+.form-scroll{flex:1;overflow-y:auto;padding-bottom:70px}
+.form-scroll::-webkit-scrollbar{width:4px}
+.form-scroll::-webkit-scrollbar-thumb{background:var(--border)}
+
+/* ── FORM FIELDS ── */
+.id-row{padding:13px 18px 8px;display:grid;grid-template-columns:72px 1fr 68px 1fr 165px;gap:10px;align-items:end;border-bottom:1px solid var(--border-lt);flex-shrink:0}
+.fg{display:flex;flex-direction:column;gap:3px}
+.fl{font-family:'Cinzel',serif;font-size:8px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-dim);display:flex;justify-content:space-between;align-items:baseline}
+.fc{font-family:'Source Code Pro',monospace;font-size:8px;color:var(--ink-faint)}
+input,select{font-family:'Crimson Text',serif;font-size:14px;color:var(--ink);background:var(--parch);border:none;border-bottom:1.5px solid var(--border);padding:4px 2px;width:100%;outline:none;transition:border-color .15s;-webkit-appearance:none;appearance:none}
+input:focus,select:focus{border-bottom-color:var(--crimson)}
+select{cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a7a58'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 4px center;padding-right:18px;background-color:var(--parch)}
+select option{background:#fff;color:#2a1e0a}
+
+/* ── PRESETS ── */
+.presets{padding:9px 18px 7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--border-lt);flex-shrink:0}
+.pl{font-family:'Cinzel',serif;font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim)}
+.pill{font-family:'Cinzel',serif;font-size:9px;letter-spacing:.08em;padding:4px 12px;border:1px solid var(--border);background:transparent;color:var(--ink-mid);cursor:pointer;border-radius:12px;transition:all .15s}
+.pill:hover{background:var(--parch-dk);border-color:var(--crimson);color:var(--crimson)}
+
+/* ── SECTION ── */
+.sec{padding:10px 18px}
+.sh{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.st{font-family:'Cinzel',serif;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink)}
+.sl{flex:1;height:1px;background:var(--border-lt)}
+.grid{display:grid;gap:10px 14px}
+.g2{grid-template-columns:1fr 1fr}
+.g3{grid-template-columns:1fr 1fr 1fr}
+.g4{grid-template-columns:1fr 1fr 1fr 1fr}
+.rg{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.rc{display:flex;flex-direction:column;gap:3px}
+.warn{color:var(--crimson);font-size:11px;font-style:italic;margin-bottom:8px}
+.note{color:var(--ink-dim);font-size:12px;font-style:italic;margin-bottom:8px}
+.span2{grid-column:span 2}
+.span3{grid-column:span 3}
+
+/* ── SPELL / ADD ROWS ── */
+.spell-row{display:grid;grid-template-columns:80px 1fr 110px 28px;gap:8px;align-items:end;margin-bottom:7px}
+.add-btn{font-family:'Cinzel',serif;font-size:9px;letter-spacing:.1em;text-transform:uppercase;border:1px dashed var(--border);background:transparent;color:var(--ink-dim);padding:6px 14px;cursor:pointer;width:100%;margin-top:4px;transition:all .15s}
+.add-btn:hover{border-color:var(--crimson);color:var(--crimson)}
+.del{font-size:14px;color:var(--crimson-lt);background:none;border:none;cursor:pointer;opacity:.6;padding:0 3px;line-height:1}
+.del:hover{opacity:1}
+
+/* ── BODY PARTS TABLE ── */
+.bp-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{font-family:'Cinzel',serif;font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);text-align:left;padding:3px 4px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:2px 4px;border-bottom:1px solid var(--border-lt)}
+td input,td select{font-size:11px;padding:2px 0}
+tr:hover td{background:rgba(200,184,152,.15)}
+
+/* ── SQL PANEL ── */
+.sql-hdr{padding:12px 16px;border-bottom:1px solid #2a2010;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.sql-title{font-family:'Cinzel',serif;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);display:flex;align-items:center;gap:6px}
+.sql-title::before{content:'◆';font-size:9px}
+.sql-btns{display:flex;gap:5px}
+.sql-btn{font-family:'Cinzel',serif;font-size:9px;letter-spacing:.1em;text-transform:uppercase;border:1px solid #3a3020;background:transparent;color:#8a7a58;padding:4px 10px;cursor:pointer;transition:all .15s}
+.sql-btn:hover{border-color:var(--gold);color:var(--gold)}
+.sql-out{flex:1;overflow-y:auto;padding:14px 16px;font-family:'Source Code Pro',monospace;font-size:11px;line-height:1.8;color:#c8b898;white-space:pre-wrap}
+.sql-out::-webkit-scrollbar{width:4px}
+.sql-out::-webkit-scrollbar-thumb{background:#3a3020}
+.kw{color:#e8d080;font-weight:500}
+.st2{color:#e0a080}
+.nm{color:#80c0e8}
+.cm{color:#5a7a5a;font-style:italic}
+
+/* ── FORGE BAR ── */
+.forge-bar{position:fixed;bottom:0;left:0;right:400px;background:var(--parch);border-top:1px solid var(--border);padding:10px 18px;display:flex;gap:10px;align-items:center;z-index:50}
+.forge-inp{flex:1;font-family:'IM Fell English',serif;font-style:italic;font-size:13px;color:var(--ink-dim);background:transparent;border:none;outline:none;padding:3px;user-select:text}
+.forge-inp::placeholder{color:var(--ink-faint)}
+.forge-btn{font-family:'Cinzel',serif;font-size:10px;letter-spacing:.1em;padding:9px 18px;background:var(--crimson);color:#f5eedf;border:none;cursor:pointer;text-transform:uppercase;transition:all .15s;white-space:nowrap}
+.forge-btn:hover{background:var(--crimson-dk)}
+.forge-btn:disabled{background:#8a7a58;cursor:not-allowed}
+
+/* ── AI MODE ── */
+.ai-workspace{flex:1;display:none;flex-direction:column;background:var(--parch-lt)}
+.ai-workspace.active{display:flex}
+.ai-left{flex:1;display:flex;flex-direction:column;padding:20px}
+.ai-right{width:400px;background:var(--sql);display:flex;flex-direction:column}
+.ai-content-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.ai-ctab{font-family:'Cinzel',serif;font-size:9px;letter-spacing:.08em;text-transform:uppercase;padding:6px 14px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:2px;transition:all .15s}
+.ai-ctab:hover{border-color:var(--crimson);color:var(--crimson)}
+.ai-ctab.active{background:var(--crimson);border-color:var(--crimson);color:#f5eedf}
+.ai-prompt-wrap{border:1px solid var(--border);background:var(--parch);padding:12px}
+.ai-prompt-label{font-family:'Cinzel',serif;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:8px}
+.ai-prompt{width:100%;height:110px;font-family:'IM Fell English',serif;font-style:italic;font-size:14px;color:var(--ink);background:transparent;border:none;outline:none;resize:none;line-height:1.6;user-select:text}
+.ai-prompt::placeholder{color:var(--ink-faint)}
+.ai-btn-row{display:flex;gap:8px;margin-top:12px;align-items:center}
+.ai-gen-btn{font-family:'Cinzel',serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:10px 24px;background:var(--crimson);color:#f5eedf;border:none;cursor:pointer;transition:all .15s}
+.ai-gen-btn:hover{background:var(--crimson-dk)}
+.ai-gen-btn:disabled{background:#8a7a58;cursor:not-allowed}
+.ai-stop-btn{font-family:'Cinzel',serif;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 18px;background:transparent;border:1px solid var(--border);color:var(--ink-dim);cursor:pointer;transition:all .15s}
+.ai-stop-btn:hover{border-color:var(--crimson);color:var(--crimson)}
+.ai-status{font-family:'Cinzel',serif;font-size:10px;letter-spacing:.08em;color:var(--ink-dim);margin-left:8px}
+.ai-status.generating{color:var(--gold);animation:pulse 1.5s ease-in-out infinite}
+.ai-status.done{color:var(--green)}
+.ai-status.error{color:var(--crimson-lt)}
+@keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
+.ai-output-wrap{flex:1;overflow:hidden;margin-top:12px;border:1px solid var(--border);background:var(--sql);display:flex;flex-direction:column}
+.ai-output-hdr{padding:8px 12px;border-bottom:1px solid #2a2010;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.ai-output-title{font-family:'Cinzel',serif;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
+.ai-out{flex:1;overflow-y:auto;padding:12px 14px;font-family:'Source Code Pro',monospace;font-size:11px;line-height:1.8;color:#c8b898;white-space:pre-wrap}
+.ai-out::-webkit-scrollbar{width:4px}
+.ai-out::-webkit-scrollbar-thumb{background:#3a3020}
+.ai-save-btn{font-family:'Cinzel',serif;font-size:9px;letter-spacing:.1em;text-transform:uppercase;border:1px solid #3a3020;background:transparent;color:#8a7a58;padding:4px 10px;cursor:pointer;transition:all .15s}
+.ai-save-btn:hover{border-color:var(--gold);color:var(--gold)}
+.ai-save-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── SETTINGS PANEL ── */
+.settings-overlay{position:fixed;inset:0;background:rgba(20,10,0,.5);z-index:200;display:none;align-items:center;justify-content:center}
+.settings-overlay.open{display:flex}
+.settings-box{background:var(--parch-lt);border:1px solid var(--border);width:600px;max-height:80vh;overflow-y:auto;display:flex;flex-direction:column}
+.settings-hdr{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.settings-title{font-family:'Cinzel',serif;font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--crimson)}
+.settings-close{font-size:18px;background:none;border:none;color:var(--ink-dim);cursor:pointer;padding:0 4px;line-height:1}
+.settings-close:hover{color:var(--crimson)}
+.settings-body{padding:20px;flex:1;overflow-y:auto}
+.settings-sec{margin-bottom:20px}
+.settings-sec-title{font-family:'Cinzel',serif;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-dim);background:var(--parch-dk);padding:5px 8px;margin-bottom:12px}
+.settings-field{margin-bottom:12px}
+.settings-label{font-family:'Cinzel',serif;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:4px;display:block}
+.settings-field input,.settings-field select{border:1px solid var(--border);background:var(--parch);padding:6px 10px;border-bottom-width:1px;font-size:13px}
+.settings-field input:focus,.settings-field select:focus{border-color:var(--crimson)}
+.settings-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0}
+.btn-save{font-family:'Cinzel',serif;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:8px 20px;background:var(--crimson);color:#f5eedf;border:none;cursor:pointer}
+.btn-save:hover{background:var(--crimson-dk)}
+.btn-cancel{font-family:'Cinzel',serif;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:8px 20px;background:transparent;border:1px solid var(--border);color:var(--ink-mid);cursor:pointer}
+.btn-cancel:hover{background:var(--parch-dk)}
+.wcid-table{width:100%;border-collapse:collapse;font-size:12px}
+.wcid-table th{font-family:'Cinzel',serif;font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);padding:4px 6px;border-bottom:1px solid var(--border);text-align:left}
+.wcid-table td{padding:4px 6px;border-bottom:1px solid var(--border-lt)}
+.wcid-table td input{font-size:12px;border-bottom:1px solid var(--border)}
+.toast{position:fixed;bottom:80px;right:420px;background:var(--ink);color:var(--parch-lt);font-family:'Cinzel',serif;font-size:10px;letter-spacing:.1em;padding:8px 16px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:300}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">
+    <span class="logo-x">✠</span>
+    <span class="logo-name">ACEFORGE</span>
+    <span class="logo-sub">— Weenie Workbench</span>
+  </div>
+  <div class="top-divider"></div>
+  <div class="top-info">
+    <div class="top-info-label">Active <span id="topType">Creature</span></div>
+    <div class="top-info-val">WCID <span id="topRange">850,000 – 859,999</span></div>
+  </div>
+  <div class="top-spacer"></div>
+  <button class="top-btn" onclick="openOutputFolder()">📂 Output Folder</button>
+  <button class="top-btn" onclick="openSettings()">⚙ Settings</button>
+  <button class="top-btn danger" onclick="resetForm()">↺ Reset</button>
+</div>
+
+<!-- MODE TABS -->
+<div class="mode-tabs">
+  <button class="mode-tab active" onclick="switchMode('manual',this)">✏ Manual</button>
+  <button class="mode-tab" onclick="switchMode('ai',this)">✨ AI Mode</button>
+</div>
+
+<!-- MANUAL WORKSPACE -->
+<div class="workspace active" id="manualWS">
+
+  <!-- FORM PANEL -->
+  <div class="form-panel">
+
+    <!-- WORKBENCH HEADER -->
+    <div class="wb-header">
+      <div>
+        <div class="wb-title" id="wbTitle">✠ Creature <span>· Workbench</span></div>
+        <div class="wb-desc" id="wbDesc">Hostile creatures with combat, loot, and behavior.</div>
+      </div>
+      <div>
+        <div class="wcid-label">WCID Range</div>
+        <div class="wcid-row">
+          <input class="wcid-inp" id="wcidFrom" value="850000" oninput="regen()">
+          <span class="wcid-sep">–</span>
+          <input class="wcid-inp" id="wcidTo" value="859999">
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTENT TYPE INNER TABS -->
+    <div class="inner-tabs" id="innerTabs"></div>
+
+    <!-- IDENTITY ROW -->
+    <div class="id-row">
+      <div class="fg"><div class="fl">WCID <span class="fc">key</span></div><input type="number" id="fWcid" value="850000" oninput="regen()"></div>
+      <div class="fg"><div class="fl">Name <span class="fc">S-1</span></div><input type="text" id="fName" value="New Creature" oninput="regen()"></div>
+      <div class="fg" id="gLevel"><div class="fl">Level <span class="fc">I-25</span></div><input type="number" id="fLevel" value="100" oninput="regen()"></div>
+      <div class="fg" id="gXp"><div class="fl">XP Override <span class="fc">I-146</span></div><input type="number" id="fXp" value="50000" oninput="regen()"></div>
+      <div class="fg"><div class="fl">Weenie Type <span class="fc">type</span></div><select id="fWType" onchange="regen()"><option value="10">10 · Creature</option></select></div>
+    </div>
+
+    <!-- SUB TABS -->
+    <div class="content-tabs" id="subTabs"></div>
+
+    <!-- PRESETS -->
+    <div class="presets" id="presetsRow"></div>
+
+    <!-- FORM SCROLL -->
+    <div class="form-scroll" id="formContent"></div>
+
+  </div><!-- /form-panel -->
+
+  <!-- SQL PANEL -->
+  <div class="sql-panel">
+    <div class="sql-hdr">
+      <div class="sql-title">Generated SQL</div>
+      <div class="sql-btns">
+        <button class="sql-btn" onclick="copySQL()">⊡ Copy</button>
+        <button class="sql-btn" onclick="downloadSQL()">↓ Download</button>
+        <button class="sql-btn" onclick="saveSQL()">+ Save File</button>
+      </div>
+    </div>
+    <div class="sql-out" id="sqlOut"></div>
+  </div>
+
+</div><!-- /manualWS -->
+
+<!-- AI WORKSPACE -->
+<div class="workspace" id="aiWS" style="flex-direction:row">
+  <div class="ai-left">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:14px">
+      <div style="font-family:'Cinzel',serif;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--crimson)">✨ AI Content Generator</div>
+      <div style="font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:12px">Describe what you want. Claude generates complete SQL.</div>
+    </div>
+    <div class="ai-content-tabs" id="aiTypeTabs"></div>
+    <div class="ai-prompt-wrap">
+      <div class="ai-prompt-label">Describe your content</div>
+      <textarea class="ai-prompt" id="aiPrompt" placeholder="e.g. A level 180 ice drudge for a snowy biome. High cold resist, weak to fire. Drops T6 loot. Casts Frost Bolt and Frost Volley. Give it an intimidating name."></textarea>
+    </div>
+    <div class="ai-btn-row">
+      <button class="ai-gen-btn" id="aiGenBtn" onclick="startGeneration()">▶ Generate</button>
+      <button class="ai-stop-btn" id="aiStopBtn" onclick="stopGeneration()" style="display:none">⏹ Stop</button>
+      <button class="ai-gen-btn" id="aiClearBtn" onclick="clearAI()" style="background:transparent;border:1px solid var(--border);color:var(--ink-mid)">🗑 Clear</button>
+      <span class="ai-status" id="aiStatus"></span>
+    </div>
+    <div class="ai-output-wrap">
+      <div class="ai-output-hdr">
+        <div class="ai-output-title">◆ Streaming Output</div>
+        <button class="ai-save-btn" id="aiSaveBtn" onclick="saveAIFiles()" disabled>💾 Save Files</button>
+      </div>
+      <div class="ai-out" id="aiOut"></div>
+    </div>
+  </div>
+  <div class="ai-right">
+    <div class="sql-hdr">
+      <div class="sql-title">File List</div>
+    </div>
+    <div class="sql-out" id="aiFileList" style="font-size:11px;color:#8a7a58;font-style:italic;padding:14px 16px">Files will appear here after saving.</div>
+  </div>
+</div>
+
+<!-- FORGE BAR (manual mode only) -->
+<div class="forge-bar" id="forgeBar">
+  <input class="forge-inp" id="forgeInp" placeholder="Describe what you want — AI will fill the form…">
+  <button class="forge-btn" disabled title="Use AI Mode tab for AI generation">✨ Use AI Mode</button>
+</div>
+
+<!-- SETTINGS OVERLAY -->
+<div class="settings-overlay" id="settingsOverlay" onclick="overlayClick(event)">
+  <div class="settings-box" onclick="event.stopPropagation()">
+    <div class="settings-hdr">
+      <div class="settings-title">⚙ Settings</div>
+      <button class="settings-close" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="settings-body">
+      <div class="settings-sec">
+        <div class="settings-sec-title">API Configuration</div>
+        <div class="settings-field">
+          <label class="settings-label">Anthropic API Key <span style="color:var(--ink-faint);font-family:'IM Fell English',serif;font-style:italic;font-size:10px">(required for AI Mode only)</span></label>
+          <input type="password" id="sApiKey" placeholder="sk-ant-..." style="width:100%">
+        </div>
+        <div class="settings-field">
+          <label class="settings-label">Model</label>
+          <select id="sModel" style="width:100%">
+            <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (recommended)</option>
+            <option value="claude-opus-4-20250514">Claude Opus 4 (most capable)</option>
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (fastest)</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-sec">
+        <div class="settings-sec-title">Server Configuration</div>
+        <div class="settings-field">
+          <label class="settings-label">Server Name</label>
+          <input type="text" id="sServerName" placeholder="My Server" style="width:100%">
+        </div>
+        <div class="settings-field">
+          <label class="settings-label">Author / Admin Name <span style="color:var(--ink-faint);font-family:'IM Fell English',serif;font-style:italic;font-size:10px">(optional)</span></label>
+          <input type="text" id="sAuthor" placeholder="Your name" style="width:100%">
+        </div>
+      </div>
+      <div class="settings-sec">
+        <div class="settings-sec-title">Output Directory</div>
+        <div class="settings-field">
+          <label class="settings-label">SQL files are saved here</label>
+          <input type="text" id="sOutputDir" placeholder="C:\Documents\ACEForge\output" style="width:100%">
+        </div>
+      </div>
+      <div class="settings-sec">
+        <div class="settings-sec-title">WCID Ranges</div>
+        <table class="wcid-table" id="wcidTable">
+          <thead><tr><th>Category</th><th>Range Start</th><th>Next Available</th></tr></thead>
+          <tbody id="wcidTbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="settings-foot">
+      <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
+      <button class="btn-save" onclick="saveSettings()">Save Settings</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// DATA
+// ─────────────────────────────────────────────────────────────────────────────
+const CREATURE_TYPES=[[0,'None'],[1,'Olthoi'],[2,'Banderling'],[3,'Drudge'],[4,'Mosswart'],[5,'Lugian'],[6,'Tumerok'],[7,'Mite'],[8,'Tusker'],[13,'Golem'],[14,'Undead'],[15,'Gromnie'],[16,'Reedshark'],[17,'Armoredillo'],[18,'Fae'],[19,'Virindi'],[20,'Wisp'],[22,'Shadow'],[23,'Mattekar'],[28,'Monouga'],[29,'Zefir'],[30,'Skeleton'],[31,'Human'],[32,'Shreth'],[38,'FireElemental'],[39,'Snowman'],[44,'Grievver'],[46,'Ursuin'],[48,'HollowMinion'],[60,'AcidElemental'],[61,'FrostElemental'],[75,'Burun'],[99,'GearKnight'],[100,'Gurog'],[101,'Anekshay']];
+const DMG_TYPES=[[1,'Slash'],[2,'Pierce'],[4,'Bludgeon'],[8,'Cold'],[16,'Fire'],[32,'Acid'],[64,'Electric'],[1024,'Nether']];
+const WEP_SKILLS=[[44,'HeavyWeapons'],[45,'LightWeapons'],[46,'FinesseWeapons'],[41,'TwoHandedCombat'],[47,'MissileWeapons'],[34,'WarMagic'],[33,'LifeMagic'],[43,'VoidMagic']];
+const COMBAT_STYLES=[[2,'OneHanded'],[4,'OneHanded+Shield'],[8,'TwoHanded'],[512,'Magic'],[16,'Bow'],[32,'Crossbow'],[128,'ThrownWeapon']];
+const ATTACK_TYPES=[[1,'Punch'],[2,'Thrust'],[4,'Slash'],[6,'Thrust+Slash'],[8,'Kick'],[32,'DoubleSlash'],[64,'TripleSlash']];
+const ARMOR_SLOTS=[[1,'Head'],[2,'Chest'],[4,'Abdomen'],[8,'UpperArm'],[16,'LowerArm'],[32,'Hand'],[64,'UpperLeg'],[128,'LowerLeg'],[256,'Foot'],[512,'ChestArmor'],[1024,'AbdomenArmor'],[2048,'UpperArmArmor'],[4096,'LowerArmArmor'],[8192,'UpperLegArmor'],[16384,'LowerLegArmor'],[32768,'NeckWear']];
+const ARMOR_TYPES=[[0,'None'],[1,'Cloth'],[2,'Leather'],[3,'StuddedLeather'],[4,'Scale'],[5,'Chainmail'],[6,'DiffusingWeave'],[7,'Amuli'],[8,'Celdon'],[9,'Haebrean'],[10,'Yoroi'],[11,'Platemail'],[12,'Lorica'],[13,'Nariyid'],[14,'Alduressa'],[15,'Covenant'],[17,'Koveras'],[18,'Olthoi']];
+const ITEM_USE=[[1,'No (type 1)'],[2,'Self (type 2)'],[4,'Wielded (type 4)'],[8,'Contained (type 8)'],[16,'Viewed (type 16)'],[32,'Remote (type 32)']];
+const BONDED=[[-2,'Destroy on Death'],[-1,'Slippery (drops on death)'],[0,'Normal'],[1,'Bonded (kept on death)'],[2,'Sticky']];
+const ATTUNED=[[0,'Normal'],[1,'Attuned (no drop/trade)'],[2,'Sticky']];
+const PALETTES=[[1,'AquaBlue'],[2,'Blue'],[4,'Brown'],[8,'Green'],[9,'Grey'],[14,'Red'],[17,'Yellow'],[19,'Copper'],[20,'Silver'],[21,'Gold'],[39,'Black'],[40,'Bronze'],[41,'SandyYellow'],[46,'Tan'],[48,'White']];
+const ALL_SKILLS=[[6,'MeleeDefense'],[7,'MissileDefense'],[14,'ArcaneLore'],[15,'MagicDefense'],[16,'ManaConversion'],[33,'LifeMagic'],[34,'WarMagic'],[41,'TwoHandedCombat'],[43,'VoidMagic'],[44,'HeavyWeapons'],[45,'LightWeapons'],[46,'FinesseWeapons'],[47,'MissileWeapons'],[48,'Shield'],[49,'DualWield'],[50,'Recklessness'],[51,'SneakAttack'],[52,'DirtyFighting']];
+const SKILL_SAC=[[1,'Untrained'],[2,'Trained'],[3,'Specialized']];
+const BODY_PARTS=[{k:0,n:'Head'},{k:1,n:'Chest'},{k:2,n:'Abdomen'},{k:3,n:'UpperArm'},{k:4,n:'LowerArm'},{k:5,n:'Hand'},{k:6,n:'UpperLeg'},{k:7,n:'LowerLeg'},{k:8,n:'Foot'}];
+const RADAR_COLORS=[[1,'Blue'],[2,'Gold'],[3,'White'],[4,'Purple'],[5,'Red'],[7,'Green'],[8,'Yellow (NPC)']];
+
+const TYPE_CFG={
+  creature:{label:'Creature',icon:'✠',desc:'Hostile creatures with combat, loot, and behavior.',wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 – 859,999',
+    wTypes:[{v:10,l:'10 · Creature'}],
+    subTabs:['properties','attributes','skills','spellbook','bodyparts'],
+    presets:[
+      {l:'Rift Drudge (T6)',d:{fName:'Rift Drudge',fLevel:'180',fXp:'800000',cType:'3',fDmg:'95',fDmgType:'1',fWepSkill:'44',rSlash:'1.0',rPierce:'1.0',rBludge:'1.5',rCold:'0.5',rFire:'1.8',rAcid:'0.8',rElec:'1.0',rNether:'1.0',fHP:'3200',fStam:'3000',fMana:'500',fLum:'15000'}},
+      {l:'Fire Elemental',d:{fName:'Fire Elemental',fLevel:'200',fXp:'1200000',cType:'38',fDmg:'110',fDmgType:'16',fWepSkill:'44',rSlash:'0.6',rPierce:'0.6',rBludge:'1.2',rCold:'2.0',rFire:'0.1',rAcid:'1.0',rElec:'1.0',rNether:'0.5',fHP:'4000',fStam:'4000',fMana:'800',fLum:'20000'}},
+      {l:'Frost Skeleton',d:{fName:'Frost Tomb Sentinel',fLevel:'150',fXp:'400000',cType:'30',fDmg:'75',fDmgType:'1',fWepSkill:'44',rSlash:'0.8',rPierce:'0.7',rBludge:'1.5',rCold:'0.2',rFire:'1.5',rAcid:'1.0',rElec:'1.0',rNether:'0.3',fHP:'2200',fStam:'2000',fMana:'500',fLum:'8000'}},
+      {l:'Acid Olthoi',d:{fName:'Acid Olthoi',fLevel:'220',fXp:'1800000',cType:'1',fDmg:'130',fDmgType:'32',fWepSkill:'44',rSlash:'0.8',rPierce:'1.2',rBludge:'1.0',rCold:'1.0',rFire:'1.0',rAcid:'0.1',rElec:'1.2',rNether:'1.0',fHP:'5000',fStam:'4000',fMana:'500',fLum:'25000'}},
+    ]},
+  npc:{label:'NPC',icon:'◆',desc:'Quest givers, merchants, and interactive characters.',wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 – 859,999',
+    wTypes:[{v:10,l:'10 · Creature (NPC)'},{v:12,l:'12 · Vendor'}],
+    subTabs:['properties','attributes','emotes'],
+    presets:[
+      {l:'Quest Giver',d:{fName:'New Quest Giver',fLevel:'275',fShortDesc:'A weathered figure with knowing eyes.',fUseRadius:'3.0'}},
+      {l:'Vendor',d:{fName:'New Merchant',fLevel:'275',fShortDesc:'A traveling merchant of rare goods.',fUseRadius:'5.0'}},
+    ]},
+  item:{label:'Item',icon:'◈',desc:'Quest tokens, gems, stackables, and consumables.',wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 – 819,999',
+    wTypes:[{v:38,l:'38 · Gem'},{v:51,l:'51 · Stackable'},{v:18,l:'18 · Food'},{v:34,l:'34 · Scroll'},{v:22,l:'22 · Key'}],
+    subTabs:['properties'],
+    presets:[
+      {l:'Quest Token',d:{fName:'Quest Seal',fValue:'100',fEncumb:'5',fMaxStack:'1',fItemUse:'1',fBonded:'1',fAttuned:'1'}},
+      {l:'Stackable Drop',d:{fName:'Crafting Fragment',fValue:'50',fEncumb:'10',fMaxStack:'25',fItemUse:'8',fBonded:'0',fAttuned:'0'}},
+      {l:'Consumable',d:{fName:'Health Philtre',fValue:'300',fEncumb:'15',fMaxStack:'10',fItemUse:'2',fBonded:'0',fAttuned:'0'}},
+    ]},
+  weapon:{label:'Weapon',icon:'⚔',desc:'Melee weapons, missile launchers, and casters.',wcidFrom:'870000',wcidTo:'879999',wcidRange:'870,000 – 879,999',
+    wTypes:[{v:6,l:'6 · MeleeWeapon'},{v:3,l:'3 · MissileLauncher'},{v:35,l:'35 · Caster'}],
+    subTabs:['properties'],
+    presets:[
+      {l:'Heavy Sword',d:{fName:'Enchanted Longsword',fDmg:'85',fDmgType:'1',fWepTime:'45',fDmgVar:'0.4',fWepSkill:'44',fWepDef:'1.02',fWepOff:'1.03',fWieldDiff:'290',fValue:'12000',fEncumb:'450'}},
+      {l:'Light Spear',d:{fName:'Swift Spear',fDmg:'60',fDmgType:'2',fWepTime:'35',fDmgVar:'0.3',fWepSkill:'45',fWepDef:'1.04',fWepOff:'1.02',fWieldDiff:'250',fValue:'9000',fEncumb:'300'}},
+      {l:'Finesse Dagger',d:{fName:'Venom Dagger',fDmg:'45',fDmgType:'2',fWepTime:'28',fDmgVar:'0.2',fWepSkill:'46',fWepDef:'1.06',fWepOff:'1.05',fWieldDiff:'240',fValue:'8000',fEncumb:'200'}},
+      {l:'War Staff',d:{fName:'Staff of War',fDmg:'0',fDmgType:'0',fWepTime:'0',fDmgVar:'0',fWepSkill:'34',fWepDef:'1.05',fWepOff:'1.0',fWieldDiff:'300',fValue:'15000',fEncumb:'250'}},
+    ]},
+  armor:{label:'Armor',icon:'⛨',desc:'Clothing and armor for all body slots.',wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 – 819,999',
+    wTypes:[{v:2,l:'2 · Clothing/Armor'}],
+    subTabs:['properties'],
+    presets:[
+      {l:'Plate Chest',d:{fName:'Platemail Cuirass',fArmorLevel:'200',fArmorType:'11',fValidLoc:'512',fValue:'8000',fEncumb:'600'}},
+      {l:'Leather Cap',d:{fName:'Leather Cap',fArmorLevel:'60',fArmorType:'2',fValidLoc:'1',fValue:'800',fEncumb:'80'}},
+      {l:'Amuli Coat',d:{fName:'Amuli Coat',fArmorLevel:'160',fArmorType:'7',fValidLoc:'2',fValue:'5000',fEncumb:'350'}},
+      {l:'Covenant Gauntlets',d:{fName:'Covenant Gauntlets',fArmorLevel:'400',fArmorType:'15',fValidLoc:'32',fValue:'25000',fEncumb:'200'}},
+    ]},
+  quest:{label:'Quest',icon:'◇',desc:'Kill contracts, quest flags, and progression items.',wcidFrom:'860000',wcidTo:'869999',wcidRange:'860,000 – 869,999',
+    wTypes:[{v:38,l:'38 · Gem (Contract)'},{v:38,l:'38 · Gem (Kill Contract)'}],
+    subTabs:['properties','emotes'],
+    presets:[
+      {l:'Kill Contract',d:{fName:'Kill Contract',fValue:'1',fEncumb:'5',fBonded:'1',fAttuned:'1',fItemUse:'8',fMaxStack:'1'}},
+      {l:'Quest Token',d:{fName:'Quest Seal',fValue:'100',fEncumb:'5',fBonded:'1',fAttuned:'1',fItemUse:'1',fMaxStack:'1'}},
+    ]},
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let curType='creature', curSub='properties', curMode='manual', curAIType='creature';
+let spells=[], bodyParts=BODY_PARTS.map(b=>({...b,dType:4,dVal:0,dVar:0,baseAL:80,sl:64,pi:56,bl:120,co:40,fi:120,ac:80,el:80,nt:24}));
+let aiFullText='', aiGenerating=false;
+let appConfig={server_name:'Shattered Dawn',wcid_ranges:{},api_key_set:false};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+const $=id=>document.getElementById(id);
+const opt=(arr,valFn,lblFn,selVal)=>arr.map(r=>`<option value="${valFn(r)}"${valFn(r)==selVal?' selected':''}>${lblFn(r)}</option>`).join('');
+const g=(id,d='')=>{const e=$(id);return e?e.value:d;};
+const gi=(id,d=0)=>parseInt(g(id,String(d)))||d;
+const gf=(id,d=0)=>parseFloat(g(id,String(d)))||d;
+
+function kw(s){return`<span class="kw">${s}</span>`}
+function st(s){return`<span class="st2">'${String(s).replace(/'/g,"''")}'</span>`}
+function nm(n){return`<span class="nm">${n}</span>`}
+function cm(s){return`<span class="cm">/* ${s} */</span>`}
+function pad(s,n){const t=s.replace(/<[^>]+>/g,'');return s+' '.repeat(Math.max(0,n-t.length))}
+
+function toast(msg,ms=2000){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),ms);}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODE SWITCH
+// ─────────────────────────────────────────────────────────────────────────────
+function switchMode(mode,btn){
+  curMode=mode;
+  document.querySelectorAll('.mode-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  $('manualWS').classList.toggle('active',mode==='manual');
+  $('aiWS').classList.toggle('active',mode==='ai');
+  $('forgeBar').style.display=mode==='manual'?'flex':'none';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FORM BUILDING
+// ─────────────────────────────────────────────────────────────────────────────
+function buildInnerTabs(){
+  $('innerTabs').innerHTML=Object.entries(TYPE_CFG).map(([k,c])=>
+    `<button class="itab${k===curType?' active':''}" onclick="switchType('${k}',this)">${c.icon} ${c.label}</button>`
+  ).join('');
+}
+
+function switchType(type,btn){
+  curType=type;curSub='properties';
+  spells=[];bodyParts=BODY_PARTS.map(b=>({...b,dType:4,dVal:0,dVar:0,baseAL:80,sl:64,pi:56,bl:120,co:40,fi:120,ac:80,el:80,nt:24}));
+  document.querySelectorAll('.itab').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  buildForm();
+}
+
+function buildForm(){
+  const c=TYPE_CFG[curType];
+  $('wbTitle').innerHTML=`${c.icon} ${c.label} <span>· Workbench</span>`;
+  $('wbDesc').textContent=c.desc;
+  $('wcidFrom').value=c.wcidFrom;
+  $('wcidTo').value=c.wcidTo;
+  $('fWcid').value=c.wcidFrom;
+  $('topType').textContent=c.label;
+  $('topRange').textContent=c.wcidRange;
+  $('fWType').innerHTML=c.wTypes.map(t=>`<option value="${t.v}">${t.l}</option>`).join('');
+
+  // Show/hide level/xp fields
+  const showLevel=['creature','npc'].includes(curType);
+  $('gLevel').style.display=showLevel?'':'none';
+  $('gXp').style.display=curType==='creature'?'':'none';
+
+  // Sub tabs
+  const stabs={properties:'⚙ Properties',attributes:'◈ Attributes',skills:'+ Skills',spellbook:'+ Spell Book',bodyparts:'✠ Body Parts',emotes:'◇ Emotes'};
+  $('subTabs').innerHTML=c.subTabs.map((s,i)=>
+    `<button class="ctab${i===0?' active':''}" onclick="switchSub('${s}',this)">${stabs[s]||s}</button>`
+  ).join('');
+  curSub=c.subTabs[0];
+
+  // Presets
+  if(c.presets.length){
+    $('presetsRow').style.display='flex';
+    $('presetsRow').innerHTML=`<span class="pl">Presets:</span>`+c.presets.map(p=>
+      `<button class="pill" onclick='applyPreset(${JSON.stringify(p.d)})'>${p.l}</button>`
+    ).join('');
+  } else {
+    $('presetsRow').style.display='none';
+  }
+
+  buildSubContent();
+}
+
+function switchSub(sub,btn){
+  curSub=sub;
+  document.querySelectorAll('.ctab').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  buildSubContent();
+}
+
+function buildSubContent(){
+  const fc=$('formContent');
+  if(curSub==='properties') fc.innerHTML=buildProps();
+  else if(curSub==='attributes') fc.innerHTML=buildAttrs();
+  else if(curSub==='skills') fc.innerHTML=buildSkills();
+  else if(curSub==='spellbook') fc.innerHTML=buildSpells();
+  else if(curSub==='bodyparts') fc.innerHTML=buildBodyParts();
+  else if(curSub==='emotes') fc.innerHTML=`<div class="sec"><div class="sh"><div class="st">Emotes</div><div class="sl"></div></div><p class="note">Use the AI Mode tab to generate emote chains. Describe the quest logic and Claude will produce the full emote SQL.</p></div>`;
+  fc.querySelectorAll('input,select').forEach(e=>e.addEventListener('input',regen));
+  regen();
+}
+
+function buildProps(){
+  const t=curType;let h='';
+  if(t==='creature'||t==='npc'){
+    h+=`<div class="sec"><div class="sh"><div class="st">Identity</div><div class="sl"></div></div>
+    <div class="grid g3">
+      <div class="fg"><div class="fl">Creature Type <span class="fc">I-2</span></div>
+        <select id="cType">${CREATURE_TYPES.map(([v,l])=>`<option value="${v}"${v===31?' selected':''}>${v} · ${l}</option>`).join('')}</select></div>
+      <div class="fg"><div class="fl">Default Scale <span class="fc">F-39</span></div><input type="text" id="fScale" value="1.0"></div>
+      <div class="fg"><div class="fl">Palette <span class="fc">I-3</span></div>
+        <select id="fPalette">${opt(PALETTES,r=>r[0],r=>`${r[0]} · ${r[1]}`,9)}</select></div>
+    </div></div>`;
+
+    if(t==='creature'){
+      h+=`<div class="sec"><div class="sh"><div class="st">Combat</div><div class="sl"></div></div>
+      <div class="grid g3">
+        <div class="fg"><div class="fl">Damage <span class="fc">I-44</span></div><input type="number" id="fDmg" value="80"></div>
+        <div class="fg"><div class="fl">Damage Type <span class="fc">I-45</span></div>
+          <select id="fDmgType">${opt(DMG_TYPES,r=>r[0],r=>`${r[0]} · ${r[1]}`,1)}</select></div>
+        <div class="fg"><div class="fl">Weapon Skill <span class="fc">I-48</span></div>
+          <select id="fWepSkill">${opt(WEP_SKILLS,r=>r[0],r=>`${r[0]} · ${r[1]}`,44)}</select></div>
+        <div class="fg"><div class="fl">Combat Style <span class="fc">I-101</span></div>
+          <select id="fCombatStyle">${opt(COMBAT_STYLES,r=>r[0],r=>`${r[0]} · ${r[1]}`,2)}</select></div>
+        <div class="fg"><div class="fl">Attack Type <span class="fc">I-47</span></div>
+          <select id="fAttackType">${opt(ATTACK_TYPES,r=>r[0],r=>`${r[0]} · ${r[1]}`,4)}</select></div>
+        <div class="fg"><div class="fl">Death Treasure <span class="fc">DID-35</span></div>
+          <input type="number" id="fTreasureTier" value="3100" title="Tier ID from treasure tables"></div>
+      </div></div>
+      <div class="sec"><div class="sh"><div class="st">Resistances</div><div class="sl"></div></div>
+      <div class="rg">
+        ${[['Slash','rSlash'],['Pierce','rPierce'],['Bludge','rBludge'],['Cold','rCold'],['Fire','rFire'],['Acid','rAcid'],['Elec','rElec'],['Nether','rNether']].map(([l,id])=>`<div class="rc"><div class="fl">${l} <span class="fc">F</span></div><input type="text" id="${id}" value="1.0"></div>`).join('')}
+      </div></div>
+      <div class="sec"><div class="sh"><div class="st">Vitals &amp; Rewards</div><div class="sl"></div></div>
+      <div class="grid g3">
+        <div class="fg"><div class="fl">Max Health <span class="fc">V-1</span></div><input type="number" id="fHP" value="2000"></div>
+        <div class="fg"><div class="fl">Max Stamina <span class="fc">V-3</span></div><input type="number" id="fStam" value="2000"></div>
+        <div class="fg"><div class="fl">Max Mana <span class="fc">V-5</span></div><input type="number" id="fMana" value="800"></div>
+        <div class="fg"><div class="fl">Luminance Award <span class="fc">I-332</span></div><input type="number" id="fLum" value="5000"></div>
+        <div class="fg"><div class="fl">Aggro Range <span class="fc">F-31</span></div><input type="text" id="fAggroRange" value="16.0"></div>
+        <div class="fg"><div class="fl">Casts Magic <span class="fc">B-6</span></div>
+          <select id="fUsesMana"><option value="0">No</option><option value="1">Yes</option></select></div>
+      </div></div>`;
+    }
+
+    if(t==='npc'){
+      h+=`<div class="sec"><div class="sh"><div class="st">NPC Settings</div><div class="sl"></div></div>
+      <div class="grid g3">
+        <div class="fg"><div class="fl">Use Radius <span class="fc">F-54</span></div><input type="text" id="fUseRadius" value="3.0"></div>
+        <div class="fg"><div class="fl">Radar Color <span class="fc">I-95</span></div>
+          <select id="fRadarColor">${opt(RADAR_COLORS,r=>r[0],r=>`${r[0]} · ${r[1]}`,8)}</select></div>
+        <div class="fg span3"><div class="fl">Short Description <span class="fc">S-15</span></div>
+          <input type="text" id="fShortDesc" value="A mysterious figure."></div>
+      </div></div>`;
+    }
+  }
+
+  if(t==='item'||t==='quest'){
+    h+=`<div class="sec"><div class="sh"><div class="st">Item Properties</div><div class="sl"></div></div>
+    <div class="grid g3">
+      <div class="fg"><div class="fl">Value (pyreals) <span class="fc">I-19</span></div><input type="number" id="fValue" value="100"></div>
+      <div class="fg"><div class="fl">Encumbrance <span class="fc">I-5</span></div><input type="number" id="fEncumb" value="10"></div>
+      <div class="fg"><div class="fl">Max Stack Size <span class="fc">I-11</span></div><input type="number" id="fMaxStack" value="1"></div>
+      <div class="fg"><div class="fl">Item Useable <span class="fc">I-16</span></div>
+        <select id="fItemUse">${opt(ITEM_USE,r=>r[0],r=>r[1],1)}</select></div>
+      <div class="fg"><div class="fl">Bonded <span class="fc">I-33</span></div>
+        <select id="fBonded">${opt(BONDED,r=>r[0],r=>r[1],1)}</select></div>
+      <div class="fg"><div class="fl">Attuned <span class="fc">I-114</span></div>
+        <select id="fAttuned">${opt(ATTUNED,r=>r[0],r=>r[1],1)}</select></div>
+      <div class="fg"><div class="fl">Palette <span class="fc">I-3</span></div>
+        <select id="fPalette">${opt(PALETTES,r=>r[0],r=>`${r[0]} · ${r[1]}`,39)}</select></div>
+      <div class="fg span2"><div class="fl">Short Description <span class="fc">S-15</span></div>
+        <input type="text" id="fShortDesc" value=""></div>
+      <div class="fg span3"><div class="fl">Use Message <span class="fc">S-14</span></div>
+        <input type="text" id="fUseMsg" value=""></div>
+    </div></div>`;
+  }
+
+  if(t==='weapon'){
+    h+=`<div class="sec"><div class="sh"><div class="st">Weapon Properties</div><div class="sl"></div></div>
+    <div class="grid g3">
+      <div class="fg"><div class="fl">Damage <span class="fc">I-44</span></div><input type="number" id="fDmg" value="80"></div>
+      <div class="fg"><div class="fl">Damage Type <span class="fc">I-45</span></div>
+        <select id="fDmgType">${opt(DMG_TYPES,r=>r[0],r=>`${r[0]} · ${r[1]}`,1)}</select></div>
+      <div class="fg"><div class="fl">Weapon Skill <span class="fc">I-48</span></div>
+        <select id="fWepSkill">${opt(WEP_SKILLS,r=>r[0],r=>`${r[0]} · ${r[1]}`,44)}</select></div>
+      <div class="fg"><div class="fl">Weapon Time <span class="fc">I-49</span></div><input type="number" id="fWepTime" value="45"></div>
+      <div class="fg"><div class="fl">Damage Variance <span class="fc">F-22</span></div><input type="text" id="fDmgVar" value="0.4"></div>
+      <div class="fg"><div class="fl">Attack Type <span class="fc">I-47</span></div>
+        <select id="fAttackType">${opt(ATTACK_TYPES,r=>r[0],r=>`${r[0]} · ${r[1]}`,4)}</select></div>
+      <div class="fg"><div class="fl">Defense Mod <span class="fc">F-29</span></div><input type="text" id="fWepDef" value="1.0"></div>
+      <div class="fg"><div class="fl">Offense Mod <span class="fc">F-62</span></div><input type="text" id="fWepOff" value="1.0"></div>
+      <div class="fg"><div class="fl">Wield Difficulty <span class="fc">I-160</span></div><input type="number" id="fWieldDiff" value="290"></div>
+      <div class="fg"><div class="fl">Value <span class="fc">I-19</span></div><input type="number" id="fValue" value="5000"></div>
+      <div class="fg"><div class="fl">Encumbrance <span class="fc">I-5</span></div><input type="number" id="fEncumb" value="400"></div>
+      <div class="fg"><div class="fl">Palette <span class="fc">I-3</span></div>
+        <select id="fPalette">${opt(PALETTES,r=>r[0],r=>`${r[0]} · ${r[1]}`,20)}</select></div>
+    </div></div>`;
+  }
+
+  if(t==='armor'){
+    h+=`<div class="sec"><div class="sh"><div class="st">Armor Properties</div><div class="sl"></div></div>
+    <div class="grid g3">
+      <div class="fg"><div class="fl">Armor Level <span class="fc">I-28</span></div><input type="number" id="fArmorLevel" value="100"></div>
+      <div class="fg"><div class="fl">Armor Type <span class="fc">I-27</span></div>
+        <select id="fArmorType">${opt(ARMOR_TYPES,r=>r[0],r=>`${r[0]} · ${r[1]}`,11)}</select></div>
+      <div class="fg"><div class="fl">Slot (Valid Location) <span class="fc">I-9</span></div>
+        <select id="fValidLoc">${opt(ARMOR_SLOTS,r=>r[0],r=>`${r[0]} · ${r[1]}`,512)}</select></div>
+      <div class="fg"><div class="fl">Value <span class="fc">I-19</span></div><input type="number" id="fValue" value="3000"></div>
+      <div class="fg"><div class="fl">Encumbrance <span class="fc">I-5</span></div><input type="number" id="fEncumb" value="300"></div>
+      <div class="fg"><div class="fl">Palette <span class="fc">I-3</span></div>
+        <select id="fPalette">${opt(PALETTES,r=>r[0],r=>`${r[0]} · ${r[1]}`,9)}</select></div>
+    </div>
+    <div class="sh" style="margin-top:12px"><div class="st">Elemental Modifiers</div><div class="sl"></div></div>
+    <div class="rg">
+      ${[['Slash','mSlash'],['Pierce','mPierce'],['Bludge','mBludge'],['Cold','mCold'],['Fire','mFire'],['Acid','mAcid'],['Elec','mElec'],['Nether','mNether']].map(([l,id])=>`<div class="rc"><div class="fl">${l} <span class="fc">F</span></div><input type="text" id="${id}" value="1.0"></div>`).join('')}
+    </div></div>`;
+  }
+  return h;
+}
+
+function buildAttrs(){
+  const attrs=[[1,'Strength'],[2,'Endurance'],[3,'Quickness'],[4,'Coordination'],[5,'Focus'],[6,'Self']];
+  return `<div class="sec">
+    <div class="sh"><div class="st">Attributes</div><div class="sl"></div></div>
+    <div class="grid g3">${attrs.map(([t,n])=>`<div class="fg"><div class="fl">${n} <span class="fc">A-${t}</span></div><input type="number" id="attr_${t}" value="260"></div>`).join('')}</div>
+    <div class="sh" style="margin-top:12px"><div class="st">Vitals</div><div class="sl"></div></div>
+    <div class="grid g3">
+      <div class="fg"><div class="fl">MaxHealth <span class="fc">V-1</span></div><input type="number" id="vital_1" value="2000"></div>
+      <div class="fg"><div class="fl">MaxStamina <span class="fc">V-3</span></div><input type="number" id="vital_3" value="2000"></div>
+      <div class="fg"><div class="fl">MaxMana <span class="fc">V-5</span></div><input type="number" id="vital_5" value="800"></div>
+    </div></div>`;
+}
+
+function buildSkills(){
+  return `<div class="sec">
+    <div class="sh"><div class="st">Skills</div><div class="sl"></div></div>
+    <p class="warn">⚠ Retired skill types 1–5 and 8–13 are never valid — do not use them.</p>
+    ${ALL_SKILLS.map(([id,name])=>`
+      <div style="display:grid;grid-template-columns:160px 150px 90px;gap:8px;align-items:end;margin-bottom:7px">
+        <div class="fl" style="align-self:center">${name} <span class="fc">SK-${id}</span></div>
+        <select id="sk_sac_${id}" onchange="regen()">${opt(SKILL_SAC,r=>r[0],r=>`${r[0]} · ${r[1]}`,2)}</select>
+        <input type="number" id="sk_init_${id}" value="0" placeholder="Init Level" oninput="regen()">
+      </div>`).join('')}
+  </div>`;
+}
+
+function buildSpells(){
+  const rows=spells.map((sp,i)=>`
+    <div class="spell-row">
+      <div class="fg"><div class="fl">Spell ID</div><input type="number" id="sp_id_${i}" value="${sp.id}" oninput="updateSpell(${i},'id',this.value)"></div>
+      <div class="fg"><div class="fl">Name (reference)</div><input type="text" id="sp_nm_${i}" value="${sp.name}" oninput="updateSpell(${i},'name',this.value)"></div>
+      <div class="fg"><div class="fl">Probability</div><input type="text" id="sp_pr_${i}" value="${sp.prob}" oninput="updateSpell(${i},'prob',this.value)"></div>
+      <button class="del" onclick="removeSpell(${i})">✕</button>
+    </div>`).join('');
+  return `<div class="sec">
+    <div class="sh"><div class="st">Spell Book</div><div class="sl"></div></div>
+    <p class="note">Probability: ≤2.0 → actual%=value/100 · >2.0 → actual%=value−2.0 &nbsp;&nbsp;e.g. 2.20 = 20% cast chance</p>
+    ${rows}
+    <button class="add-btn" onclick="addSpell()">+ Add Spell</button>
+  </div>`;
+}
+
+function buildBodyParts(){
+  const rows=bodyParts.map((bp,i)=>`<tr>
+    <td style="font-family:'Cinzel',serif;font-size:9px;white-space:nowrap;color:var(--ink-mid)">${bp.n}</td>
+    <td><select id="bp_dt_${i}" style="font-size:10px" onchange="regen()">${opt(DMG_TYPES,r=>r[0],r=>`${r[0]}·${r[1]}`,4)}</select></td>
+    <td><input type="number" id="bp_dv_${i}" value="${bp.dVal}" oninput="regen()"></td>
+    <td><input type="number" id="bp_al_${i}" value="${bp.baseAL}" oninput="regen()"></td>
+    <td><input type="number" id="bp_sl_${i}" value="${bp.sl}" oninput="regen()"></td>
+    <td><input type="number" id="bp_pi_${i}" value="${bp.pi}" oninput="regen()"></td>
+    <td><input type="number" id="bp_bl_${i}" value="${bp.bl}" oninput="regen()"></td>
+    <td><input type="number" id="bp_co_${i}" value="${bp.co}" oninput="regen()"></td>
+    <td><input type="number" id="bp_fi_${i}" value="${bp.fi}" oninput="regen()"></td>
+    <td><input type="number" id="bp_ac_${i}" value="${bp.ac}" oninput="regen()"></td>
+    <td><input type="number" id="bp_el_${i}" value="${bp.el}" oninput="regen()"></td>
+  </tr>`).join('');
+  return `<div class="sec bp-wrap">
+    <div class="sh"><div class="st">Body Parts</div><div class="sl"></div></div>
+    <table><thead><tr><th>Part</th><th>DmgType</th><th>DVal</th><th>Base AL</th><th>Slash</th><th>Pierce</th><th>Bludge</th><th>Cold</th><th>Fire</th><th>Acid</th><th>Elec</th></tr></thead><tbody>${rows}</tbody></table>
+  </div>`;
+}
+
+function updateSpell(i,f,v){spells[i][f]=v;regen();}
+function addSpell(){spells.push({id:1788,name:'Eye of the Storm',prob:'1.04'});buildSubContent();}
+function removeSpell(i){spells.splice(i,1);buildSubContent();}
+function applyPreset(d){Object.entries(d).forEach(([id,v])=>{const e=$(id);if(e)e.value=v;});regen();}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SQL GENERATION
+// ─────────────────────────────────────────────────────────────────────────────
+function regen(){
+  const wcid=gi('fWcid',850000);
+  const name=g('fName','New Creature');
+  const wType=gi('fWType',10);
+  const className=name.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const now=new Date().toISOString().replace('T',' ').slice(0,19);
+  const typeNames={2:'Clothing',3:'MissileLauncher',6:'MeleeWeapon',10:'Creature',12:'Vendor',18:'Food',34:'Scroll',35:'Caster',38:'Gem',51:'Stackable'};
+  const typeName=typeNames[wType]||'Generic';
+  const t=curType;
+
+  let p=[];
+  p.push(cm(`===== FILE: ${wcid} ${name}.sql =====`));p.push('');
+  p.push(kw('DELETE FROM')+' `weenie` '+kw('WHERE')+' `class_Id` = '+nm(wcid)+';');p.push('');
+  p.push(kw('INSERT INTO')+' `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)');
+  p.push(kw('VALUES')+' ('+nm(wcid)+', '+st(className)+', '+nm(wType)+', '+st(now)+') '+cm(`${typeName} - SD custom content`)+';');p.push('');
+
+  let IR=[];
+  if(t==='creature'||t==='npc'){
+    IR.push([1,16,'ItemType - Creature']);
+    const ct=gi('cType',31);IR.push([2,ct,'CreatureType - '+(CREATURE_TYPES.find(([v])=>v==ct)||[0,'?'])[1]]);
+    IR.push([3,gi('fPalette',9),'PaletteTemplate']);
+    IR.push([6,-1,'ItemsCapacity'],[7,-1,'ContainersCapacity']);
+    IR.push([16,t==='npc'?32:1,'ItemUseable']);
+    IR.push([25,gi('fLevel',100),'Level']);
+    if(t==='creature'){
+      IR.push([40,2,'CombatMode - Melee'],[44,gi('fDmg',80),'Damage']);
+      const dt=gi('fDmgType',1);IR.push([45,dt,'DamageType - '+(DMG_TYPES.find(([v])=>v==dt)||[0,'?'])[1]]);
+      IR.push([47,gi('fAttackType',4),'AttackType']);
+      const ws=gi('fWepSkill',44);IR.push([48,ws,'WeaponSkill - '+(WEP_SKILLS.find(([v])=>v==ws)||[0,'?'])[1]]);
+      const cs=gi('fCombatStyle',2);IR.push([101,cs,'AiAllowedCombatStyle']);
+      IR.push([133,4,'ShowableOnRadar - Always'],[146,gi('fXp',50000),'XpOverride'],[332,gi('fLum',5000),'LuminanceAward']);
+    }
+    if(t==='npc'){
+      IR.push([95,gi('fRadarColor',8),'RadarBlipColor'],[133,4,'ShowableOnRadar - Always'],[134,16,'PlayerKillerStatus - RubberGlue'],[146,0,'XpOverride - 0']);
+    }
+  } else if(t==='item'||t==='quest'){
+    const enc=gi('fEncumb',10),ms=gi('fMaxStack',1);
+    IR.push([1,2048,'ItemType - Gem'],[3,gi('fPalette',39),'PaletteTemplate'],[5,enc,'EncumbranceVal'],[11,ms,'MaxStackSize'],[12,1,'StackSize'],[13,enc,'StackUnitEncumbrance'],[16,gi('fItemUse',1),'ItemUseable'],[19,gi('fValue',100),'Value'],[33,gi('fBonded',1),'Bonded'],[93,1044,'PhysicsState'],[114,gi('fAttuned',1),'Attuned']);
+  } else if(t==='weapon'){
+    const ws=gi('fWepSkill',44);
+    IR.push([1,1,'ItemType - MeleeWeapon'],[5,gi('fEncumb',400),'EncumbranceVal'],[19,gi('fValue',5000),'Value'],[44,gi('fDmg',80),'Damage']);
+    const dt=gi('fDmgType',1);IR.push([45,dt,'DamageType - '+(DMG_TYPES.find(([v])=>v==dt)||[0,'?'])[1]]);
+    IR.push([47,gi('fAttackType',4),'AttackType'],[48,ws,'WeaponSkill - '+(WEP_SKILLS.find(([v])=>v==ws)||[0,'?'])[1]],[49,gi('fWepTime',45),'WeaponTime'],[93,1044,'PhysicsState'],[158,1,'WieldRequirements - Skill'],[159,ws,'WieldSkilltype'],[160,gi('fWieldDiff',290),'WieldDifficulty']);
+  } else if(t==='armor'){
+    const at=gi('fArmorType',11),vl=gi('fValidLoc',512);
+    IR.push([1,2,'ItemType - Armor'],[4,vl,'ClothingPriority'],[5,gi('fEncumb',300),'EncumbranceVal'],[9,vl,'ValidLocations'],[19,gi('fValue',3000),'Value'],[27,at,'ArmorType - '+(ARMOR_TYPES.find(([v])=>v==at)||[0,'?'])[1]],[28,gi('fArmorLevel',100),'ArmorLevel'],[93,1044,'PhysicsState']);
+  }
+
+  if(IR.length){
+    p.push(kw('INSERT INTO')+' `weenie_properties_int` (`object_Id`, `type`, `value`)');
+    IR.forEach((r,i)=>{const[tp,v,c]=r;const row=`(${nm(wcid)}, ${pad(nm(tp),5)}, ${pad(nm(v),13)}) `+cm(c);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
+    p.push(';');p.push('');
+  }
+
+  if(t==='creature'){
+    const bools=[[1,'True','Stuck'],[6,gi('fUsesMana',0)?'True':'False','AiUsesMana'],[12,'True','ReportCollisions'],[13,'False','Ethereal'],[14,'True','GravityStatus'],[15,'True','LightsStatus'],[19,'True','Attackable'],[120,'False','TreasureCorpse']];
+    p.push(kw('INSERT INTO')+' `weenie_properties_bool` (`object_Id`, `type`, `value`)');
+    bools.forEach((r,i)=>{const[tp,v,c]=r;const row=`(${nm(wcid)}, ${pad(nm(tp),5)}, ${String(v).padEnd(6)}) `+cm(c);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
+    p.push(';');p.push('');
+
+    const rs=gf('rSlash',1),rp=gf('rPierce',1),rb=gf('rBludge',1),rc=gf('rCold',1),rf=gf('rFire',1),ra=gf('rAcid',1),re=gf('rElec',1),rn=gf('rNether',1);
+    const sc=gf('fScale',1),ar=gf('fAggroRange',16);
+    const FR=[[1,5,'HeartbeatInterval'],[3,0.5,'HealthRate'],[4,0.4,'StaminaRate'],[5,1.5,'ManaRate'],[12,1.0,'Shade'],[13,rs,'ArmorModVsSlash'],[14,rp,'ArmorModVsPierce'],[15,rb,'ArmorModVsBludgeon'],[16,rc,'ArmorModVsCold'],[17,rf,'ArmorModVsFire'],[18,ra,'ArmorModVsAcid'],[19,re,'ArmorModVsElectric'],[31,ar,'VisualAwarenessRange'],[39,sc,'DefaultScale'],[64,rs,'ResistSlash'],[65,rp,'ResistPierce'],[66,rb,'ResistBludgeon'],[67,rf,'ResistFire'],[68,rc,'ResistCold'],[69,ra,'ResistAcid'],[70,re,'ResistElectric'],[165,rn,'ArmorModVsNether'],[166,rn,'ResistNether']];
+    p.push(kw('INSERT INTO')+' `weenie_properties_float` (`object_Id`, `type`, `value`)');
+    FR.forEach((r,i)=>{const[tp,v,c]=r;const row=`(${nm(wcid)}, ${pad(nm(tp),5)}, ${String(v).padEnd(9)}) `+cm(c);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
+    p.push(';');p.push('');
+  }
+
+  if(t==='weapon'){
+    const FR=[[22,gf('fDmgVar',0.4),'DamageVariance'],[29,gf('fWepDef',1.0),'WeaponDefense'],[39,1.0,'DefaultScale'],[62,gf('fWepOff',1.0),'WeaponOffense']];
+    p.push(kw('INSERT INTO')+' `weenie_properties_float` (`object_Id`, `type`, `value`)');
+    FR.forEach((r,i)=>{const[tp,v,c]=r;const row=`(${nm(wcid)}, ${pad(nm(tp),5)}, ${String(v).padEnd(9)}) `+cm(c);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
+    p.push(';');p.push('');
+  }
+
+  if(t==='armor'){
+    const ids=[['mSlash',13,'ArmorModVsSlash'],['mPierce',14,'ArmorModVsPierce'],['mBludge',15,'ArmorModVsBludgeon'],['mCold',16,'ArmorModVsCold'],['mFire',17,'ArmorModVsFire'],['mAcid',18,'ArmorModVsAcid'],['mElec',19,'ArmorModVsElectric'],['mNether',165,'ArmorModVsNether']];
+    const FR=ids.map(([id,tp,c])=>[tp,gf(id,1.0),c]);FR.push([39,1.0,'DefaultScale']);
+    p.push(kw('INSERT INTO')+' `weenie_properties_float` (`object_Id`, `type`, `value`)');
+    FR.forEach((r,i)=>{const[tp,v,c]=r;const row=`(${nm(wcid)}, ${pad(nm(tp),5)}, ${String(v).padEnd(9)}) `+cm(c);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
+    p.push(';');p.push('');
+  }
+
+  const SR=[[1,name,'Name']];
+  const sd=g('fShortDesc','');if(sd)SR.push([15,sd,'ShortDesc']);
+  const um=g('fUseMsg','');if(um)SR.push([14,um,'Use']);
+  p.push(kw('INSERT INTO')+' `weenie_properties_string` (`object_Id`, `type`, `value`)');
+  SR.forEach((r,i)=>{const[tp,v,c]=r;const row=`(${nm(wcid)}, ${pad(nm(tp),5)}, ${st(v)}) `+cm(c);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
+  p.push(';');p.push('');
+
+  const DR=[[1,'0x02000178','Setup'],[2,'0x09000008','MotionTable'],[3,'0x20000008','SoundTable'],[8,'0x06001036','Icon'],[22,'0x34000026','PhysicsEffectTable']];
+  if(t==='creature'){const tr=gi('fTreasureTier',3100);if(tr)DR.push([35,tr,'DeathTreasureType']);}
+  p.push(kw('INSERT INTO')+' `weenie_properties_d_i_d` (`object_Id`, `type`, `value`)');
+  DR.forEach((r,i)=>{const[tp,v,c]=r;const row=`(${nm(wcid)}, ${pad(nm(tp),5)}, ${typeof v==='number'?nm(v):v.padEnd(14)}) `+cm(c);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
+  p.push(';');p.push('');
+
+  if(curSub==='attributes'&&(t==='creature'||t==='npc')){
+    const attrs=[[1,'Strength'],[2,'Endurance'],[3,'Quickness'],[4,'Coordination'],[5,'Focus'],[6,'Self']];
+    p.push(kw('INSERT INTO')+' `weenie_properties_attribute` (`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`)');
+    attrs.forEach(([tp,n],i)=>{const v=gi(`attr_${tp}`,260);const row=`(${nm(wcid)}, ${nm(tp)}, ${nm(v)}, 0, 0) `+cm(n);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
+    p.push(';');p.push('');
+    const vitals=[[1,'MaxHealth',gi('vital_1',2000)],[3,'MaxStamina',gi('vital_3',2000)],[5,'MaxMana',gi('vital_5',800)]];
+    p.push(kw('INSERT INTO')+' `weenie_properties_attribute_2nd` (`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`, `current_Level`)');
+    vitals.forEach(([tp,n,v],i)=>{const row=`(${nm(wcid)}, ${nm(tp)}, ${nm(v)}, 0, 0, ${nm(v)}) `+cm(n);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
+    p.push(';');p.push('');
+  }
+
+  if(curSub==='spellbook'&&spells.length){
+    p.push(kw('INSERT INTO')+' `weenie_properties_spell_book` (`object_Id`, `spell`, `probability`)');
+    spells.forEach((sp,i)=>{const row=`(${nm(wcid)}, ${pad(nm(sp.id),7)}, ${sp.prob}) `+cm(sp.name);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
+    p.push(';');p.push('');
+  }
+
+  if(curSub==='bodyparts'){
+    p.push(kw('INSERT INTO')+' `weenie_properties_body_part`');
+    p.push('  (`object_Id`, `key`, `d_Type`, `d_Val`, `d_Var`, `base_Armor`,');
+    p.push('   `armor_Vs_Slash`, `armor_Vs_Pierce`, `armor_Vs_Bludgeon`, `armor_Vs_Cold`,');
+    p.push('   `armor_Vs_Fire`, `armor_Vs_Acid`, `armor_Vs_Electric`, `armor_Vs_Nether`,');
+    p.push('   `b_h`, `h_l_f`, `m_l_f`, `l_l_f`, `h_r_f`, `m_r_f`, `l_r_f`,');
+    p.push('   `h_l_b`, `m_l_b`, `l_l_b`, `h_r_b`, `m_r_b`, `l_r_b`)');
+    bodyParts.forEach((bp,i)=>{
+      const dt=gi(`bp_dt_${i}`,4),dv=gi(`bp_dv_${i}`,0),al=gi(`bp_al_${i}`,80);
+      const sl=gi(`bp_sl_${i}`,bp.sl),pi=gi(`bp_pi_${i}`,bp.pi),bl=gi(`bp_bl_${i}`,bp.bl);
+      const co=gi(`bp_co_${i}`,bp.co),fi=gi(`bp_fi_${i}`,bp.fi),ac=gi(`bp_ac_${i}`,bp.ac),el=gi(`bp_el_${i}`,bp.el);
+      const row=`(${nm(wcid)}, ${nm(bp.k)}, ${nm(dt)}, ${nm(dv)}, 0, ${nm(al)}, ${nm(sl)}, ${nm(pi)}, ${nm(bl)}, ${nm(co)}, ${nm(fi)}, ${nm(ac)}, ${nm(el)}, 0, 1, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0) `+cm(bp.n);
+      p.push(i===0?kw('VALUES')+' '+row:'     , '+row);
+    });
+    p.push(';');
+  }
+
+  $('sqlOut').innerHTML=p.join('\n');
+}
+
+function getPlainSQL(){return $('sqlOut').innerText||$('sqlOut').textContent;}
+
+function copySQL(){
+  navigator.clipboard.writeText(getPlainSQL()).then(()=>toast('Copied to clipboard'));
+}
+
+function downloadSQL(){
+  const name=g('fName','weenie').toLowerCase().replace(/[^a-z0-9]/g,'_');
+  const wcid=gi('fWcid',850000);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([getPlainSQL()],{type:'text/plain'}));
+  a.download=`${wcid}_${name}.sql`;a.click();
+}
+
+function saveSQL(){
+  const sql=getPlainSQL();
+  const wcid=gi('fWcid',850000);
+  const name=g('fName','weenie');
+  if(window.pywebview){
+    window.pywebview.api.save_sql(sql,wcid,name).then(r=>{
+      if(r.success) toast('Saved: '+r.filename);
+      else toast('Error: '+r.error);
+    });
+  } else {
+    downloadSQL();
+  }
+}
+
+function resetForm(){
+  const c=TYPE_CFG[curType];
+  $('fName').value='New '+c.label;
+  $('fWcid').value=c.wcidFrom;
+  if($('fLevel'))$('fLevel').value='100';
+  if($('fXp'))$('fXp').value='50000';
+  spells=[];
+  bodyParts=BODY_PARTS.map(b=>({...b,dType:4,dVal:0,dVar:0,baseAL:80,sl:64,pi:56,bl:120,co:40,fi:120,ac:80,el:80,nt:24}));
+  buildSubContent();
+}
+
+function openOutputFolder(){
+  if(window.pywebview){window.pywebview.api.open_output_folder();}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI MODE
+// ─────────────────────────────────────────────────────────────────────────────
+const AI_TYPES=['creature','npc','item','weapon','armor','quest','general'];
+const AI_PROMPTS={
+  creature:'e.g. A level 180 ice drudge for a snowy biome. High cold resist, weak to fire. Drops T6 loot. Casts Frost Bolt and Frost Volley.',
+  npc:'e.g. A grim Aluvian historian who gives a Dericost vault quest. Waves at players. Short, ominous description.',
+  item:'e.g. A bonded attuned quest token that a player turns in to complete the Vault quest.',
+  weapon:'e.g. A level 290 wield HeavyWeapons sword with fire damage. High offense mod. Named Flamebrand.',
+  armor:'e.g. A full set of custom Dericost tomb armor. High AL, cold resist bonus, dark black palette.',
+  quest:'e.g. A 3-step undead quest at level 250. Kill 25 sentinels, collect 5 ossuary fragments, defeat a boss. Reward: 25% XP, 40,000 luminance, 5 trade notes.',
+  general:'e.g. A kill contract gem for slaying Frost Skeletons with a 20-hour daily cooldown.',
+};
+
+function buildAITabs(){
+  $('aiTypeTabs').innerHTML=AI_TYPES.map(t=>`<button class="ai-ctab${t===curAIType?' active':''}" onclick="switchAIType('${t}',this)">${TYPE_CFG[t]?.icon||'✦'} ${t.charAt(0).toUpperCase()+t.slice(1)}</button>`).join('');
+  $('aiPrompt').placeholder=AI_PROMPTS[curAIType]||'Describe what you want…';
+}
+
+function switchAIType(type,btn){
+  curAIType=type;
+  document.querySelectorAll('.ai-ctab').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  $('aiPrompt').placeholder=AI_PROMPTS[type]||'Describe what you want…';
+}
+
+function startGeneration(){
+  const prompt=$('aiPrompt').value.trim();
+  if(!prompt){toast('Enter a prompt first.');return;}
+  if(aiGenerating)return;
+  if(!appConfig.api_key_set){toast('No API key — open Settings first.');openSettings();return;}
+
+  aiGenerating=true;aiFullText='';
+  $('aiOut').textContent='';
+  $('aiGenBtn').disabled=true;
+  $('aiStopBtn').style.display='inline-block';
+  $('aiSaveBtn').disabled=true;
+  $('aiStatus').textContent='● Generating…';
+  $('aiStatus').className='ai-status generating';
+
+  if(window.pywebview){
+    window.pywebview.api.start_generation(prompt,curAIType).then(r=>{
+      if(!r.success){
+        setAIError(r.error);
+      }
+    });
+  } else {
+    setAIError('pywebview not available — run as desktop app.');
+  }
+}
+
+function stopGeneration(){
+  aiGenerating=false;
+  if(window.pywebview)window.pywebview.api.stop_generation();
+  $('aiGenBtn').disabled=false;
+  $('aiStopBtn').style.display='none';
+  $('aiStatus').textContent='⏹ Stopped';
+  $('aiStatus').className='ai-status';
+  if(aiFullText)$('aiSaveBtn').disabled=false;
+}
+
+function setAIError(msg){
+  aiGenerating=false;
+  $('aiGenBtn').disabled=false;
+  $('aiStopBtn').style.display='none';
+  $('aiStatus').textContent='✗ '+msg;
+  $('aiStatus').className='ai-status error';
+}
+
+// Listen for streaming events from Python
+window.addEventListener('ai_chunk',(e)=>{
+  if(!aiGenerating)return;
+  aiFullText+=e.detail;
+  $('aiOut').textContent=aiFullText;
+  $('aiOut').scrollTop=$('aiOut').scrollHeight;
+});
+
+window.addEventListener('ai_done',(e)=>{
+  aiFullText=e.detail;aiGenerating=false;
+  $('aiGenBtn').disabled=false;
+  $('aiStopBtn').style.display='none';
+  $('aiSaveBtn').disabled=false;
+  const count=(aiFullText.match(/FILE:/g)||[]).length;
+  $('aiStatus').textContent=`✓ Done — ${count} file${count!==1?'s':''} ready`;
+  $('aiStatus').className='ai-status done';
+  $('aiOut').scrollTop=0;
+});
+
+window.addEventListener('ai_error',(e)=>{setAIError(e.detail);});
+
+function saveAIFiles(){
+  if(!aiFullText)return;
+  if(window.pywebview){
+    window.pywebview.api.save_ai_files(aiFullText,curAIType).then(r=>{
+      if(r.success){
+        toast(`Saved ${r.count} file(s)`);
+        $('aiFileList').innerHTML=`<div style="color:var(--gold);font-family:'Cinzel',serif;font-size:9px;letter-spacing:.1em;margin-bottom:8px">${r.folder}</div>`+
+          r.files.map(f=>`<div style="color:#c8b898;margin-bottom:4px">📄 ${f}</div>`).join('');
+      } else {
+        toast('Error: '+r.error);
+      }
+    });
+  }
+}
+
+function clearAI(){
+  aiFullText='';aiGenerating=false;
+  $('aiOut').textContent='';
+  $('aiStatus').textContent='';
+  $('aiStatus').className='ai-status';
+  $('aiSaveBtn').disabled=true;
+  $('aiGenBtn').disabled=false;
+  $('aiStopBtn').style.display='none';
+  $('aiFileList').innerHTML='<div style="color:#8a7a58;font-style:italic;padding:14px 16px">Files will appear here after saving.</div>';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS
+// ─────────────────────────────────────────────────────────────────────────────
+function openSettings(){
+  $('settingsOverlay').classList.add('open');
+  if(window.pywebview){
+    window.pywebview.api.get_config().then(cfg=>{
+      appConfig=cfg;
+      $('sServerName').value=cfg.server_name||'';
+      $('sAuthor').value=cfg.author||'';
+      $('sOutputDir').value=cfg.output_dir||'';
+      $('sModel').value=cfg.model||'claude-sonnet-4-20250514';
+      $('sApiKey').placeholder=cfg.api_key_set?'(API key already set — enter to change)':'sk-ant-…';
+
+      const tbody=$('wcidTbody');
+      tbody.innerHTML='';
+      Object.entries(cfg.wcid_ranges||{}).forEach(([key,info])=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML=`<td style="font-family:'Cinzel',serif;font-size:10px">${info.label||key}</td>
+          <td><input type="number" id="wcid_start_${key}" value="${info.start||0}" style="width:100px"></td>
+          <td><input type="number" id="wcid_next_${key}" value="${info.next||0}" style="width:100px"></td>`;
+        tr.dataset.key=key;
+        tbody.appendChild(tr);
+      });
+    });
+  }
+}
+
+function closeSettings(){$('settingsOverlay').classList.remove('open');}
+function overlayClick(e){if(e.target===$('settingsOverlay'))closeSettings();}
+
+function saveSettings(){
+  const data={
+    server_name:$('sServerName').value.trim(),
+    author:$('sAuthor').value.trim(),
+    output_dir:$('sOutputDir').value.trim(),
+    model:$('sModel').value,
+  };
+  const apiKey=$('sApiKey').value.trim();
+  if(apiKey)data.api_key=apiKey;
+
+  const ranges={};
+  document.querySelectorAll('#wcidTbody tr').forEach(tr=>{
+    const key=tr.dataset.key;
+    if(key){
+      const start=parseInt(document.getElementById(`wcid_start_${key}`)?.value)||0;
+      const next=parseInt(document.getElementById(`wcid_next_${key}`)?.value)||0;
+      const existing=appConfig.wcid_ranges?.[key]||{};
+      ranges[key]={...existing,start,next};
+    }
+  });
+  if(Object.keys(ranges).length)data.wcid_ranges=ranges;
+
+  if(window.pywebview){
+    window.pywebview.api.save_config(data).then(r=>{
+      if(r.success){
+        toast('Settings saved.');
+        closeSettings();
+        appConfig.api_key_set=appConfig.api_key_set||!!data.api_key;
+        appConfig.server_name=data.server_name;
+      } else {
+        toast('Error: '+r.error);
+      }
+    });
+  } else {
+    closeSettings();
+    toast('Settings saved (local mode).');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────────────────
+function init(){
+  buildInnerTabs();
+  buildAITabs();
+  buildForm();
+
+  // Load config from Python
+  if(window.pywebview){
+    window.addEventListener('pywebviewready',()=>{
+      window.pywebview.api.get_config().then(cfg=>{
+        appConfig=cfg;
+      });
+    });
+  }
+}
+
+// pywebview fires 'pywebviewready' when the JS bridge is ready
+window.addEventListener('pywebviewready',init);
+// Fallback for browser testing (no pywebview)
+if(!window.pywebview) init();
+</script>
+</body>
+</html>
