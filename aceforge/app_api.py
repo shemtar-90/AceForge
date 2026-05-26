@@ -76,7 +76,7 @@ class AppAPI:
             return {"success": False, "error": str(e)}
 
     def validate_key(self) -> dict:
-        """Test the current API credentials and return result to UI."""
+        """Test the currently saved API credentials."""
         self.api_client.update_credentials(
             api_key=self.config.api_key,
             model=self.config.model,
@@ -84,6 +84,28 @@ class AppAPI:
             base_url=self.config.base_url,
         )
         ok, err = self.api_client.validate_key()
+        return {"valid": ok, "error": err}
+
+    def validate_key_with(
+        self,
+        provider: str,
+        api_key: str,
+        model: str,
+        base_url: str = "",
+    ) -> dict:
+        """
+        Test credentials passed directly from the Settings form.
+        Does NOT require saving first — used by the Test Connection button.
+        Uses a temporary client so saved credentials are not affected.
+        """
+        from .api_client import APIClient
+        temp = APIClient(
+            api_key=api_key,
+            model=model or "gemini-2.0-flash",
+            provider=provider,
+            base_url=base_url,
+        )
+        ok, err = temp.validate_key()
         return {"valid": ok, "error": err}
 
     # ── File Operations ────────────────────────────────────────────────────────
