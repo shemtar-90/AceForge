@@ -62,6 +62,8 @@ select option{background:#fff;color:#2a1e0a}
 .pill.add-preset{border-style:dashed;color:var(--gold);border-color:var(--gold)}
 .pill.add-preset:hover{background:rgba(200,160,64,.1)}
 .form-scroll{flex:1;overflow-y:auto;padding-bottom:74px}
+.sub-panel{display:none}
+.sub-panel.active{display:block}
 .form-scroll::-webkit-scrollbar{width:5px}
 .form-scroll::-webkit-scrollbar-thumb{background:var(--border-lt)}
 .sec{padding:12px 18px}
@@ -556,21 +558,80 @@ function buildForm(){
   buildSubContent();
 }
 
+function rebuildPanel(sub){
+  // Rebuild a single sub-panel in-place without touching other panels
+  const panel=document.querySelector(`[data-sub="${sub}"]`);
+  if(!panel) return;
+  const builders={properties:buildProps,attributes:buildAttrs,skills:buildSkills,spellbook:buildSpellbook,bodyparts:buildBodyPartsTab,emotes:buildEmotesTab,advanced:buildAdvanced};
+  panel.innerHTML=(builders[sub]||buildProps)();
+  panel.querySelectorAll('input,select,textarea').forEach(e=>e.addEventListener('input',onFieldInput));
+  regen();
+}
+
 function switchSub(sub,btn){
   curSub=sub;
   document.querySelectorAll('.ctab').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
-  buildSubContent();
+  // Show/hide panels — never rebuild, never lose values
+  document.querySelectorAll('#formContent .sub-panel').forEach(p=>{
+    p.classList.toggle('active', p.dataset.sub===sub);
+  });
+  // Update dynamic labels that depend on values from other tabs
+  updateCrossTabLabels();
+  regen();
 }
 
 function buildSubContent(){
+  // Render ALL panels at once, show only the current one
   const fc=$('formContent');
+  const c=TYPE_CFG[curType];
   const builders={properties:buildProps,attributes:buildAttrs,skills:buildSkills,spellbook:buildSpellbook,bodyparts:buildBodyPartsTab,emotes:buildEmotesTab,advanced:buildAdvanced};
-  fc.innerHTML=(builders[curSub]||buildProps)();
-  fc.querySelectorAll('input,select,textarea').forEach(e=>e.addEventListener('input',regen));
+  fc.innerHTML=c.subTabs.map(sub=>{
+    const active=sub===curSub?'active':'';
+    return `<div class="sub-panel ${active}" data-sub="${sub}">${(builders[sub]||buildProps)()}</div>`;
+  }).join('');
+  fc.querySelectorAll('input,select,textarea').forEach(e=>e.addEventListener('input',onFieldInput));
   // Close dropdowns on outside click
-  document.addEventListener('click',e=>{if(!e.target.closest('.sdrop-wrap'))document.querySelectorAll('.sdrop-box.open').forEach(d=>d.classList.remove('open'));},{once:false});
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.sdrop-wrap'))
+      document.querySelectorAll('.sdrop-box.open').forEach(d=>d.classList.remove('open'));
+  });
   regen();
+}
+
+function onFieldInput(e){
+  regen();
+  const id=e.target.id;
+  // Level change → update skill base note in Skills tab
+  if(id==='fLevel') updateSkillBaseLabels();
+  // Creature type change → update body parts layout
+  if(id==='cType') onCTypeChange();
+  // Armor type change → enable/disable elemental modifiers
+  if(id==='fArmorType') onArmorTypeChange();
+  // NPC weenie type change → refresh properties panel so vendor fields appear/disappear
+  if(id==='fWType' && (curType==='npc')) rebuildPanel('properties');
+}
+
+function updateCrossTabLabels(){
+  updateSkillBaseLabels();
+  updateVitalLinks();
+}
+
+function updateSkillBaseLabels(){
+  const level=gi('fLevel',100);
+  const base=Math.floor(level*2.2);
+  // Update the note in the skills panel
+  const note=document.querySelector('[data-sub="skills"] .note');
+  if(note) note.textContent=`Base value auto-calculated from level ${level} → ~${base}. Adjust per skill as needed.`;
+  // Do NOT reset init_level inputs — user may have edited them manually
+}
+
+function updateVitalLinks(){
+  // Keep the vitals panel in sync with HP from Properties if it hasn't been manually changed
+  const hp=g('fHP','');
+  const v1=$('vital_1');
+  // Only auto-sync if the field exists and Properties has a value
+  // We intentionally don't overwrite — the user has two separate controls
 }
 
 // ── PROPERTIES ────────────────────────────────────────────────────────────────
@@ -750,7 +811,16 @@ function buildJewelryProps(){
 }
 
 function setQField(id,v){const e=$(id);if(e){e.value=v;regen();}}
-function onCTypeChange(){bodyParts=getBodyParts(gi('cType',31));if(curSub==='bodyparts')buildSubContent();else regen();}
+function onCTypeChange(){
+  bodyParts=getBodyParts(gi('cType',31));
+  // Rebuild only the body parts panel in-place
+  const bpPanel=document.querySelector('[data-sub="bodyparts"]');
+  if(bpPanel){
+    bpPanel.innerHTML=buildBodyPartsTab();
+    bpPanel.querySelectorAll('input,select').forEach(e=>e.addEventListener('input',onFieldInput));
+  }
+  regen();
+}
 function onArmorTypeChange(){
   const isCloth=gi('fArmorType',11)===1;
   ['mSlash','mPierce','mBludge','mCold','mFire','mAcid','mElec','mNether'].forEach(id=>{const e=$(id);if(e)e.disabled=isCloth;});
@@ -766,7 +836,7 @@ function buildRecipeProps(){
       <div class="fg"><div class="fl">Value</div><input type="number" id="rreq_v_${i}" value="${r.value||1}" oninput="recipeReqs[${i}].value=this.value;regen()"></div>
       <div class="fg"><div class="fl">Compare</div><select id="rreq_c_${i}" onchange="recipeReqs[${i}].compare=this.value;regen()">${opt(COMPARE_TYPE,r.compare)}</select></div>
       <div class="fg"><div class="fl">Message</div><input type="text" id="rreq_m_${i}" value="${r.message||''}" oninput="recipeReqs[${i}].message=this.value;regen()"></div>
-      <button class="del" onclick="recipeReqs.splice(${i},1);buildSubContent()">✕</button>
+      <button class="del" onclick="recipeReqs.splice(${i},1);rebuildPanel('properties')">✕</button>
     </div>`).join('');
   const modRows=recipeMods.map((m,i)=>`
     <div style="display:grid;grid-template-columns:120px 80px 130px 130px 80px 28px;gap:8px;align-items:end;margin-bottom:6px">
@@ -775,7 +845,7 @@ function buildRecipeProps(){
       <div class="fg"><div class="fl">Operation</div><select id="rmod_o_${i}" onchange="recipeMods[${i}].operation=this.value;regen()">${opt(MOD_OP,m.operation)}</select></div>
       <div class="fg"><div class="fl">Value</div><input type="text" id="rmod_v_${i}" value="${m.value||0}" oninput="recipeMods[${i}].value=this.value;regen()"></div>
       <div class="fg"><div class="fl">Source</div><select id="rmod_src_${i}" onchange="recipeMods[${i}].source=this.value;regen()">${opt(RECIPE_SOURCE_TYPE,m.source)}</select></div>
-      <button class="del" onclick="recipeMods.splice(${i},1);buildSubContent()">✕</button>
+      <button class="del" onclick="recipeMods.splice(${i},1);rebuildPanel('properties')">✕</button>
     </div>`).join('');
   const cbRows=cookbookEntries.map((e,i)=>`
     <div style="display:grid;grid-template-columns:1fr 1fr 28px;gap:8px;align-items:end;margin-bottom:6px">
@@ -786,7 +856,7 @@ function buildRecipeProps(){
         </div>
       </div>
       <div class="fg"><div class="fl">Target WCID</div><input type="number" id="cb_tgt_${i}" value="${e.tgt||0}" oninput="cookbookEntries[${i}].tgt=this.value;regen()"></div>
-      <button class="del" onclick="cookbookEntries.splice(${i},1);buildSubContent()">✕</button>
+      <button class="del" onclick="cookbookEntries.splice(${i},1);rebuildPanel('properties')">✕</button>
     </div>`).join('');
   return `<div class="sec"><div class="sh"><div class="st">Recipe Core</div><div class="sl"></div></div>
   <div class="grid g3">
@@ -803,14 +873,14 @@ function buildRecipeProps(){
   </div>
   <div class="sh" style="margin-top:14px"><div class="st">Requirements (recipe_requirements_int)</div><div class="sl"></div></div>
   ${reqRows}
-  <button class="add-btn" onclick="recipeReqs.push({type:0,stat:105,value:1,compare:6,message:'Requirement not met!'});buildSubContent()">+ Add Requirement</button>
+  <button class="add-btn" onclick="recipeReqs.push({type:0,stat:105,value:1,compare:6,message:'Requirement not met!'});rebuildPanel('properties')">+ Add Requirement</button>
   <div class="sh" style="margin-top:14px"><div class="st">Modifications (recipe_mods)</div><div class="sl"></div></div>
   <p class="note">Values with decimals go to recipe_mods_float, whole numbers to recipe_mods_int.</p>
   ${modRows}
-  <button class="add-btn" onclick="recipeMods.push({type:0,stat:0,operation:2,value:0,source:1});buildSubContent()">+ Add Modification</button>
+  <button class="add-btn" onclick="recipeMods.push({type:0,stat:0,operation:2,value:0,source:1});rebuildPanel('properties')">+ Add Modification</button>
   <div class="sh" style="margin-top:14px"><div class="st">Cook Book (source → target pairs)</div><div class="sl"></div></div>
   ${cbRows}
-  <button class="add-btn" onclick="cookbookEntries.push({src:0,srcLabel:'',tgt:0});buildSubContent()">+ Add Source → Target Pair</button>
+  <button class="add-btn" onclick="cookbookEntries.push({src:0,srcLabel:'',tgt:0});rebuildPanel('properties')">+ Add Source → Target Pair</button>
   </div>`;
 }
 
@@ -856,13 +926,13 @@ function buildSpellbook(){
         <div class="sdrop-box" id="sp_drop_${i}"><div class="sdrop-none">Type to search spells…</div></div>
       </div>
       <div class="fg"><div class="fl">Probability</div><input type="text" id="sp_pr_${i}" value="${sp.prob||'2.0'}" oninput="spells[${i}].prob=this.value;regen()"></div>
-      <button class="del" onclick="spells.splice(${i},1);buildSubContent()">✕</button>
+      <button class="del" onclick="spells.splice(${i},1);rebuildPanel('spellbook')">✕</button>
     </div>`).join('');
   return `<div class="sec">
     <div class="sh"><div class="st">Spell Book</div><div class="sl"></div></div>
     <p class="note">Probability: ≤2.0 → actual%=value/100 · >2.0 → actual%=value−2.0 &nbsp; Default: 2.0 (100% cast chance)</p>
     ${rows}
-    <button class="add-btn" onclick="spells.push({id:'',name:'',prob:'2.0'});buildSubContent()">+ Add Spell</button>
+    <button class="add-btn" onclick="spells.push({id:'',name:'',prob:'2.0'});rebuildPanel('spellbook')">+ Add Spell</button>
   </div>`;
 }
 
@@ -927,24 +997,24 @@ function buildEmoteBlock(em,i){
       <div class="fg"><div class="fl">Message / Quest Name</div><input type="text" id="ea_m_${i}_${j}" value="${a.message||''}" oninput="emotes[${i}].actions[${j}].message=this.value;regen()" placeholder="Text or quest name"></div>
       <div class="fg"><div class="fl">Delay (s)</div><input type="text" id="ea_d_${i}_${j}" value="${a.delay||0}" oninput="emotes[${i}].actions[${j}].delay=this.value;regen()"></div>
       <div class="fg"><div class="fl">Amount / Pct / Lum</div><input type="text" id="ea_a_${i}_${j}" value="${a.amount||''}" oninput="emotes[${i}].actions[${j}].amount=this.value;regen()" placeholder="0"></div>
-      <button class="del" onclick="emotes[${i}].actions.splice(${j},1);buildSubContent()">✕</button>
+      <button class="del" onclick="emotes[${i}].actions.splice(${j},1);rebuildPanel('emotes')">✕</button>
     </div>`).join('');
   return `<div class="emote-block">
     <div class="emote-hdr" onclick="toggleEmote(${i})">
       <span style="font-size:12px;color:var(--ink-mid)" id="et_${i}">▼</span>
       <span class="emote-hdr-title">${catName} — Prob: ${em.prob||1}${em.questFilter?' | Quest: '+em.questFilter:''}</span>
-      <button class="del" onclick="event.stopPropagation();emotes.splice(${i},1);buildSubContent()">✕ Remove</button>
+      <button class="del" onclick="event.stopPropagation();emotes.splice(${i},1);rebuildPanel('emotes')">✕ Remove</button>
     </div>
     <div class="emote-body open" id="eb_${i}">
       <div class="grid g3" style="margin-bottom:10px">
-        <div class="fg"><div class="fl">Category</div><select id="em_cat_${i}" onchange="emotes[${i}].category=this.value;buildSubContent()">${opt(EMOTE_CATS,em.category||7)}</select></div>
+        <div class="fg"><div class="fl">Category</div><select id="em_cat_${i}" onchange="emotes[${i}].category=this.value;rebuildPanel('emotes')">${opt(EMOTE_CATS,em.category||7)}</select></div>
         <div class="fg"><div class="fl">Probability</div><input type="text" id="em_prob_${i}" value="${em.prob||1}" oninput="emotes[${i}].prob=this.value;regen()"></div>
         <div class="fg"><div class="fl">WCID Filter (0=any)</div><input type="number" id="em_wcid_${i}" value="${em.wcidFilter||0}" oninput="emotes[${i}].wcidFilter=this.value;regen()"></div>
         <div class="fg" style="grid-column:span 3"><div class="fl">Quest Filter (one word, blank=none)</div><input type="text" id="em_quest_${i}" value="${em.questFilter||''}" oninput="emotes[${i}].questFilter=this.value;regen()"></div>
       </div>
       <div style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:6px">Actions</div>
       <div id="ea_rows_${i}">${actions}</div>
-      <button class="add-btn" style="margin-top:4px" onclick="emotes[${i}].actions.push({type:10,message:'',delay:0,amount:''});buildSubContent()">+ Add Action</button>
+      <button class="add-btn" style="margin-top:4px" onclick="emotes[${i}].actions.push({type:10,message:'',delay:0,amount:''});rebuildPanel('emotes')">+ Add Action</button>
     </div>
   </div>`;
 }
@@ -953,7 +1023,7 @@ function toggleEmote(i){
   const b=$(`eb_${i}`),t=$(`et_${i}`);
   if(b){b.classList.toggle('open');if(t)t.textContent=b.classList.contains('open')?'▼':'▶';}
 }
-function addEmote(){emotes.push({category:7,prob:1,wcidFilter:0,questFilter:'',actions:[]});buildSubContent();}
+function addEmote(){emotes.push({category:7,prob:1,wcidFilter:0,questFilter:'',actions:[]});rebuildPanel('emotes');}
 
 // ── ADVANCED (FULL PROPERTY EDITOR) ──────────────────────────────────────────
 function buildAdvanced(){
@@ -963,7 +1033,7 @@ function buildAdvanced(){
     const rows=arr.map((row,i)=>`<tr>
       <td><select id="${arrRef}_t_${i}" onchange="window.${arrRef}[${i}].type=this.value;regen()" style="font-size:12px"><option value="${row.type}">${row.type} · ${propNames[row.type]||'custom'}</option>${typeOpts}</select></td>
       <td><input type="text" id="${arrRef}_v_${i}" value="${row.value||''}" oninput="window.${arrRef}[${i}].value=this.value;regen()" style="font-size:13px;font-weight:600"></td>
-      <td style="text-align:center"><button class="del" onclick="window.${arrRef}.splice(${i},1);buildSubContent()">✕</button></td>
+      <td style="text-align:center"><button class="del" onclick="window.${arrRef}.splice(${i},1);rebuildPanel('advanced')">✕</button></td>
     </tr>`).join('');
     return `<table class="ptbl"><thead><tr><th style="width:260px">Property</th><th>Value</th><th style="width:30px"></th></tr></thead><tbody>${rows}</tbody></table>`;
   }
@@ -971,19 +1041,19 @@ function buildAdvanced(){
   return `<div class="sec">
     <div class="sh"><div class="st">Int Properties</div><div class="sl"></div></div>
     ${tbl('extraInt',PROP_INT,'int')}
-    <button class="add-btn" onclick="extraInt.push({type:'${firstInt}',value:'0'});buildSubContent()">+ Add Int Property</button>
+    <button class="add-btn" onclick="extraInt.push({type:'${firstInt}',value:'0'});rebuildPanel('advanced')">+ Add Int Property</button>
     <div class="sh" style="margin-top:14px"><div class="st">Bool Properties</div><div class="sl"></div></div>
     ${tbl('extraBool',PROP_BOOL,'bool')}
-    <button class="add-btn" onclick="extraBool.push({type:'${firstBool}',value:'False'});buildSubContent()">+ Add Bool Property</button>
+    <button class="add-btn" onclick="extraBool.push({type:'${firstBool}',value:'False'});rebuildPanel('advanced')">+ Add Bool Property</button>
     <div class="sh" style="margin-top:14px"><div class="st">Float Properties</div><div class="sl"></div></div>
     ${tbl('extraFloat',PROP_FLOAT,'float')}
-    <button class="add-btn" onclick="extraFloat.push({type:'${firstFloat}',value:'0.0'});buildSubContent()">+ Add Float Property</button>
+    <button class="add-btn" onclick="extraFloat.push({type:'${firstFloat}',value:'0.0'});rebuildPanel('advanced')">+ Add Float Property</button>
     <div class="sh" style="margin-top:14px"><div class="st">String Properties</div><div class="sl"></div></div>
     ${tbl('extraStr',PROP_STRING,'string')}
-    <button class="add-btn" onclick="extraStr.push({type:'${firstStr}',value:''});buildSubContent()">+ Add String Property</button>
+    <button class="add-btn" onclick="extraStr.push({type:'${firstStr}',value:''});rebuildPanel('advanced')">+ Add String Property</button>
     <div class="sh" style="margin-top:14px"><div class="st">DID Properties</div><div class="sl"></div></div>
     ${tbl('extraDID',PROP_DID,'did')}
-    <button class="add-btn" onclick="extraDID.push({type:'${firstDID}',value:'0x00000000'});buildSubContent()">+ Add DID Property</button>
+    <button class="add-btn" onclick="extraDID.push({type:'${firstDID}',value:'0x00000000'});rebuildPanel('advanced')">+ Add DID Property</button>
   </div>`;
 }
 
@@ -1156,8 +1226,8 @@ function buildSQL(){
   allDR.forEach((r,i)=>{const[tp,v,c]=r;const row='('+nm(wcid)+', '+pad(nm(tp),5)+', '+(typeof v==='number'?nm(v):v.padEnd(14))+') '+cm(c);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
   p.push(';');p.push('');
 
-  // Attributes
-  if(curSub==='attributes'&&isCreature){
+  // Attributes (always emit when tab is rendered and values exist)
+  if(isCreature&&$('attr_1')){
     const attrs=[[1,'Strength'],[2,'Endurance'],[3,'Quickness'],[4,'Coordination'],[5,'Focus'],[6,'Self']];
     p.push(kw('INSERT INTO')+' `weenie_properties_attribute` (`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`)');
     attrs.forEach(([tp,n],i)=>{const v=gi('attr_'+tp,260);const row='('+nm(wcid)+', '+nm(tp)+', '+nm(v)+', 0, 0) '+cm(n);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
@@ -1169,7 +1239,7 @@ function buildSQL(){
   }
 
   // Skills
-  if(curSub==='skills'&&isCreature){
+  if(isCreature&&$('sk_sac_6')){
     const trained=ALL_SKILLS.filter(([id])=>gi('sk_sac_'+id,1)>1&&gi('sk_init_'+id,0)>0);
     if(trained.length){
       p.push(kw('INSERT INTO')+' `weenie_properties_skill` (`object_Id`, `type`, `level_From_P_P`, `s_a_c`, `p_p`, `init_Level`, `resistance_At_Last_Check`, `last_Used_Time`)');
@@ -1179,7 +1249,7 @@ function buildSQL(){
   }
 
   // Spell book
-  if(curSub==='spellbook'&&spells.length){
+  if(spells.length&&$('fWcid')){
     const valid=spells.filter(sp=>sp.id);
     if(valid.length){
       p.push(kw('INSERT INTO')+' `weenie_properties_spell_book` (`object_Id`, `spell`, `probability`)');
@@ -1189,7 +1259,7 @@ function buildSQL(){
   }
 
   // Body parts
-  if(curSub==='bodyparts'&&isCreature){
+  if(isCreature&&$('bp_dt_0')){
     p.push(kw('INSERT INTO')+' `weenie_properties_body_part`');
     p.push('  (`object_Id`, `key`, `d_Type`, `d_Val`, `d_Var`, `base_Armor`,');
     p.push('   `armor_Vs_Slash`, `armor_Vs_Pierce`, `armor_Vs_Bludgeon`, `armor_Vs_Cold`,');
@@ -1205,7 +1275,7 @@ function buildSQL(){
   }
 
   // Emotes
-  if(curSub==='emotes'&&emotes.length){
+  if(emotes.length){
     emotes.forEach(em=>{
       const catName=lookupName(EMOTE_CATS,em.category||7);
       p.push('');
@@ -1419,7 +1489,17 @@ function openSettings(){
   }
 }
 function closeSettings(){$('settingsOverlay').classList.remove('open');}
-$('settingsOverlay').addEventListener('click',e=>{if(e.target===$('settingsOverlay'))closeSettings();});
+// Settings overlay: close only on mousedown directly on backdrop (not on text-select drag)
+(function(){
+  let downOnOverlay=false;
+  $('settingsOverlay').addEventListener('mousedown',e=>{
+    downOnOverlay=(e.target===$('settingsOverlay'));
+  });
+  $('settingsOverlay').addEventListener('mouseup',e=>{
+    if(downOnOverlay&&e.target===$('settingsOverlay'))closeSettings();
+    downOnOverlay=false;
+  });
+})();
 function saveSettings(){
   const data={provider:$('sProvider').value,model:$('sModel').value.trim(),base_url:($('sBaseUrl').value||'').trim(),server_name:$('sServerName').value.trim()||'Server Name',author:$('sAuthor').value.trim(),output_dir:$('sOutputDir').value.trim()};
   const apiKey=$('sApiKey').value.trim();if(apiKey)data.api_key=apiKey;

@@ -27,7 +27,7 @@ DEFAULT_CONFIG = {
     "api_key":     "",
     "model":       "claude-sonnet-4-20250514",
     "base_url":    "",          # only used for "compatible" provider
-    "server_name": "Shattered Dawn",
+    "server_name": "Server Name",
     "author":      "",
     "output_dir":  str(Path.home() / "Documents" / "ACEForge" / "output"),
     "wcid_ranges": DEFAULT_WCID_RANGES,

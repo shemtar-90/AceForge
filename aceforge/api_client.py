@@ -110,14 +110,14 @@ class APIClient:
     def _validate_anthropic(self) -> tuple[bool, str]:
         try:
             import anthropic
+            # Use models.list() — zero tokens, just verifies the API key is valid
             client = anthropic.Anthropic(api_key=self._api_key)
-            client.messages.create(
-                model=self._model, max_tokens=10,
-                messages=[{"role": "user", "content": "hi"}],
-            )
+            client.models.list()
             return True, ""
         except ImportError:
             return False, "anthropic package not installed. Run: pip install anthropic"
+        except anthropic.AuthenticationError:
+            return False, "Invalid API key. Check your Anthropic key at console.anthropic.com"
         except Exception as e:
             return False, _friendly_error(e, "anthropic")
 
@@ -125,8 +125,8 @@ class APIClient:
         try:
             import google.generativeai as genai
             genai.configure(api_key=self._api_key)
-            model = genai.GenerativeModel(self._model)
-            model.generate_content("hi", generation_config={"max_output_tokens": 10})
+            # list_models is a lightweight call that just verifies the key
+            list(genai.list_models())
             return True, ""
         except ImportError:
             return False, "google-generativeai package not installed. Run: pip install google-generativeai"
@@ -137,13 +137,20 @@ class APIClient:
         try:
             import openai
             client = self._build_openai_client()
-            client.chat.completions.create(
-                model=self._model, max_tokens=10,
-                messages=[{"role": "user", "content": "hi"}],
-            )
+            # models.list() verifies the key without consuming tokens
+            # Fall back to a tiny chat call for providers that don't support models.list()
+            try:
+                client.models.list()
+            except Exception:
+                client.chat.completions.create(
+                    model=self._model or "gpt-4o-mini", max_tokens=1,
+                    messages=[{"role": "user", "content": "hi"}],
+                )
             return True, ""
         except ImportError:
             return False, "openai package not installed. Run: pip install openai"
+        except openai.AuthenticationError:
+            return False, "Invalid API key. Check your key at your provider's dashboard."
         except Exception as e:
             return False, _friendly_error(e, "openai")
 
@@ -260,14 +267,21 @@ class APIClient:
 def _friendly_error(exc: Exception, provider: str) -> str:
     msg = str(exc)
     low = msg.lower()
-    if "auth" in low or "api key" in low or "401" in low or "403" in low or "invalid" in low and "key" in low:
+    # Auth errors — must be specific, not catch model errors
+    if "401" in low or "authentication" in low or "unauthenticated" in low:
         return "Invalid API key. Check your key in Settings."
-    if "rate" in low or "429" in low or "quota" in low or "resource exhausted" in low:
+    if "403" in low and "permission" in low:
+        return "API key does not have permission for this operation."
+    # Rate limits
+    if "429" in low or ("rate" in low and "limit" in low) or "quota" in low or "resource exhausted" in low:
         return "Rate limit or quota exceeded. Wait a moment and try again."
-    if "connect" in low or "timeout" in low or "network" in low or "refused" in low:
+    # Network
+    if "connect" in low or "timeout" in low or "network" in low or "refused" in low or "unreachable" in low:
         return "Connection failed. Check your internet connection and endpoint URL."
-    if "model" in low and ("not found" in low or "does not exist" in low or "404" in low):
-        return "Model not found. Check the model name in Settings."
-    if "billing" in low or "payment" in low:
-        return "Billing issue with your API account. Check your provider dashboard."
+    # Model not found — do NOT confuse with auth
+    if ("model" in low or "engine" in low) and ("not found" in low or "does not exist" in low or "invalid" in low or "404" in low):
+        return "Model not found or invalid. Check the model name in Settings."
+    # Billing
+    if "billing" in low or "payment" in low or "insufficient_quota" in low:
+        return "Billing issue. Check your account at your provider's dashboard."
     return f"API error: {msg}"
