@@ -10,7 +10,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
-  contents: write   # Required to create GitHub Releases and upload assets
+  contents: write
 
 jobs:
   build:
@@ -18,38 +18,31 @@ jobs:
     runs-on: windows-2025
 
     steps:
-      # ── 1. Checkout ───────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
 
-      # ── 2. Python ─────────────────────────────────────────────────────────
       - name: Set up Python 3.11
         uses: actions/setup-python@v5.4.0
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      # ── 3. Dependencies ───────────────────────────────────────────────────
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # ── 4. Verify Python imports work ─────────────────────────────────────
       - name: Verify imports
         shell: pwsh
         run: |
           python -c "import customtkinter; print('customtkinter OK')"
           python -c "import anthropic; print('anthropic OK')"
-          python -c "import PyInstaller; print('PyInstaller OK')"
 
-      # ── 5. Prepare references folder ──────────────────────────────────────
       - name: Prepare reference files
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "aceforge/references" | Out-Null
-
           $refs = @(
             "aceforge/references/enums.md",
             "aceforge/references/spells.md",
@@ -65,14 +58,12 @@ jobs:
             "aceforge/references/lore.md",
             "aceforge/references/schema.md"
           )
-
           $missing = @()
           foreach ($f in $refs) {
             if (-not (Test-Path $f)) { $missing += $f }
           }
-
           if ($missing.Count -gt 0) {
-            Write-Warning "Missing $($missing.Count) reference file(s) — AI Mode will have limited context."
+            Write-Warning "Missing $($missing.Count) reference file(s) - AI Mode will have limited context."
             foreach ($f in $missing) { Write-Warning "  $f" }
             $txt = "Add reference files from ace-content-generator.skill to enable full AI Mode.`nMissing:`n" + ($missing -join "`n")
             Set-Content -Path "aceforge/references/README_AI_MODE.txt" -Value $txt
@@ -80,19 +71,21 @@ jobs:
             Write-Host "All reference files present."
           }
 
-      # ── 6. Build PyInstaller spec ─────────────────────────────────────────
       - name: Build executable
+        run: python -m PyInstaller ACEForge.spec --noconfirm --clean
+
+      # One-file mode outputs dist/ACEForge.exe (not dist/ACEForge/ACEForge.exe)
+      - name: Verify build output
         shell: pwsh
         run: |
-          python -m PyInstaller ACEForge.spec --noconfirm --clean
-          if (-not (Test-Path "dist/ACEForge/ACEForge.exe")) {
-            Write-Error "ACEForge.exe not found after build"
+          if (-not (Test-Path "dist/ACEForge.exe")) {
+            Write-Error "ACEForge.exe not found at dist/ACEForge.exe"
+            Get-ChildItem -Path "dist/" -Recurse | Select-Object FullName
             exit 1
           }
-          $mb = [math]::Round((Get-Item "dist/ACEForge/ACEForge.exe").Length / 1MB, 1)
-          Write-Host "ACEForge.exe built — $mb MB"
+          $mb = [math]::Round((Get-Item "dist/ACEForge.exe").Length / 1MB, 1)
+          Write-Host "ACEForge.exe built successfully - $mb MB"
 
-      # ── 7. Version string ─────────────────────────────────────────────────
       - name: Get version
         id: version
         shell: pwsh
@@ -106,24 +99,34 @@ jobs:
           echo "ZIP_NAME=ACEForge_${v}_Windows.zip" >> $env:GITHUB_OUTPUT
           Write-Host "Version: $v"
 
-      # ── 8. Finalize build folder ──────────────────────────────────────────
-      - name: Finalize build folder
+      # Stage everything into a clean folder before zipping
+      - name: Stage release folder
         shell: pwsh
         run: |
           $v = "${{ steps.version.outputs.VERSION }}"
-          Set-Content "dist/ACEForge/VERSION.txt" "ACEForge v$v`nBuilt: $(Get-Date -Format 'yyyy-MM-dd HH:mm UTC')`nPlatform: Windows x64"
-          Copy-Item "README.md" "dist/ACEForge/README.md"
+          $stage = "release_stage"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
 
-      # ── 9. Zip ────────────────────────────────────────────────────────────
+          # Main executable
+          Copy-Item "dist/ACEForge.exe" "$stage/ACEForge.exe"
+
+          # Supporting docs
+          Copy-Item "README.md"  "$stage/README.md"
+          Copy-Item "LICENSE.txt" "$stage/LICENSE.txt"
+
+          Set-Content "$stage/VERSION.txt" "ACEForge v$v`nBuilt: $(Get-Date -Format 'yyyy-MM-dd HH:mm UTC')`nPlatform: Windows x64 (one-file)"
+
+          Write-Host "Staged:"
+          Get-ChildItem $stage | Select-Object Name, Length
+
       - name: Create release zip
         shell: pwsh
         run: |
           $zip = "${{ steps.version.outputs.ZIP_NAME }}"
-          Compress-Archive -Path "dist/ACEForge/*" -DestinationPath $zip
+          Compress-Archive -Path "release_stage/*" -DestinationPath $zip
           $mb = [math]::Round((Get-Item $zip).Length / 1MB, 1)
-          Write-Host "Created $zip — $mb MB"
+          Write-Host "Created $zip - $mb MB"
 
-      # ── 10. Upload artifact (always) ──────────────────────────────────────
       - name: Upload artifact
         uses: actions/upload-artifact@v4.6.2
         with:
@@ -131,7 +134,6 @@ jobs:
           path: ${{ steps.version.outputs.ZIP_NAME }}
           retention-days: 30
 
-      # ── 11. Publish release (tags only) ───────────────────────────────────
       - name: Create GitHub Release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2.2.1
@@ -158,6 +160,7 @@ jobs:
 
             - Windows 10 or 11 (64-bit)
             - No Python installation needed — everything is bundled
+            - First launch may take 3–5 seconds while the app unpacks itself (normal)
 
             ### Your settings survive upgrades
 
