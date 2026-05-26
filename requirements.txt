@@ -1,3 +1,4 @@
 anthropic>=0.40.0
+openai>=1.30.0
 pywebview>=5.0.0
 pythonnet>=3.0.0

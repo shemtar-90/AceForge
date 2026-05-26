@@ -343,18 +343,38 @@ tr:hover td{background:rgba(200,184,152,.15)}
     </div>
     <div class="settings-body">
       <div class="settings-sec">
-        <div class="settings-sec-title">API Configuration</div>
+        <div class="settings-sec-title">AI Provider</div>
         <div class="settings-field">
-          <label class="settings-label">Anthropic API Key <span style="color:var(--ink-faint);font-family:'IM Fell English',serif;font-style:italic;font-size:10px">(required for AI Mode only)</span></label>
-          <input type="password" id="sApiKey" placeholder="sk-ant-..." style="width:100%">
+          <label class="settings-label">Provider</label>
+          <select id="sProvider" style="width:100%" onchange="onProviderChange()">
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="openai">OpenAI (GPT)</option>
+            <option value="compatible">OpenAI-Compatible Endpoint</option>
+          </select>
+        </div>
+        <div class="settings-field" id="sBaseUrlField" style="display:none">
+          <label class="settings-label">Base URL
+            <span style="color:var(--ink-faint);font-family:'IM Fell English',serif;font-style:italic;font-size:10px"> — endpoint for your provider</span>
+          </label>
+          <select id="sBaseUrlPreset" style="width:100%;margin-bottom:6px" onchange="onEndpointPreset()">
+            <option value="">— choose a known endpoint or enter below —</option>
+          </select>
+          <input type="text" id="sBaseUrl" placeholder="https://api.example.com/v1" style="width:100%">
+        </div>
+        <div class="settings-field">
+          <label class="settings-label">API Key
+            <span style="color:var(--ink-faint);font-family:'IM Fell English',serif;font-style:italic;font-size:10px" id="sKeyHint"> — required for AI Mode</span>
+          </label>
+          <input type="password" id="sApiKey" placeholder="Paste your API key here" style="width:100%">
         </div>
         <div class="settings-field">
           <label class="settings-label">Model</label>
-          <select id="sModel" style="width:100%">
-            <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (recommended)</option>
-            <option value="claude-opus-4-20250514">Claude Opus 4 (most capable)</option>
-            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (fastest)</option>
-          </select>
+          <input type="text" id="sModel" placeholder="e.g. claude-sonnet-4-20250514" style="width:100%">
+          <div id="sModelHints" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"></div>
+        </div>
+        <div style="margin-top:10px">
+          <button class="top-btn" onclick="testAPIKey()" style="padding:7px 16px">⚡ Test Connection</button>
+          <span id="sTestResult" style="font-family:'Cinzel',serif;font-size:10px;margin-left:10px"></span>
         </div>
       </div>
       <div class="settings-sec">
@@ -1058,17 +1078,64 @@ function clearAI(){
 // ─────────────────────────────────────────────────────────────────────────────
 // SETTINGS
 // ─────────────────────────────────────────────────────────────────────────────
+// Provider model suggestions
+const MODEL_HINTS={
+  anthropic:['claude-sonnet-4-20250514','claude-opus-4-20250514','claude-haiku-4-5-20251001'],
+  openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo'],
+  compatible:['mistral-medium','mistral-small','llama-3-70b-instruct','mixtral-8x7b','gemma-7b-it','phi-3-medium'],
+};
+
+function onProviderChange(){
+  const p=$('sProvider').value;
+  $('sBaseUrlField').style.display=p==='compatible'?'block':'none';
+  const hints=MODEL_HINTS[p]||[];
+  $('sModelHints').innerHTML=hints.map(m=>`<button onclick="$('sModel').value='${m}'" style="font-family:'Cinzel',serif;font-size:8px;letter-spacing:.05em;padding:3px 10px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:10px" onmouseover="this.style.borderColor='var(--crimson)';this.style.color='var(--crimson)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--ink-dim)'">${m}</button>`).join('');
+  const keyHints={anthropic:'sk-ant-…',openai:'sk-…',compatible:'Your provider key (or any string for local)'};
+  $('sApiKey').placeholder=keyHints[p]||'API key';
+}
+
+function onEndpointPreset(){
+  const v=$('sBaseUrlPreset').value;
+  if(v)$('sBaseUrl').value=v;
+}
+
+function testAPIKey(){
+  const result=$('sTestResult');
+  result.textContent='Testing…';result.style.color='var(--gold)';
+  if(window.pywebview){
+    window.pywebview.api.validate_key().then(r=>{
+      if(r.valid){result.textContent='✓ Connected';result.style.color='var(--green)';}
+      else{result.textContent='✗ '+r.error;result.style.color='var(--crimson-lt)';}
+    });
+  } else {
+    result.textContent='(not available in browser mode)';result.style.color='var(--ink-dim)';
+  }
+}
+
 function openSettings(){
   $('settingsOverlay').classList.add('open');
   if(window.pywebview){
     window.pywebview.api.get_config().then(cfg=>{
       appConfig=cfg;
+      // Provider
+      $('sProvider').value=cfg.provider||'anthropic';
+      onProviderChange();
+      $('sModel').value=cfg.model||'claude-sonnet-4-20250514';
+      $('sBaseUrl').value=cfg.base_url||'';
+      $('sApiKey').placeholder=cfg.api_key_set?'(already set — paste to change)':$('sApiKey').placeholder;
+      // Known endpoints dropdown
+      const preset=$('sBaseUrlPreset');
+      preset.innerHTML='<option value="">— choose a known endpoint —</option>';
+      Object.entries(cfg.known_endpoints||{}).forEach(([name,url])=>{
+        const opt=document.createElement('option');
+        opt.value=url;opt.textContent=name;
+        preset.appendChild(opt);
+      });
+      // Server
       $('sServerName').value=cfg.server_name||'';
       $('sAuthor').value=cfg.author||'';
       $('sOutputDir').value=cfg.output_dir||'';
-      $('sModel').value=cfg.model||'claude-sonnet-4-20250514';
-      $('sApiKey').placeholder=cfg.api_key_set?'(API key already set — enter to change)':'sk-ant-…';
-
+      // WCID ranges
       const tbody=$('wcidTbody');
       tbody.innerHTML='';
       Object.entries(cfg.wcid_ranges||{}).forEach(([key,info])=>{
@@ -1088,10 +1155,12 @@ function overlayClick(e){if(e.target===$('settingsOverlay'))closeSettings();}
 
 function saveSettings(){
   const data={
+    provider:$('sProvider').value,
+    model:$('sModel').value.trim(),
+    base_url:$('sBaseUrl').value.trim(),
     server_name:$('sServerName').value.trim(),
     author:$('sAuthor').value.trim(),
     output_dir:$('sOutputDir').value.trim(),
-    model:$('sModel').value,
   };
   const apiKey=$('sApiKey').value.trim();
   if(apiKey)data.api_key=apiKey;
