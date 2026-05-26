@@ -1,34 +1,28 @@
 # ACEForge PyInstaller build spec
-# Build: pyinstaller ACEForge.spec --noconfirm --clean
+# One-file mode: everything packed into a single ACEForge.exe
+# This avoids the python311.dll path issue on end-user machines.
 
 import os
 from pathlib import Path
 
 block_cipher = None
 
-# ── Collect reference files ───────────────────────────────────────────────────
-# Each entry is (source_path, destination_folder_inside_bundle)
-# source_path must be the actual file path on disk
-# destination is where it lands relative to the bundle root
+# ── Reference files ───────────────────────────────────────────────────────────
 refs_dir = Path('aceforge/references')
 ref_datas = []
-
 if refs_dir.exists():
     for f in refs_dir.iterdir():
         if f.is_file():
-            # f is e.g. Path('aceforge/references/enums.md')
-            # destination 'aceforge/references' puts it at
-            # _internal/aceforge/references/enums.md inside the bundle
             ref_datas.append((str(f), 'aceforge/references'))
 
-# Bundle SKILL.md one level up from references/
 skill_md = Path('aceforge/SKILL.md')
 if skill_md.exists():
     ref_datas.append((str(skill_md), 'aceforge'))
 
 # ── CustomTkinter assets ──────────────────────────────────────────────────────
 import customtkinter
-ctk_assets = os.path.join(os.path.dirname(customtkinter.__file__), 'assets')
+ctk_path = os.path.dirname(customtkinter.__file__)
+ctk_assets = os.path.join(ctk_path, 'assets')
 
 a = Analysis(
     ['aceforge/main.py'],
@@ -45,6 +39,7 @@ a = Analysis(
         'tkinter.messagebox',
         'PIL',
         'PIL._tkinter_finder',
+        '_tkinter',
     ],
     hookspath=[],
     hooksconfig={},
@@ -58,16 +53,22 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# ── One-file EXE ──────────────────────────────────────────────────────────────
+# exclude_binaries=False and no COLLECT = single self-contained .exe
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
     [],
-    exclude_binaries=True,
     name='ACEForge',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -75,15 +76,4 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=None,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='ACEForge',
 )

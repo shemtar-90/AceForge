@@ -2,15 +2,17 @@
 ACEForge Skill Loader
 Reads SKILL.md and all reference files from the bundled references/ directory.
 Constructs the full system prompt that gets sent with every API request.
+
+Works in both dev mode (files on disk) and PyInstaller one-file mode
+(files extracted to sys._MEIPASS at runtime).
 """
 
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
 
-# Reference files to load — ordered by priority (most important first)
-# Smaller files that are always useful load fully; large files load selectively
 ALWAYS_LOAD = [
     "SKILL.md",
     "enums.md",
@@ -20,18 +22,6 @@ ALWAYS_LOAD = [
     "schema.md",
 ]
 
-ON_DEMAND = [
-    "all_spells.txt",
-    "armor.md",
-    "clothing.md",
-    "melee_weapons.md",
-    "missile_weapons.md",
-    "casters.md",
-    "did_values.md",
-    "icons.md",
-]
-
-# Content type → which on-demand files to include
 CONTENT_TYPE_FILES = {
     "monster":  ["did_values.md", "icons.md", "all_spells.txt"],
     "boss":     ["did_values.md", "icons.md", "all_spells.txt"],
@@ -44,67 +34,80 @@ CONTENT_TYPE_FILES = {
 }
 
 
-def get_references_dir() -> Path:
+def get_base_dir() -> Path:
     """
-    Find the references directory — works both in dev and bundled (PyInstaller) mode.
-    Returns None if not found rather than crashing — the app handles missing refs gracefully.
+    Return the base directory where bundled files live.
+
+    PyInstaller one-file mode: everything is extracted to a temp folder
+    stored in sys._MEIPASS at runtime. That folder contains all the
+    'datas' entries from the spec, so 'aceforge/references/' is there.
+
+    Dev mode: files are relative to this source file's location.
     """
-    import sys
-
-    candidates = []
-
-    # PyInstaller unpacks to sys._MEIPASS at runtime
     if hasattr(sys, "_MEIPASS"):
-        candidates.append(Path(sys._MEIPASS) / "aceforge" / "references")
-        candidates.append(Path(sys._MEIPASS) / "references")
+        return Path(sys._MEIPASS)
+    return Path(__file__).parent.parent
 
-    # Dev mode and fallbacks
-    candidates += [
+
+def get_references_dir() -> Path:
+    base = get_base_dir()
+    candidates = [
+        base / "aceforge" / "references",
+        base / "references",
         Path(__file__).parent / "references",
-        Path(__file__).parent.parent / "references",
-        Path(__file__).parent.parent / "aceforge" / "references",
-        Path.cwd() / "aceforge" / "references",
-        Path.cwd() / "references",
     ]
-
     for path in candidates:
         if path.exists() and path.is_dir():
             return path
 
-    # No references found — return a placeholder path
-    # The app will run in manual-only mode, AI mode will warn the user
+    # Create a fallback empty dir so the app never crashes
     fallback = Path(__file__).parent / "references"
     fallback.mkdir(parents=True, exist_ok=True)
     return fallback
 
 
+def get_skill_md_path() -> Optional[Path]:
+    base = get_base_dir()
+    candidates = [
+        base / "aceforge" / "SKILL.md",
+        base / "SKILL.md",
+        Path(__file__).parent / "SKILL.md",
+        Path(__file__).parent.parent / "SKILL.md",
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    return None
+
+
 class SkillLoader:
     def __init__(self):
         self._refs_dir = get_references_dir()
+        self._skill_md = get_skill_md_path()
         self._cache: dict[str, str] = {}
 
     def _read(self, filename: str) -> str:
         if filename in self._cache:
             return self._cache[filename]
 
-        # Try references dir first, then parent dir (for SKILL.md)
-        candidates = [
-            self._refs_dir / filename,
-            self._refs_dir.parent / filename,
-        ]
-        for path in candidates:
+        # SKILL.md has its own search path
+        if filename == "SKILL.md":
+            if self._skill_md and self._skill_md.exists():
+                content = self._skill_md.read_text(encoding="utf-8", errors="replace")
+                self._cache[filename] = content
+                return content
+        else:
+            path = self._refs_dir / filename
             if path.exists():
                 content = path.read_text(encoding="utf-8", errors="replace")
                 self._cache[filename] = content
                 return content
 
-        # File missing — return a soft warning embedded in the prompt
-        # so the model knows context is limited rather than getting nothing
         warning = (
             f"[REFERENCE FILE MISSING: {filename}]\n"
             f"This reference file was not bundled with the application.\n"
-            f"AI Mode may have reduced accuracy for content requiring this data.\n"
-            f"See the README for how to add reference files."
+            f"AI Mode accuracy may be reduced without it.\n"
+            f"See README.md for how to add reference files."
         )
         self._cache[filename] = warning
         return warning
@@ -116,25 +119,14 @@ class SkillLoader:
         wcid_ranges: dict,
         author: str = "",
     ) -> str:
-        """
-        Construct the full system prompt for a generation request.
-        Combines SKILL.md + always-loaded refs + content-type-specific refs.
-        Injects current server config so WCID ranges are always accurate.
-        """
         parts = []
 
-        # 1 — Always-loaded files
         for fname in ALWAYS_LOAD:
             content = self._read(fname)
+            parts.append(content)
             if fname == "SKILL.md":
-                # Inject live server config block right after SKILL.md
-                server_block = self._build_server_block(server_name, wcid_ranges, author)
-                parts.append(content)
-                parts.append(server_block)
-            else:
-                parts.append(f"\n\n{'='*60}\n# {fname}\n{'='*60}\n{content}")
+                parts.append(self._build_server_block(server_name, wcid_ranges, author))
 
-        # 2 — Content-type-specific files
         extra_files = CONTENT_TYPE_FILES.get(content_type, CONTENT_TYPE_FILES["general"])
         for fname in extra_files:
             if fname not in ALWAYS_LOAD:
@@ -147,14 +139,12 @@ class SkillLoader:
         lines = [
             "\n\n" + "="*60,
             "# LIVE SERVER CONFIGURATION",
-            "# These values override any defaults in SKILL.md.",
-            "# Always use these WCID ranges when assigning IDs.",
             "="*60,
             f"Server Name: {server_name}",
         ]
         if author:
             lines.append(f"Author/Admin: {author}")
-        lines.append("\n## Current WCID Ranges (use 'next' as the next available ID):")
+        lines.append("\n## Current WCID Ranges:")
         lines.append("| Category | Range Start | Next Available |")
         lines.append("|----------|-------------|----------------|")
         for key, info in wcid_ranges.items():
@@ -162,8 +152,7 @@ class SkillLoader:
             start = info.get("start", "?")
             nxt   = info.get("next", "?")
             lines.append(f"| {label} | {start} | {nxt} |")
-        lines.append("\nAlways use the 'Next Available' value as the starting WCID for new content.")
-        lines.append("If generating multiple WCIDs in one response, increment sequentially from 'Next Available'.")
+        lines.append("\nAlways use 'Next Available' as the starting WCID for new content.")
         return "\n".join(lines)
 
     def list_references(self) -> list[str]:
