@@ -34,6 +34,9 @@ a = Analysis(
     datas=ref_datas + web_datas,
     hiddenimports=[
         'anthropic',
+        'openai',
+        'google.generativeai',
+        'google.ai.generativelanguage_v1beta',
         'webview',
         'webview.platforms.winforms',
         'webview.platforms.edgechromium',

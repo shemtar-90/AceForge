@@ -348,6 +348,7 @@ tr:hover td{background:rgba(200,184,152,.15)}
           <label class="settings-label">Provider</label>
           <select id="sProvider" style="width:100%" onchange="onProviderChange()">
             <option value="anthropic">Anthropic (Claude)</option>
+            <option value="google">Google AI Studio (Gemini) — Free</option>
             <option value="openai">OpenAI (GPT)</option>
             <option value="compatible">OpenAI-Compatible Endpoint</option>
           </select>
@@ -1081,6 +1082,7 @@ function clearAI(){
 // Provider model suggestions
 const MODEL_HINTS={
   anthropic:['claude-sonnet-4-20250514','claude-opus-4-20250514','claude-haiku-4-5-20251001'],
+  google:['gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-pro','gemini-1.5-flash'],
   openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo'],
   compatible:['mistral-medium','mistral-small','llama-3-70b-instruct','mixtral-8x7b','gemma-7b-it','phi-3-medium'],
 };
@@ -1088,10 +1090,22 @@ const MODEL_HINTS={
 function onProviderChange(){
   const p=$('sProvider').value;
   $('sBaseUrlField').style.display=p==='compatible'?'block':'none';
+  // Show/hide free tier note
+  let freeNote=$('sProviderNote');
+  if(!freeNote){freeNote=document.createElement('div');freeNote.id='sProviderNote';freeNote.style='font-family:'IM Fell English',serif;font-style:italic;font-size:12px;color:var(--green);margin-top:6px;';$('sProvider').parentNode.appendChild(freeNote);}
+  if(p==='google'){freeNote.innerHTML='✓ Free tier available — get your key at <a href="#" style="color:var(--green)" onclick="return false">aistudio.google.com/apikey</a> &nbsp;·&nbsp; 15 req/min, 1,500 req/day on flash models';}
+  else{freeNote.innerHTML='';}
+  // Model hints
   const hints=MODEL_HINTS[p]||[];
   $('sModelHints').innerHTML=hints.map(m=>`<button onclick="$('sModel').value='${m}'" style="font-family:'Cinzel',serif;font-size:8px;letter-spacing:.05em;padding:3px 10px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:10px" onmouseover="this.style.borderColor='var(--crimson)';this.style.color='var(--crimson)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--ink-dim)'">${m}</button>`).join('');
-  const keyHints={anthropic:'sk-ant-…',openai:'sk-…',compatible:'Your provider key (or any string for local)'};
+  // Key placeholder
+  const keyHints={anthropic:'sk-ant-…',google:'AIza… (from aistudio.google.com/apikey)',openai:'sk-…',compatible:'Your provider key (or any string for local)'};
   $('sApiKey').placeholder=keyHints[p]||'API key';
+  // Default model suggestion
+  const defaultModels={anthropic:'claude-sonnet-4-20250514',google:'gemini-2.0-flash',openai:'gpt-4o',compatible:'mistral-medium'};
+  if(!$('sModel').value||Object.values(defaultModels).includes($('sModel').value)){
+    $('sModel').value=defaultModels[p]||'';
+  }
 }
 
 function onEndpointPreset(){
