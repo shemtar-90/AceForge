@@ -563,7 +563,7 @@ function buildForm(){
   idHTML+=`<div class="fg" style="max-width:220px"><div class="fl">Weenie Type <span class="fc">type</span></div><select id="fWType" onchange="regen()">${c.wTypes.map(t=>`<option value="${t[0]}">${t[0]} · ${t[1]}</option>`).join('')}</select></div>`;
   $('idRow').innerHTML=idHTML;
   // Sub tabs
-  const stabs={properties:'⚙ Properties',attributes:'◈ Attributes',skills:'+ Skills',spellbook:'+ Spellbook',bodyparts:'✠ Body Parts',emotes:'◇ Emotes',advanced:'∷ Advanced'};
+  const stabs={properties:'⚙ Form Fields',attributes:'◈ Attributes',skills:'+ Skills',spellbook:'+ Spellbook',bodyparts:'✠ Body Parts',emotes:'◇ Emotes',advanced:'≡ Properties'};
   $('subTabs').innerHTML=c.subTabs.map((s,i)=>`<button class="ctab${s===curSub?' active':''}" onclick="switchSub('${s}',this)">${stabs[s]||s}</button>`).join('');
   // Presets
   const custom=customPresets[curType]||[];
@@ -599,6 +599,11 @@ function switchSub(sub,btn){
   // Update dynamic labels that depend on values from other tabs
   updateCrossTabLabels();
   regen();
+  // Auto-sync Advanced tab from SQL whenever it's opened
+  if(sub==='advanced'){
+    // Short delay so regen() finishes writing SQL first
+    setTimeout(()=>syncAdvancedFromSQL(true), 50);
+  }
 }
 
 function buildSubContent(){
@@ -1074,9 +1079,12 @@ function buildSpellbook(){
   const rows=spells.map((sp,i)=>`
     <div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-lt)">
       <div class="fg sdrop-wrap" style="flex:2">
-        <div class="fl">Spell Name <span style="color:var(--ink-faint);font-size:9px">(search)</span></div>
-        <input type="text" id="sp_nm_${i}" value="${sp.name||''}" oninput="filterSpells(${i},this.value)" autocomplete="off" placeholder="Search by name…" style="border-bottom:2px solid var(--border)">
-        <div class="sdrop-box" id="sp_drop_${i}"><div class="sdrop-none">Type to search…</div></div>
+        <div class="fl">Spell Name <span style="color:var(--ink-faint);font-size:9px">(type or click ▼)</span></div>
+        <div style="display:flex;gap:0">
+          <input type="text" id="sp_nm_${i}" value="${sp.name||''}" oninput="filterSpells(${i},this.value)" onfocus="openSpellDrop(${i})" autocomplete="off" placeholder="Search spells…" style="border-bottom:2px solid var(--border);flex:1">
+          <button onclick="openSpellDrop(${i})" tabindex="-1" style="border:none;border-bottom:2px solid var(--border);background:var(--parch);padding:0 8px;cursor:pointer;color:var(--ink-dim);font-size:11px">▼</button>
+        </div>
+        <div class="sdrop-box" id="sp_drop_${i}"><div class="sdrop-none">Type to search, or click ▼ to browse</div></div>
       </div>
       <div class="fg" style="max-width:80px">
         <div class="fl">ID <span class="fc">spell</span></div>
@@ -1096,14 +1104,36 @@ function buildSpellbook(){
   </div>`;
 }
 
-function filterSpells(idx,query){
-  spells[idx].name=query;
-  const drop=$(`sp_drop_${idx}`);if(!drop)return;
-  if(!query||query.length<2){drop.classList.remove('open');return;}
-  const q=query.toLowerCase();
-  const matches=SPELLS.filter(s=>s[1].toLowerCase().includes(q)).slice(0,50);
-  drop.innerHTML=matches.length?matches.map(s=>`<div class="sdrop-item" onclick="selectSpell(${idx},${s[0]},${JSON.stringify(s[1])})">${s[1]}<small>${s[0]}</small></div>`).join(''):'<div class="sdrop-none">No results</div>';
+function openSpellDrop(idx){
+  const inp=$(`sp_nm_${idx}`);
+  const query=inp?inp.value:'';
+  // Show first 60 spells or filter by current text
+  const ql=query.toLowerCase();
+  const matches=ql.length>=1
+    ? SPELLS.filter(s=>s[1].toLowerCase().includes(ql)).slice(0,60)
+    : SPELLS.slice(0,60);
+  const drop=$(`sp_drop_${idx}`);
+  if(!drop)return;
+  if(matches.length){
+    drop.innerHTML=matches.map(s=>`<div class="sdrop-item" onclick="selectSpell(${idx},${s[0]},${JSON.stringify(s[1])})">${s[1]}<small>${s[0]}</small></div>`).join('');
+  } else {
+    drop.innerHTML='<div class="sdrop-none">No results</div>';
+  }
+  // Close all other spell drops first
+  document.querySelectorAll('.sdrop-box.open').forEach(d=>{if(d.id!==`sp_drop_${idx}`)d.classList.remove('open');});
   drop.classList.add('open');
+}
+
+function filterSpells(idx,query){
+  if(spells[idx]) spells[idx].name=query;
+  const drop=$(`sp_drop_${idx}`);if(!drop)return;
+  const q=query.toLowerCase();
+  // Show matching results, or top 60 if empty
+  const matches=q.length>=1
+    ?SPELLS.filter(s=>s[1].toLowerCase().includes(q)).slice(0,60)
+    :SPELLS.slice(0,60);
+  drop.innerHTML=matches.length?matches.map(s=>`<div class="sdrop-item" onclick="selectSpell(${idx},${s[0]},${JSON.stringify(s[1])})">${s[1]}<small>${s[0]}</small></div>`).join(''):'<div class="sdrop-none">No results</div>';
+  if(q.length>=1||drop.classList.contains('open')) drop.classList.add('open');
 }
 function selectSpell(idx,id,name){
   spells[idx]={...spells[idx],id,name};
@@ -1214,8 +1244,8 @@ function buildAdvanced(){
   return `<div class="sec">
     <div class="sh"><div class="st">Advanced Properties</div><div class="sl"></div></div>
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
-      <button class="top-btn" onclick="syncAdvancedFromSQL()" style="padding:6px 14px;font-size:9px">↓ Sync from Live Preview</button>
-      <span style="font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:12px">Pulls all properties currently in the SQL preview into these tables so you can edit them.</span>
+      <button class="top-btn" onclick="syncAdvancedFromSQL()" style="padding:6px 14px;font-size:9px">↺ Refresh from Live Preview</button>
+      <span style="font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:12px">Auto-synced when you open this tab. Click Refresh to manually reload from the current SQL.</span>
     </div>
     <div class="sh"><div class="st">Int Properties</div><div class="sl"></div></div>
     ${tbl('extraInt',PROP_INT)}
@@ -1236,7 +1266,7 @@ function buildAdvanced(){
 }
 
 // Parse the live SQL preview and load all properties into the Advanced tables
-function syncAdvancedFromSQL(){
+function syncAdvancedFromSQL(silent=false){
   const sql=getPlainSQL();
   if(!sql.trim()){toast('No SQL to sync from.');return;}
 
@@ -1246,37 +1276,23 @@ function syncAdvancedFromSQL(){
   const strSection=extractInsertValues(sql,'weenie_properties_string');
   const didSection=extractInsertValues(sql,'weenie_properties_d_i_d');
 
-  // Props already shown in the Properties tab — exclude from Advanced to avoid duplication
-  // Int: ItemType(1), CreatureType(2), Palette(3), ClothingPriority(4), Encumb(5),
-  //      ItemsCapacity(6), ContainersCapacity(7), ValidLoc(9), CurrentWieldLoc(10),
-  //      MaxStackSize(11), StackSize(12), StackUnitEncumb(13), ItemUseable(16),
-  //      Value(19), Level(25), ArmorType(27), ArmorLevel(28), Bonded(33), CombatMode(40),
-  //      Damage(44), DamageType(45), AttackType(47), WeaponSkill(48), WeaponTime(49),
-  //      PhysicsState(93), RadarBlipColor(95), ShowableOnRadar(133), PlayerKillerStatus(134),
-  //      XpOverride(146), WieldReq(158), WieldSkill(159), WieldDiff(160), LumAward(332)
-  const SKIP_INT=new Set([1,2,3,4,5,6,7,9,10,11,12,13,16,19,25,27,28,33,40,44,45,47,48,49,93,95,133,134,146,158,159,160,204,307,308,313,314,315,317,323,332]);
-  // Bool: all the standard creature bools handled by Properties
-  const SKIP_BOOL=new Set([1,6,7,8,11,12,13,14,15,18,19,22,23,29,39,41,42,50,52,63,65,66,79,91,98,120]);
-  // Float: all resistances, ArmorMods, scale, rates, etc. shown in Properties
-  const SKIP_FLOAT=new Set([1,3,4,5,12,13,14,15,16,17,18,19,21,22,29,31,34,37,38,39,41,43,54,62,64,65,66,67,68,69,70,71,72,73,74,75,80,104,122,125,136,144,149,150,152,165,166]);
-  // String: Name(1), Use(14), ShortDesc(15), LongDesc(16)
-  const SKIP_STR=new Set([1,14,15,16,17,18,20]);
-  // DID: Setup(1), MotionTable(2), SoundTable(3), Icon(8), PhysicsEffectTable(22), DeathTreasure(35)
-  const SKIP_DID=new Set([1,2,3,4,6,7,8,22,28,32,35,36,38,46,50,52,55]);
-
-  extraInt=intSection.filter(r=>!SKIP_INT.has(r.type)).map(r=>({type:String(r.type),value:String(r.value)}));
-  extraBool=boolSection.filter(r=>!SKIP_BOOL.has(r.type)).map(r=>({type:String(r.type),value:String(r.value)}));
-  extraFloat=floatSection.filter(r=>!SKIP_FLOAT.has(r.type)).map(r=>({type:String(r.type),value:String(r.value)}));
-  extraStr=strSection.filter(r=>!SKIP_STR.has(r.type)).map(r=>({type:String(r.type),value:String(r.value)}));
-  extraDID=didSection.filter(r=>!SKIP_DID.has(r.type)).map(r=>({type:String(r.type),value:String(r.value)}));
+  // Load ALL properties from SQL into the ≡ Properties tab so users can see
+  // and edit everything that appears in the Live Preview
+  extraInt=intSection.map(r=>({type:String(r.type),value:String(r.value)}));
+  extraBool=boolSection.map(r=>({type:String(r.type),value:String(r.value)}));
+  extraFloat=floatSection.map(r=>({type:String(r.type),value:String(r.value)}));
+  extraStr=strSection.map(r=>({type:String(r.type),value:String(r.value)}));
+  extraDID=didSection.map(r=>({type:String(r.type),value:String(r.value)}));
 
   rebuildPanel('advanced');
   markSQLClean();
   const total=extraInt.length+extraBool.length+extraFloat.length+extraStr.length+extraDID.length;
-  if(total===0){
-    toast('Nothing extra to sync — all properties are already in the form fields.');
-  } else {
-    toast(`Synced ${total} additional properties into Advanced tab.`);
+  if(!silent){
+    if(total===0){
+      toast('All properties are reflected in the form fields above.');
+    } else {
+      toast(`Loaded ${total} additional properties.`);
+    }
   }
 }
 
@@ -1906,12 +1922,7 @@ function buildSQL(){
 
   // ── Body parts ───────────────────────────────────────────────────────────
   if(isCreature && $('bp_dt_0')){
-    lines.push(`INSERT INTO \`weenie_properties_body_part\``);
-    lines.push(`  (\`object_Id\`, \`key\`, \`d_Type\`, \`d_Val\`, \`d_Var\`, \`base_Armor\`,`);
-    lines.push(`   \`armor_Vs_Slash\`, \`armor_Vs_Pierce\`, \`armor_Vs_Bludgeon\`, \`armor_Vs_Cold\`,`);
-    lines.push(`   \`armor_Vs_Fire\`, \`armor_Vs_Acid\`, \`armor_Vs_Electric\`, \`armor_Vs_Nether\`,`);
-    lines.push(`   \`b_h\`, \`h_l_f\`, \`m_l_f\`, \`l_l_f\`, \`h_r_f\`, \`m_r_f\`, \`l_r_f\`,`);
-    lines.push(`   \`h_l_b\`, \`m_l_b\`, \`l_l_b\`, \`h_r_b\`, \`m_r_b\`, \`l_r_b\`)`);
+    lines.push(`INSERT INTO \`weenie_properties_body_part\` (\`object_Id\`, \`key\`, \`d_Type\`, \`d_Val\`, \`d_Var\`, \`base_Armor\`, \`armor_Vs_Slash\`, \`armor_Vs_Pierce\`, \`armor_Vs_Bludgeon\`, \`armor_Vs_Cold\`, \`armor_Vs_Fire\`, \`armor_Vs_Acid\`, \`armor_Vs_Electric\`, \`armor_Vs_Nether\`, \`b_h\`, \`h_l_f\`, \`m_l_f\`, \`l_l_f\`, \`h_r_f\`, \`m_r_f\`, \`l_r_f\`, \`h_l_b\`, \`m_l_b\`, \`l_l_b\`, \`h_r_b\`, \`m_r_b\`, \`l_r_b\`)`);
     bodyParts.forEach((bp,i)=>{
       const dt=gi('bp_dt_'+i,4), dv=gi('bp_dv_'+i,0), al=gi('bp_al_'+i,80);
       const sl=gi('bp_sl_'+i,64), pi=gi('bp_pi_'+i,56), bl=gi('bp_bl_'+i,120);
