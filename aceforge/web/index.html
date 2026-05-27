@@ -599,10 +599,9 @@ function switchSub(sub,btn){
   // Update dynamic labels that depend on values from other tabs
   updateCrossTabLabels();
   regen();
-  // Auto-sync Advanced tab from SQL whenever it's opened
+  // Properties tab — just rebuild, _lastSQLProps is already current from regen()
   if(sub==='advanced'){
-    // Short delay so regen() finishes writing SQL first
-    setTimeout(()=>syncAdvancedFromSQL(true), 50);
+    rebuildPanel('advanced');
   }
 }
 
@@ -1111,11 +1110,14 @@ function openSpellDrop(idx){
   const ql=query.toLowerCase();
   const matches=ql.length>=1
     ? SPELLS.filter(s=>s[1].toLowerCase().includes(ql)).slice(0,60)
-    : SPELLS.slice(0,60);
+    : SPELLS.slice(0,8);
   const drop=$(`sp_drop_${idx}`);
   if(!drop)return;
   if(matches.length){
-    drop.innerHTML=matches.map(s=>`<div class="sdrop-item" onclick="selectSpell(${idx},${s[0]},${JSON.stringify(s[1])})">${s[1]}<small>${s[0]}</small></div>`).join('');
+    drop.innerHTML=matches.map(s=>{
+      const safeName=s[1].replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+      return `<div class="sdrop-item" onmousedown="event.preventDefault();selectSpell(${idx},${s[0]},'${safeName}')">${s[1]}<small>${s[0]}</small></div>`;
+    }).join('');
   } else {
     drop.innerHTML='<div class="sdrop-none">No results</div>';
   }
@@ -1130,15 +1132,20 @@ function filterSpells(idx,query){
   const q=query.toLowerCase();
   // Show matching results, or top 60 if empty
   const matches=q.length>=1
-    ?SPELLS.filter(s=>s[1].toLowerCase().includes(q)).slice(0,60)
+    ?SPELLS.filter(s=>s[1].toLowerCase().includes(q)).slice(0,50)
     :SPELLS.slice(0,60);
-  drop.innerHTML=matches.length?matches.map(s=>`<div class="sdrop-item" onclick="selectSpell(${idx},${s[0]},${JSON.stringify(s[1])})">${s[1]}<small>${s[0]}</small></div>`).join(''):'<div class="sdrop-none">No results</div>';
+  drop.innerHTML=matches.length?matches.map(s=>{
+    const safeName=s[1].replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    return `<div class="sdrop-item" onmousedown="event.preventDefault();selectSpell(${idx},${s[0]},'${safeName}')">${s[1]}<small>${s[0]}</small></div>`;
+  }).join(''):'<div class="sdrop-none">No results</div>';
   if(q.length>=1||drop.classList.contains('open')) drop.classList.add('open');
 }
 function selectSpell(idx,id,name){
-  spells[idx]={...spells[idx],id,name};
+  // Decode HTML entities that were escaped for the attribute
+  const decoded=name.replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&');
+  spells[idx]={...spells[idx],id,name:decoded};
   const ie=$(`sp_id_${idx}`),ne=$(`sp_nm_${idx}`),dr=$(`sp_drop_${idx}`);
-  if(ie)ie.value=id;if(ne)ne.value=name;if(dr)dr.classList.remove('open');regen();
+  if(ie)ie.value=id;if(ne)ne.value=decoded;if(dr)dr.classList.remove('open');regen();
 }
 
 // ── BODY PARTS ────────────────────────────────────────────────────────────────
@@ -1228,107 +1235,153 @@ function toggleEmote(i){
 }
 function addEmote(){emotes.push({category:7,prob:1,wcidFilter:0,questFilter:'',actions:[]});rebuildPanel('emotes');}
 
-// ── ADVANCED (FULL PROPERTY EDITOR) ──────────────────────────────────────────
+// ── PROPERTIES TAB (full property editor) ────────────────────────────────────
+// Architecture:
+//   extraInt/Bool/Float/Str/DID hold ONLY additional rows not emitted by the
+//   form fields.  syncAdvancedFromSQL reads what regen() already produced and
+//   shows ALL rows — but the properties tab editor only controls the "extra"
+//   arrays.  The form fields (Name, Level, Damage…) emit their rows
+//   automatically; editing them in the Properties tab would duplicate them.
+//
+//   To avoid confusion we now show the full SQL output in a read-only summary
+//   at the top, and the editable extras below.  The Add flow uses a dropdown
+//   to pick which property type to add first, then lets the user enter a value.
+
 function buildAdvanced(){
-  function tbl(arrRef,propNames){
-    const arr=window[arrRef]||[];
-    const typeOpts=Object.entries(propNames).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('');
-    const rows=arr.map((row,i)=>`<tr>
-      <td><select id="${arrRef}_t_${i}" onchange="window.${arrRef}[${i}].type=this.value;regen()" style="font-size:12px"><option value="${row.type}">${row.type} · ${propNames[row.type]||'custom'}</option>${typeOpts}</select></td>
-      <td><input type="text" id="${arrRef}_v_${i}" value="${row.value||''}" oninput="window.${arrRef}[${i}].value=this.value;regen()" style="font-size:13px;font-weight:600"></td>
-      <td style="text-align:center"><button class="del" onclick="window.${arrRef}.splice(${i},1);rebuildPanel('advanced')">✕</button></td>
-    </tr>`).join('');
-    return `<table class="ptbl"><thead><tr><th style="width:260px">Property</th><th>Value</th><th style="width:30px"></th></tr></thead><tbody>${rows||'<tr><td colspan=3 style="color:var(--ink-faint);font-style:italic;padding:8px 6px;font-size:13px">None — click + to add</td></tr>'}</tbody></table>`;
+  // Type IDs already emitted by the form fields — these are managed/read-only in the Properties tab
+  const SKIP_INT=new Set([1,2,3,4,5,6,7,9,10,11,12,13,16,19,25,26,27,28,33,40,44,45,47,48,49,93,95,101,106,107,108,109,110,114,126,133,134,146,151,158,159,160,169,204,307,308,313,314,315,317,323,332]);
+  const SKIP_BOOL=new Set([1,6,7,8,11,12,13,14,15,18,19,22,23,29,39,41,42,50,52,63,65,66,79,91,98,100,120]);
+  const SKIP_FLOAT=new Set([1,3,4,5,12,13,14,15,16,17,18,19,21,22,29,31,34,37,38,39,41,43,54,62,64,65,66,67,68,69,70,71,72,73,74,75,80,104,122,125,136,144,149,150,152,165,166]);
+  const SKIP_STR=new Set([1,7,14,15,16,17,18,20]);
+  const SKIP_DID=new Set([1,2,3,4,6,7,8,22,28,32,35,36,38,46,50,52,55]);
+
+  // Read-only rows for properties managed by form fields (shown grayed-out)
+  function managedRows(arr, propNames, skipSet){
+    return (arr||[]).filter(r=>skipSet.has(parseInt(r.type))).map(r=>{
+      const name=propNames[r.type]||'custom';
+      return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;opacity:0.55">
+        <div style="min-width:220px;font-family:'Cinzel',serif;font-size:10px;font-weight:700;color:var(--ink-dim)">${r.type} · ${name}</div>
+        <div style="flex:1;font-family:'Source Code Pro',monospace;font-size:12px;color:var(--ink-dim);padding:4px 3px">${r.value}</div>
+        <div style="font-family:'Cinzel',serif;font-size:8px;color:var(--ink-faint);white-space:nowrap">Form Field</div>
+      </div>`;
+    }).join('');
   }
-  const firstInt=Object.keys(PROP_INT)[0],firstBool=Object.keys(PROP_BOOL)[0],firstFloat=Object.keys(PROP_FLOAT)[0],firstStr=Object.keys(PROP_STRING)[0],firstDID=Object.keys(PROP_DID)[0];
+
+  // Editable rows from the extra arrays
+  function extraRows(arrRef, propNames, skipSet){
+    const arr=window[arrRef]||[];
+    return arr.map((r,i)=>{
+      const name=propNames[r.type]||'custom';
+      const isManaged=skipSet.has(parseInt(r.type));
+      const style=isManaged?'opacity:0.6':'';
+      return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border-lt);${style}">
+        <div style="min-width:220px;font-family:'Cinzel',serif;font-size:10px;font-weight:700;color:var(--ink-mid)">${r.type} · ${name}</div>
+        <input type="text" value="${String(r.value||'').replace(/"/g,'&quot;')}" oninput="window.${arrRef}[${i}].value=this.value;regen()" style="flex:1;font-family:'Source Code Pro',monospace;font-size:12px;font-weight:600;border-bottom:1px solid var(--border)">
+        <button class="del" onclick="window.${arrRef}.splice(${i},1);rebuildPanel('advanced');regen()">✕</button>
+      </div>`;
+    }).join('');
+  }
+
+  // Add-row UI: searchable select + value + Add button
+  function addRowUI(arrRef, propNames, defaultVal, sectionId){
+    const opts=Object.entries(propNames).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('');
+    return `<div style="display:flex;gap:8px;align-items:flex-end;margin-top:10px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+      <div class="fg" style="flex:2">
+        <div class="fl">Property to add</div>
+        <select id="add_type_${sectionId}" style="font-size:13px">${opts}</select>
+      </div>
+      <div class="fg" style="flex:1">
+        <div class="fl">Value</div>
+        <input type="text" id="add_val_${sectionId}" value="${defaultVal}" style="font-size:13px;font-weight:600">
+      </div>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addExtraProperty('${arrRef}','${sectionId}')">+ Add</button>
+    </div>`;
+  }
+
+  // Build display rows combining managed (read-only) + extras (editable)
+  // Managed rows come from lastSQLProps (populated by regen)
+  const lp=window._lastSQLProps||{};
+  const intManaged=managedRows(lp.int,PROP_INT,SKIP_INT);
+  const boolManaged=managedRows(lp.bool,PROP_BOOL,SKIP_BOOL);
+  const floatManaged=managedRows(lp.float,PROP_FLOAT,SKIP_FLOAT);
+  const strManaged=managedRows(lp.str,PROP_STRING,SKIP_STR);
+  const didManaged=managedRows(lp.did,PROP_DID,SKIP_DID);
+
+  const intExtra=extraRows('extraInt',PROP_INT,SKIP_INT);
+  const boolExtra=extraRows('extraBool',PROP_BOOL,SKIP_BOOL);
+  const floatExtra=extraRows('extraFloat',PROP_FLOAT,SKIP_FLOAT);
+  const strExtra=extraRows('extraStr',PROP_STRING,SKIP_STR);
+  const didExtra=extraRows('extraDID',PROP_DID,SKIP_DID);
+
+  const none='<div style="color:var(--ink-faint);font-style:italic;font-size:13px;padding:4px 0">None</div>';
+
   return `<div class="sec">
-    <div class="sh"><div class="st">Advanced Properties</div><div class="sl"></div></div>
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
-      <button class="top-btn" onclick="syncAdvancedFromSQL()" style="padding:6px 14px;font-size:9px">↺ Refresh from Live Preview</button>
-      <span style="font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:12px">Auto-synced when you open this tab. Click Refresh to manually reload from the current SQL.</span>
+    <div class="sh"><div class="st">≡ Properties</div><div class="sl"></div>
+      <button class="top-btn" onclick="syncAdvancedFromSQL()" style="padding:5px 12px;font-size:9px">↺ Refresh</button>
     </div>
+    <p class="note" style="margin-bottom:14px">Grayed rows are managed by the Form Fields tab. Editable rows are additional properties. Use the Add controls to insert new ones.</p>
+
     <div class="sh"><div class="st">Int Properties</div><div class="sl"></div></div>
-    ${tbl('extraInt',PROP_INT)}
-    <button class="add-btn" onclick="extraInt.push({type:'${firstInt}',value:'0'});rebuildPanel('advanced')">+ Add Int Property</button>
-    <div class="sh" style="margin-top:14px"><div class="st">Bool Properties</div><div class="sl"></div></div>
-    ${tbl('extraBool',PROP_BOOL)}
-    <button class="add-btn" onclick="extraBool.push({type:'${firstBool}',value:'False'});rebuildPanel('advanced')">+ Add Bool Property</button>
-    <div class="sh" style="margin-top:14px"><div class="st">Float Properties</div><div class="sl"></div></div>
-    ${tbl('extraFloat',PROP_FLOAT)}
-    <button class="add-btn" onclick="extraFloat.push({type:'${firstFloat}',value:'0.0'});rebuildPanel('advanced')">+ Add Float Property</button>
-    <div class="sh" style="margin-top:14px"><div class="st">String Properties</div><div class="sl"></div></div>
-    ${tbl('extraStr',PROP_STRING)}
-    <button class="add-btn" onclick="extraStr.push({type:'${firstStr}',value:''});rebuildPanel('advanced')">+ Add String Property</button>
-    <div class="sh" style="margin-top:14px"><div class="st">DID Properties</div><div class="sl"></div></div>
-    ${tbl('extraDID',PROP_DID)}
-    <button class="add-btn" onclick="extraDID.push({type:'${firstDID}',value:'0x00000000'});rebuildPanel('advanced')">+ Add DID Property</button>
+    <div id="adv_int">${intManaged}${intExtra||(!intManaged?none:'')}</div>
+    ${addRowUI('extraInt',PROP_INT,'0','int')}
+
+    <div class="sh" style="margin-top:16px"><div class="st">Bool Properties</div><div class="sl"></div></div>
+    <div id="adv_bool">${boolManaged}${boolExtra||(!boolManaged?none:'')}</div>
+    ${addRowUI('extraBool',PROP_BOOL,'True','bool')}
+
+    <div class="sh" style="margin-top:16px"><div class="st">Float Properties</div><div class="sl"></div></div>
+    <div id="adv_float">${floatManaged}${floatExtra||(!floatManaged?none:'')}</div>
+    ${addRowUI('extraFloat',PROP_FLOAT,'0.0','float')}
+
+    <div class="sh" style="margin-top:16px"><div class="st">String Properties</div><div class="sl"></div></div>
+    <div id="adv_str">${strManaged}${strExtra||(!strManaged?none:'')}</div>
+    ${addRowUI('extraStr',PROP_STRING,'','str')}
+
+    <div class="sh" style="margin-top:16px"><div class="st">DID Properties</div><div class="sl"></div></div>
+    <div id="adv_did">${didManaged}${didExtra||(!didManaged?none:'')}</div>
+    ${addRowUI('extraDID',PROP_DID,'0x00000000','did')}
   </div>`;
 }
 
-// Parse the live SQL preview and load all properties into the Advanced tables
-function syncAdvancedFromSQL(silent=false){
-  const sql=getPlainSQL();
-  if(!sql.trim()){toast('No SQL to sync from.');return;}
-
-  const intSection=extractInsertValues(sql,'weenie_properties_int');
-  const boolSection=extractInsertValues(sql,'weenie_properties_bool');
-  const floatSection=extractInsertValues(sql,'weenie_properties_float');
-  const strSection=extractInsertValues(sql,'weenie_properties_string');
-  const didSection=extractInsertValues(sql,'weenie_properties_d_i_d');
-
-  // Load ALL properties from SQL into the ≡ Properties tab so users can see
-  // and edit everything that appears in the Live Preview
-  extraInt=intSection.map(r=>({type:String(r.type),value:String(r.value)}));
-  extraBool=boolSection.map(r=>({type:String(r.type),value:String(r.value)}));
-  extraFloat=floatSection.map(r=>({type:String(r.type),value:String(r.value)}));
-  extraStr=strSection.map(r=>({type:String(r.type),value:String(r.value)}));
-  extraDID=didSection.map(r=>({type:String(r.type),value:String(r.value)}));
-
+function addExtraProperty(arrRef, sectionId){
+  const typeEl=$('add_type_'+sectionId);
+  const valEl=$('add_val_'+sectionId);
+  if(!typeEl||!valEl)return;
+  const type=String(typeEl.value);
+  const value=valEl.value.trim()||'';
+  if(!type)return;
+  const arr=window[arrRef];
+  // Replace if already exists, otherwise add
+  const existing=arr.findIndex(r=>String(r.type)===type);
+  if(existing>=0) arr[existing].value=value;
+  else arr.push({type, value});
+  arr.sort((a,b)=>parseInt(a.type)-parseInt(b.type));
+  regen();
   rebuildPanel('advanced');
-  markSQLClean();
-  const total=extraInt.length+extraBool.length+extraFloat.length+extraStr.length+extraDID.length;
-  if(!silent){
-    if(total===0){
-      toast('All properties are reflected in the form fields above.');
-    } else {
-      toast(`Loaded ${total} additional properties.`);
-    }
-  }
+  toast('Added '+type+' = '+value);
 }
 
-function extractInsertValues(sql, tableName){
-  // Find the INSERT INTO `tableName` ...;  block (plain text, no HTML)
-  const escapedName=tableName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-  const blockRe=new RegExp(
-    'INSERT\\s+INTO\\s+`'+escapedName+'`[\\s\\S]*?(?=INSERT\\s+INTO|DELETE\\s+FROM|SET\\s+@|$)',
-    'i'
-  );
-  const blockM=blockRe.exec(sql);
-  if(!blockM) return [];
-  const block=blockM[0];
+function syncAdvancedFromSQL(silent=false){
+  // Refresh the _lastSQLProps snapshot and rebuild the panel
+  // This does NOT load anything into extraInt/Bool/etc — those stay as-is
+  // (extras are only changed by Add/Remove actions or manual value editing)
+  const sql=getPlainSQL();
+  if(!sql.trim()){ if(!silent) toast('No SQL to sync from.'); return; }
 
-  const results=[];
-  // Match each row tuple: (WCID, typeInt, value)
-  // Value can be: integer, float, hex (0x...), boolean (True/False), or 'string'
-  // Pattern: ( digits , digits , <value> ) optionally followed by /* comment */
-  const rowRe=/\(\s*\d+\s*,\s*(\d+)\s*,\s*((?:'(?:[^']|'')*'|0x[0-9a-fA-F]+|True|False|-?[\d.]+))\s*\)/g;
-  let m;
-  while((m=rowRe.exec(block))!==null){
-    const type=parseInt(m[1]);
-    let raw=m[2].trim();
-    // Unquote string values
-    if(raw.startsWith("'")&&raw.endsWith("'")){
-      results.push({type, value:raw.slice(1,-1).replace(/''/g,"'")});
-    } else if(raw==='True'||raw==='False'){
-      results.push({type, value:raw});
-    } else if(raw.startsWith('0x')){
-      results.push({type, value:raw});
-    } else {
-      const num=parseFloat(raw);
-      results.push({type, value:isNaN(num)?raw:num});
-    }
+  // Parse the current SQL to show the read-only "managed" rows
+  window._lastSQLProps={
+    int:   extractInsertValues(sql,'weenie_properties_int'),
+    bool:  extractInsertValues(sql,'weenie_properties_bool'),
+    float: extractInsertValues(sql,'weenie_properties_float'),
+    str:   extractInsertValues(sql,'weenie_properties_string'),
+    did:   extractInsertValues(sql,'weenie_properties_d_i_d'),
+  };
+
+  rebuildPanel('advanced');
+  if(!silent){
+    const total=Object.values(window._lastSQLProps).reduce((s,a)=>s+a.length,0);
+    toast('Showing '+total+' properties from SQL.');
   }
-  return results;
 }
 
 // ── SEARCH FUNCTIONS ──────────────────────────────────────────────────────────
@@ -1394,6 +1447,21 @@ function regen(){
   _regenLock=false;
   // Regen from form always clears any manual SQL edits
   if(_sqlDirty) markSQLClean();
+  // Snapshot current SQL into _lastSQLProps for the Properties tab display
+  // (done silently — no rebuild of advanced panel unless it's visible)
+  const sql=getPlainSQL();
+  if(sql.trim()){
+    window._lastSQLProps={
+      int:   extractInsertValues(sql,'weenie_properties_int'),
+      bool:  extractInsertValues(sql,'weenie_properties_bool'),
+      float: extractInsertValues(sql,'weenie_properties_float'),
+      str:   extractInsertValues(sql,'weenie_properties_string'),
+      did:   extractInsertValues(sql,'weenie_properties_d_i_d'),
+    };
+    // If Properties tab is visible, refresh it
+    const advPanel=document.querySelector('[data-sub="advanced"].active');
+    if(advPanel) rebuildPanel('advanced');
+  }
 }
 
 function markSQLClean(){
