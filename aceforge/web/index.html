@@ -116,9 +116,10 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 .sql-btns{display:flex;gap:5px}
 .sql-btn{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:1px solid #3a3020;background:transparent;color:#8a7a58;padding:5px 10px;cursor:pointer;transition:all .15s}
 .sql-btn:hover{border-color:var(--gold);color:var(--gold)}
-.sql-out{flex:1;overflow-y:auto;padding:14px 16px;font-family:'Source Code Pro',monospace;font-size:12px;line-height:1.8;color:#c8b898;white-space:pre-wrap}
-.sql-out::-webkit-scrollbar{width:4px}
-.sql-out::-webkit-scrollbar-thumb{background:#3a3020}
+.sql-out{flex:1;overflow-y:auto;overflow-x:auto;padding:14px 16px;font-family:'Source Code Pro',monospace;font-size:12px;line-height:1.8;color:#c8b898;white-space:pre}
+.sql-out::-webkit-scrollbar{width:6px;height:6px}
+.sql-out::-webkit-scrollbar-thumb{background:#3a3020;border-radius:3px}
+.sql-out::-webkit-scrollbar-track{background:#0a0800}
 .kw{color:#e8d080;font-weight:600}
 .st2{color:#e0a080}
 .nm{color:#80c0e8}
@@ -227,7 +228,6 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
       <div class="sql-title">Generated SQL</div>
       <div class="sql-btns">
         <button class="sql-btn" onclick="copySQL()">⊡ Copy</button>
-        <button class="sql-btn" onclick="downloadSQL()">↓ Download</button>
         <button class="sql-btn" onclick="saveSQL()">+ Save</button>
       </div>
     </div>
@@ -319,6 +319,11 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
       <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
         <button class="top-btn" onclick="testAPIKey()">⚡ Test Connection</button>
         <span id="sTestResult" style="font-family:'Cinzel',serif;font-size:10px;font-weight:700"></span>
+      </div>
+      <div class="sec-title">Save Behavior</div>
+      <div class="sf" style="display:flex;align-items:center;gap:12px">
+        <input type="checkbox" id="sAutoOpen" style="width:auto;border:none;border-bottom:none;padding:0;margin:0;cursor:pointer;accent-color:var(--crimson)" checked>
+        <label class="sf-label" style="margin:0;cursor:pointer" for="sAutoOpen">Automatically open output folder after saving a file</label>
       </div>
       <div class="sec-title">Server Configuration</div>
       <div class="sf">
@@ -454,8 +459,8 @@ const TYPE_CFG={
       {l:'Covenant Gauntlets',d:{fName:'Covenant Gauntlets',fArmorLevel:'400',fArmorType:'15',fValidLoc:'32',fValue:'25000',fEncumb:'200',fScale:'1.0'}},
       {l:'Cloth Robe',d:{fName:'Cloth Robe',fArmorLevel:'0',fArmorType:'1',fValidLoc:'2',fValue:'100',fEncumb:'80',fScale:'1.0'}},
     ]},
-  jewelry:{label:'Jewelry',icon:'◎',desc:'Rings, necklaces, bracelets, and wristlets.',wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 – 819,999',wTypes:[[38,'Gem (Jewelry)']],
-    subTabs:['properties','emotes','advanced'],
+  jewelry:{label:'Jewelry',icon:'◎',desc:'Rings, necklaces, bracelets, and wristlets.',wcidFrom:'870000',wcidTo:'879999',wcidRange:'870,000 – 879,999',wTypes:[[1,'Generic']],
+    subTabs:['properties','spellbook','emotes','advanced'],
     presets:[
       {l:'Ring',d:{fName:'Ring of Vigor',fValue:'1000',fEncumb:'5',fBonded:'0',fAttuned:'0',fValidLoc:'134217728',fScale:'1.0'}},
       {l:'Necklace',d:{fName:'Amulet of Warding',fValue:'2000',fEncumb:'8',fBonded:'0',fAttuned:'0',fValidLoc:'1048576',fScale:'1.0'}},
@@ -465,9 +470,16 @@ const TYPE_CFG={
   quest:{label:'Quest',icon:'◇',desc:'Quest flags, kill tasks, and progression timers.',wcidFrom:'860000',wcidTo:'869999',wcidRange:'860,000 – 869,999',wTypes:[[38,'Quest Flag']],
     subTabs:['properties'],
     presets:[
-      {l:'Completion Flag',d:{fName:'NewQuestCompleted',fMinDelta:'0',fMaxSolves:'1',fMsg:'NewQuestCompleted'}},
-      {l:'Kill Timer',d:{fName:'NewQuestKTTimer',fMinDelta:'72000',fMaxSolves:'-1',fMsg:'NewQuestKTTimer'}},
-      {l:'Daily Timer',d:{fName:'NewQuestTimer',fMinDelta:'86400',fMaxSolves:'-1',fMsg:'NewQuestTimer'}},
+      {l:'Generic Quest',d:{fName:'NewQuest',fMinDelta:'0',fMaxSolves:'-1',fMsg:'NewQuest'}},
+      {l:'One-Time Completion',d:{fName:'NewQuestCompleted',fMinDelta:'0',fMaxSolves:'1',fMsg:'NewQuestCompleted'}},
+      {l:'Kill Task (KT)',d:{fName:'NewQuestKT',fMinDelta:'0',fMaxSolves:'1',fMsg:'NewQuestKT'}},
+      {l:'KT Timer (20hr)',d:{fName:'NewQuestKTTimer',fMinDelta:'72000',fMaxSolves:'-1',fMsg:'NewQuestKTTimer'}},
+      {l:'KT Completed',d:{fName:'NewQuestKTCompleted',fMinDelta:'0',fMaxSolves:'1',fMsg:'NewQuestKTCompleted'}},
+      {l:'Daily Timer (24hr)',d:{fName:'NewQuestTimer',fMinDelta:'86400',fMaxSolves:'-1',fMsg:'NewQuestTimer'}},
+      {l:'Weekly Timer (7d)',d:{fName:'NewQuestWeekly',fMinDelta:'604800',fMaxSolves:'-1',fMsg:'NewQuestWeekly'}},
+      {l:'Monthly Timer (30d)',d:{fName:'NewQuestMonthly',fMinDelta:'2592000',fMaxSolves:'-1',fMsg:'NewQuestMonthly'}},
+      {l:'Started Flag',d:{fName:'NewQuestStarted',fMinDelta:'0',fMaxSolves:'1',fMsg:'NewQuestStarted'}},
+      {l:'Arc Progress',d:{fName:'Arc1Started',fMinDelta:'0',fMaxSolves:'1',fMsg:'Arc1Started'}},
     ]},
 };
 
@@ -528,7 +540,7 @@ function buildInnerTabs(){
 function switchType(type,btn){
   curType=type;curSub=TYPE_CFG[type].subTabs[0];
   spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
-  recipeReqs=[];recipeMods=[];cookbookEntries=[];createList=[];
+  recipeReqs=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];
   bodyParts=getBodyParts(31);
   document.querySelectorAll('.itab').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
@@ -721,7 +733,25 @@ function buildProps(){
       <div class="fg"><div class="fl">Spellcraft <span class="fc">I-106</span></div><input type="number" id="fSpellcraft" value="0"></div>
       <div class="fg" style="grid-column:span 2"><div class="fl">Short Description <span class="fc">S-15</span></div><input type="text" id="fShortDesc" value=""></div>
       <div class="fg" style="grid-column:span 3"><div class="fl">Use Message <span class="fc">S-14</span></div><input type="text" id="fUseMsg" value=""></div>
-    </div></div>`;
+    
+    <div class="sec"><div class="sh" style="margin-top:12px"><div class="st">Ratings</div><div class="sl"></div></div><div style="display:flex;gap:12px;flex-wrap:wrap">
+    <div class="fg" style="flex:1"><div class="fl">Dmg Rating <span class="fc">I-307</span></div><input type="number" id="fDmgRating" value="0"></div>
+    <div class="fg" style="flex:1"><div class="fl">Dmg Resist <span class="fc">I-308</span></div><input type="number" id="fDmgResist" value="0"></div>
+    <div class="fg" style="flex:1"><div class="fl">Crit Rating <span class="fc">I-313</span></div><input type="number" id="fCritRating" value="0"></div>
+    <div class="fg" style="flex:1"><div class="fl">CritDmg Rating <span class="fc">I-314</span></div><input type="number" id="fCritDmgRating" value="0"></div>
+    <div class="fg" style="flex:1"><div class="fl">CritRes Rating <span class="fc">I-315</span></div><input type="number" id="fCritResRating" value="0"></div>
+    <div class="fg" style="flex:1"><div class="fl">Heal Resist <span class="fc">I-317</span></div><input type="number" id="fHealResist" value="0"></div>
+    <div class="fg" style="flex:1"><div class="fl">Heal Boost <span class="fc">I-323</span></div><input type="number" id="fHealBoost" value="0"></div></div></div></div></div>
+    <div class="sh" style="margin-top:14px"><div class="st">Ratings</div><div class="sl"></div></div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div class="fg"><div class="fl">Dmg Rating <span class="fc">I-307</span></div><input type="number" id="fDmgRating" value="0"></div>
+      <div class="fg"><div class="fl">Dmg Resist <span class="fc">I-308</span></div><input type="number" id="fDmgResist" value="0"></div>
+      <div class="fg"><div class="fl">Crit Rating <span class="fc">I-313</span></div><input type="number" id="fCritRating" value="0"></div>
+      <div class="fg"><div class="fl">CritDmg Rating <span class="fc">I-314</span></div><input type="number" id="fCritDmgRating" value="0"></div>
+      <div class="fg"><div class="fl">CritRes Rating <span class="fc">I-315</span></div><input type="number" id="fCritResRating" value="0"></div>
+      <div class="fg"><div class="fl">Heal Resist <span class="fc">I-317</span></div><input type="number" id="fHealResist" value="0"></div>
+      <div class="fg"><div class="fl">Heal Boost <span class="fc">I-323</span></div><input type="number" id="fHealBoost" value="0"></div>
+    </div>`;
   }
   if(t==='weapon'){
     h+=`<div class="sec"><div class="sh"><div class="st">Weapon Database Lookup</div><div class="sl"></div></div>
@@ -748,7 +778,17 @@ function buildProps(){
       <div class="fg"><div class="fl">Elemental Dmg Bonus <span class="fc">I-204</span></div><input type="number" id="fElemBonus" value="0"></div>
       <div class="fg"><div class="fl">Crit Multiplier <span class="fc">F-136</span></div><input type="text" id="fCritMult" value="1.0"></div>
       <div class="fg"><div class="fl">Palette <span class="fc">I-3</span></div><select id="fPalette">${opt(PALETTES,20)}</select></div>
-    </div></div>`;
+    </div></div>
+    <div class="sh" style="margin-top:14px"><div class="st">Ratings</div><div class="sl"></div></div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div class="fg"><div class="fl">Dmg Rating <span class="fc">I-307</span></div><input type="number" id="fDmgRating" value="0"></div>
+      <div class="fg"><div class="fl">Dmg Resist <span class="fc">I-308</span></div><input type="number" id="fDmgResist" value="0"></div>
+      <div class="fg"><div class="fl">Crit Rating <span class="fc">I-313</span></div><input type="number" id="fCritRating" value="0"></div>
+      <div class="fg"><div class="fl">CritDmg Rating <span class="fc">I-314</span></div><input type="number" id="fCritDmgRating" value="0"></div>
+      <div class="fg"><div class="fl">CritRes Rating <span class="fc">I-315</span></div><input type="number" id="fCritResRating" value="0"></div>
+      <div class="fg"><div class="fl">Heal Resist <span class="fc">I-317</span></div><input type="number" id="fHealResist" value="0"></div>
+      <div class="fg"><div class="fl">Heal Boost <span class="fc">I-323</span></div><input type="number" id="fHealBoost" value="0"></div>
+    </div>`;
   }
   if(t==='armor'){
     h+=`<div class="sec"><div class="sh"><div class="st">Armor/Clothing Database Lookup</div><div class="sl"></div></div>
@@ -826,26 +866,51 @@ function buildQuestProps(){
 }
 
 function buildJewelryProps(){
-  return `<div class="sec"><div class="sh"><div class="st">Jewelry Properties</div><div class="sl"></div></div>
+  // Slot quick-fill buttons with correct ValidLocations from reference files
+  const SLOTS=[
+    [32768,'Necklace'],[786432,'Ring (Finger)'],[196608,'Bracelet (Wrist)'],
+    [67108864,'Trinket'],[1048576,'NeckWear Alt'],[524288,'WristWear Alt'],
+  ];
+  return `<div class="sec"><div class="sh"><div class="st">Jewelry Slot</div><div class="sl"></div></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-    ${[[1048576,'Necklace'],[134217728,'Ring L'],[268435456,'Ring R'],[2097152,'Wristlet L'],[4194304,'Wristlet R'],[536870912,'Bracelet L'],[1073741824,'Bracelet R']].map(([v,l])=>`<button class="pill" onclick="setQField('fValidLoc',${v})">${l}</button>`).join('')}
+    ${SLOTS.map(([v,l])=>`<button class="pill" onclick="setQField('fValidLoc',${v})">${l}</button>`).join('')}
   </div>
-  <div class="grid g3">
-    <div class="fg"><div class="fl">Valid Location <span class="fc">I-9</span></div><input type="number" id="fValidLoc" value="134217728"></div>
-    <div class="fg"><div class="fl">Value <span class="fc">I-19</span></div><input type="number" id="fValue" value="1000"></div>
-    <div class="fg"><div class="fl">Encumbrance <span class="fc">I-5</span></div><input type="number" id="fEncumb" value="5"></div>
-    <div class="fg"><div class="fl">Bonded <span class="fc">I-33</span></div><select id="fBonded">${opt(BONDED,0)}</select></div>
-    <div class="fg"><div class="fl">Attuned <span class="fc">I-114</span></div><select id="fAttuned">${opt(ATTUNED,0)}</select></div>
-    <div class="fg"><div class="fl">Default Scale <span class="fc">F-39</span></div><input type="text" id="fScale" value="1.0"></div>
-    <div class="fg"><div class="fl">Armor Type (cloth) <span class="fc">I-27</span></div><select id="fArmorType">${opt(ARMOR_TYPES,1)}</select></div>
-    <div class="fg"><div class="fl">Palette <span class="fc">I-3</span></div><select id="fPalette">${opt(PALETTES,20)}</select></div>
-    <div class="fg"><div class="fl">Spellcraft <span class="fc">I-106</span></div><input type="number" id="fSpellcraft" value="0"></div>
-    <div class="fg" style="grid-column:span 3"><div class="fl">Short Description <span class="fc">S-15</span></div><input type="text" id="fShortDesc" value=""></div>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;gap:12px">
+      <div class="fg"><div class="fl">Valid Location <span class="fc">I-9</span></div><input type="number" id="fValidLoc" value="32768"></div>
+      <div class="fg"><div class="fl">Value (pyreals) <span class="fc">I-19</span></div><input type="number" id="fValue" value="50000"></div>
+      <div class="fg"><div class="fl">Encumbrance <span class="fc">I-5</span></div><input type="number" id="fEncumb" value="60"></div>
+      <div class="fg"><div class="fl">Mass <span class="fc">I-8</span></div><input type="number" id="fMass" value="90"></div>
+    </div>
+    <div style="display:flex;gap:12px">
+      <div class="fg"><div class="fl">Spellcraft <span class="fc">I-106</span></div><input type="number" id="fSpellcraft" value="350"></div>
+      <div class="fg"><div class="fl">Item Cur Mana <span class="fc">I-107</span></div><input type="number" id="fItemCurMana" value="3000"></div>
+      <div class="fg"><div class="fl">Item Max Mana <span class="fc">I-108</span></div><input type="number" id="fItemMaxMana" value="3000"></div>
+      <div class="fg"><div class="fl">Item Difficulty <span class="fc">I-109</span></div><input type="number" id="fItemDiff" value="0"></div>
+    </div>
+    <div style="display:flex;gap:12px">
+      <div class="fg"><div class="fl">Palette Template <span class="fc">I-3</span></div><select id="fPalette">${opt(PALETTES,1)}</select></div>
+      <div class="fg"><div class="fl">Default Scale <span class="fc">F-39</span></div><input type="text" id="fScale" value="0.5"></div>
+      <div class="fg"><div class="fl">Mana Rate <span class="fc">F-5</span></div><input type="text" id="fManaRate" value="-0.033"></div>
+      <div class="fg"><div class="fl">Shade <span class="fc">F-12</span></div><input type="text" id="fShade" value="0.66"></div>
+    </div>
+    <div style="display:flex;gap:12px">
+      <div class="fg"><div class="fl">Bonded <span class="fc">I-33</span></div><select id="fBonded">${opt(BONDED,0)}</select></div>
+      <div class="fg"><div class="fl">Attuned <span class="fc">I-114</span></div><select id="fAttuned">${opt(ATTUNED,0)}</select></div>
+      <div class="fg"><div class="fl">Inscribable <span class="fc">B-22</span></div><select id="fInscribable"><option value="1">True</option><option value="0">False</option></select></div>
+      <div class="fg"><div class="fl">Short Description <span class="fc">S-15</span></div><input type="text" id="fShortDesc" value=""></div>
+    </div>
   </div>
-  <div class="sh" style="margin-top:12px"><div class="st">Ratings</div><div class="sl"></div></div>
-  <div class="rg">
-    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`<div class="fg"><div class="fl">${l} <span class="fc">${fc}</span></div><input type="number" id="${id}" value="0"></div>`).join('')}
-  </div></div>`;
+  <div class="sh" style="margin-top:14px"><div class="st">Ratings</div><div class="sl"></div></div>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;gap:12px">
+      ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist Rating','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['Crit Dmg Rating','fCritDmgRating','I-314']].map(([l,id,fc])=>`<div class="fg"><div class="fl">${l} <span class="fc">${fc}</span></div><input type="number" id="${id}" value="0"></div>`).join('')}
+    </div>
+    <div style="display:flex;gap:12px">
+      ${[['Crit Resist Rating','fCritResRating','I-315'],['Heal Resist Rating','fHealResist','I-317'],['Heal Boost Rating','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`<div class="fg"><div class="fl">${l} <span class="fc">${fc}</span></div><input type="number" id="${id}" value="0"></div>`).join('')}
+    </div>
+  </div>
+  </div>`;
 }
 
 function setQField(id,v){const e=$(id);if(e){e.value=v;regen();}}
@@ -937,40 +1002,97 @@ function buildAttrs(){
 }
 
 // ── SKILLS ────────────────────────────────────────────────────────────────────
+// Core skills always shown; extras added by user
+const CORE_SKILL_IDS=[6,7,15,44]; // MeleeDefense,MissileDefense,MagicDefense,HeavyWeapons
+let extraSkills=[]; // [{id,sac,init}]
+
 function buildSkills(){
   const level=gi('fLevel',100);
   const base=Math.floor(level*2.2);
+  const skillSelect=ALL_SKILLS.map(([id,name])=>`<option value="${id}">${name} (SK-${id})</option>`).join('');
+  const extraRows=extraSkills.map((sk,i)=>{
+    const name=ALL_SKILLS.find(([id])=>id==sk.id)?.[1]||'Unknown';
+    return `<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:11px;font-weight:700;color:var(--ink-mid)">${name} <span class="fc">SK-${sk.id}</span></div>
+      <select id="sk_sac_x_${i}" style="width:150px" onchange="extraSkills[${i}].sac=parseInt(this.value);regen()">${opt(SKILL_SAC,sk.sac||2)}</select>
+      <input type="number" id="sk_init_x_${i}" value="${sk.init||base}" style="width:90px" oninput="extraSkills[${i}].init=parseInt(this.value);regen()">
+      <button class="del" onclick="extraSkills.splice(${i},1);rebuildPanel('skills')">✕</button>
+    </div>`;
+  }).join('');
   return `<div class="sec">
     <div class="sh"><div class="st">Skills</div><div class="sl"></div></div>
-    <p class="warn">⚠ Skill types 1–5 and 8–13 are retired — never use them.</p>
-    <p class="note" style="margin-bottom:10px">Base value auto-calculated from level ${level} → ~${base}. Adjust per skill as needed.</p>
-    ${ALL_SKILLS.map(([id,name])=>`
-      <div style="display:grid;grid-template-columns:175px 155px 95px;gap:8px;align-items:end;margin-bottom:8px">
-        <div class="fl" style="align-self:center;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${name} <span class="fc">SK-${id}</span></div>
-        <select id="sk_sac_${id}">${opt(SKILL_SAC,2)}</select>
-        <input type="number" id="sk_init_${id}" value="${base}" placeholder="Init Level">
-      </div>`).join('')}
+    <p class="warn" style="margin-bottom:10px">⚠ Retired skill types 1–5 and 8–13 are never valid.</p>
+    <p class="note" style="margin-bottom:14px">Base skill auto-calculated from level ${level} → ~${base}.</p>
+    ${CORE_SKILL_IDS.map(id=>{
+      const name=ALL_SKILLS.find(([sid])=>sid===id)?.[1]||'Skill';
+      return `<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:11px;font-weight:700;color:var(--ink-mid)">${name} <span class="fc">SK-${id}</span></div>
+        <select id="sk_sac_${id}" style="width:150px">${opt(SKILL_SAC,2)}</select>
+        <input type="number" id="sk_init_${id}" value="${base}" style="width:90px">
+      </div>`;
+    }).join('')}
+    ${extraRows}
+    <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
+      <div class="fg sdrop-wrap" style="flex:1">
+        <input type="text" id="skillSearchInp" placeholder="Search skills to add…" autocomplete="off" oninput="filterSkillSearch(this.value)" style="border:1px dashed var(--border);padding:6px 10px">
+        <div class="sdrop-box" id="skillSearch_drop"><div class="sdrop-none">Type to search skills…</div></div>
+      </div>
+      <button class="add-btn" style="width:auto;margin-top:0;padding:8px 16px" onclick="addSkillByName()">+ Add Skill</button>
+    </div>
   </div>`;
+}
+
+function filterSkillSearch(q){
+  const drop=$('skillSearch_drop');if(!drop)return;
+  if(!q||q.length<1){drop.classList.remove('open');return;}
+  const ql=q.toLowerCase();
+  const matches=ALL_SKILLS.filter(([id,name])=>name.toLowerCase().includes(ql)&&!CORE_SKILL_IDS.includes(id)).slice(0,20);
+  drop.innerHTML=matches.length
+    ?matches.map(([id,name])=>`<div class="sdrop-item" onclick="addSkillById(${id})">${name}<small>SK-${id}</small></div>`).join('')
+    :'<div class="sdrop-none">No skills found</div>';
+  drop.classList.add('open');
+}
+
+function addSkillById(id){
+  const level=gi('fLevel',100);
+  const base=Math.floor(level*2.2);
+  if(!extraSkills.find(s=>s.id===id)){
+    extraSkills.push({id,sac:2,init:base});
+    rebuildPanel('skills');
+  }
+  $('skillSearch_drop')?.classList.remove('open');
+  setV('skillSearchInp','');
+}
+
+function addSkillByName(){
+  // fallback: just open the dropdown
+  $('skillSearchInp')?.focus();
 }
 
 // ── SPELL BOOK ────────────────────────────────────────────────────────────────
 function buildSpellbook(){
   const rows=spells.map((sp,i)=>`
-    <div class="spell-row">
-      <div class="fg"><div class="fl">Spell ID</div><input type="number" id="sp_id_${i}" value="${sp.id||''}" oninput="spells[${i}].id=this.value;regen()"></div>
-      <div class="fg sdrop-wrap">
-        <div class="fl">Name <span style="color:var(--ink-faint);font-size:9px">(search)</span></div>
-        <input type="text" id="sp_nm_${i}" value="${sp.name||''}" oninput="filterSpells(${i},this.value)" autocomplete="off" placeholder="Type to search…">
-        <div class="sdrop-box" id="sp_drop_${i}"><div class="sdrop-none">Type to search spells…</div></div>
+    <div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-lt)">
+      <div class="fg sdrop-wrap" style="flex:2">
+        <div class="fl">Spell Name <span style="color:var(--ink-faint);font-size:9px">(search)</span></div>
+        <input type="text" id="sp_nm_${i}" value="${sp.name||''}" oninput="filterSpells(${i},this.value)" autocomplete="off" placeholder="Search by name…" style="border-bottom:2px solid var(--border)">
+        <div class="sdrop-box" id="sp_drop_${i}"><div class="sdrop-none">Type to search…</div></div>
       </div>
-      <div class="fg"><div class="fl">Probability</div><input type="text" id="sp_pr_${i}" value="${sp.prob||'2.0'}" oninput="spells[${i}].prob=this.value;regen()"></div>
-      <button class="del" onclick="spells.splice(${i},1);rebuildPanel('spellbook')">✕</button>
+      <div class="fg" style="max-width:80px">
+        <div class="fl">ID <span class="fc">spell</span></div>
+        <input type="number" id="sp_id_${i}" value="${sp.id||''}" oninput="spells[${i}].id=this.value;regen()">
+      </div>
+      <div class="fg" style="max-width:90px">
+        <div class="fl">Probability</div>
+        <input type="text" id="sp_pr_${i}" value="${sp.prob||'2.0'}" oninput="spells[${i}].prob=this.value;regen()">
+      </div>
+      <button class="del" onclick="spells.splice(${i},1);rebuildPanel('spellbook')" style="margin-top:16px">✕</button>
     </div>`).join('');
   return `<div class="sec">
     <div class="sh"><div class="st">Spell Book</div><div class="sl"></div></div>
-    <p class="note">Probability: ≤2.0 → actual%=value/100 · >2.0 → actual%=value−2.0 &nbsp; Default: 2.0 (100% cast chance)</p>
+    <p class="note" style="margin-bottom:10px">Search by name — ID fills automatically. Probability 2.0 = 100% cast chance. Value >2.0: actual% = value−2.0.</p>
     ${rows}
-    <button class="add-btn" onclick="spells.push({id:'',name:'',prob:'2.0'});rebuildPanel('spellbook')">+ Add Spell</button>
+    <button class="add-btn" style="margin-top:10px" onclick="spells.push({id:'',name:'',prob:'2.0'});rebuildPanel('spellbook')">+ Add Spell</button>
   </div>`;
 }
 
@@ -1029,13 +1151,26 @@ function buildEmotesTab(){
 function buildEmoteBlock(em,i){
   const catName=lookupName(EMOTE_CATS,em.category||7);
   const actions=(em.actions||[]).map((a,j)=>`
-    <div class="emote-action-row">
-      <span style="font-family:'Source Code Pro',monospace;font-size:10px;color:var(--ink-dim);align-self:center">[${j}]</span>
-      <div class="fg"><div class="fl">Type</div><select id="ea_t_${i}_${j}" onchange="emotes[${i}].actions[${j}].type=this.value;regen()">${opt(EMOTE_TYPES,a.type||10)}</select></div>
-      <div class="fg"><div class="fl">Message / Quest Name</div><input type="text" id="ea_m_${i}_${j}" value="${a.message||''}" oninput="emotes[${i}].actions[${j}].message=this.value;regen()" placeholder="Text or quest name"></div>
-      <div class="fg"><div class="fl">Delay (s)</div><input type="text" id="ea_d_${i}_${j}" value="${a.delay||0}" oninput="emotes[${i}].actions[${j}].delay=this.value;regen()"></div>
-      <div class="fg"><div class="fl">Amount / Pct / Lum</div><input type="text" id="ea_a_${i}_${j}" value="${a.amount||''}" oninput="emotes[${i}].actions[${j}].amount=this.value;regen()" placeholder="0"></div>
-      <button class="del" onclick="emotes[${i}].actions.splice(${j},1);rebuildPanel('emotes')">✕</button>
+    <div style="border:1px solid var(--border-lt);padding:10px;margin-bottom:8px;background:rgba(200,184,152,.05)">
+      <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px">
+        <span style="font-family:'Source Code Pro',monospace;font-size:10px;font-weight:700;color:var(--ink-dim);padding-top:18px;min-width:28px">[${j}]</span>
+        <div class="fg"><div class="fl">Type</div><select id="ea_t_${i}_${j}" onchange="emotes[${i}].actions[${j}].type=this.value;regen()">${opt(EMOTE_TYPES,a.type||10)}</select></div>
+        <button class="del" onclick="emotes[${i}].actions.splice(${j},1);rebuildPanel('emotes')" style="padding-top:16px">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div class="fg"><div class="fl">Message / Quest Name</div><input type="text" id="ea_m_${i}_${j}" value="${a.message||''}" oninput="emotes[${i}].actions[${j}].message=this.value;regen()" placeholder="Text or quest name"></div>
+        <div class="fg"><div class="fl">Test String</div><input type="text" id="ea_ts_${i}_${j}" value="${a.testString||''}" oninput="emotes[${i}].actions[${j}].testString=this.value;regen()" placeholder="optional"></div>
+        <div class="fg"><div class="fl">Delay (s)</div><input type="text" id="ea_d_${i}_${j}" value="${a.delay||0}" oninput="emotes[${i}].actions[${j}].delay=this.value;regen()"></div>
+        <div class="fg"><div class="fl">Extent</div><input type="number" id="ea_ext_${i}_${j}" value="${a.extent||1}" oninput="emotes[${i}].actions[${j}].extent=this.value;regen()"></div>
+        <div class="fg"><div class="fl">Amount / WCID</div><input type="text" id="ea_a_${i}_${j}" value="${a.amount||''}" oninput="emotes[${i}].actions[${j}].amount=this.value;regen()" placeholder="NULL"></div>
+        <div class="fg"><div class="fl">Amount 64</div><input type="text" id="ea_a64_${i}_${j}" value="${a.amount64||''}" oninput="emotes[${i}].actions[${j}].amount64=this.value;regen()" placeholder="NULL"></div>
+        <div class="fg"><div class="fl">Percent / Luminance</div><input type="text" id="ea_p_${i}_${j}" value="${a.percent||''}" oninput="emotes[${i}].actions[${j}].percent=this.value;regen()" placeholder="NULL"></div>
+        <div class="fg"><div class="fl">Spell ID</div><input type="number" id="ea_sp_${i}_${j}" value="${a.spellId||''}" oninput="emotes[${i}].actions[${j}].spellId=this.value;regen()" placeholder="NULL"></div>
+        <div class="fg"><div class="fl">Stack Size</div><input type="number" id="ea_ss_${i}_${j}" value="${a.stackSize||''}" oninput="emotes[${i}].actions[${j}].stackSize=this.value;regen()" placeholder="NULL"></div>
+        <div class="fg"><div class="fl">Min</div><input type="text" id="ea_min_${i}_${j}" value="${a.min||''}" oninput="emotes[${i}].actions[${j}].min=this.value;regen()" placeholder="NULL"></div>
+        <div class="fg"><div class="fl">Max</div><input type="text" id="ea_max_${i}_${j}" value="${a.max||''}" oninput="emotes[${i}].actions[${j}].max=this.value;regen()" placeholder="NULL"></div>
+        <div class="fg"><div class="fl">Hero XP 64</div><input type="text" id="ea_hxp_${i}_${j}" value="${a.heroXP64||''}" oninput="emotes[${i}].actions[${j}].heroXP64=this.value;regen()" placeholder="NULL"></div>
+      </div>
     </div>`).join('');
   return `<div class="emote-block">
     <div class="emote-hdr" onclick="toggleEmote(${i})">
@@ -1052,7 +1187,7 @@ function buildEmoteBlock(em,i){
       </div>
       <div style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:6px">Actions</div>
       <div id="ea_rows_${i}">${actions}</div>
-      <button class="add-btn" style="margin-top:4px" onclick="emotes[${i}].actions.push({type:10,message:'',delay:0,amount:''});rebuildPanel('emotes')">+ Add Action</button>
+      <button class="add-btn" style="margin-top:4px" onclick="emotes[${i}].actions.push({type:10,message:'',delay:0,extent:1,amount:'',percent:'',spellId:'',stackSize:'',min:'',max:'',testString:'',amount64:'',heroXP64:''});rebuildPanel('emotes')">+ Add Action</button>
     </div>
   </div>`;
 }
@@ -1554,6 +1689,10 @@ function buildSQL(){
     );
     if(gi('fSpellcraft',0)) IR.push([106,gi('fSpellcraft',0),'ItemSpellcraft']);
     FR.push([39, gf('fScale',1.0), 'DefaultScale']);
+    [[307,'fDmgRating','DamageRating'],[308,'fDmgResist','DamageResistRating'],
+     [313,'fCritRating','CritRating'],[314,'fCritDmgRating','CritDamageRating'],
+     [315,'fCritResRating','CritResistRating'],[317,'fHealResist','HealingResistRating'],
+     [323,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{const v=gi(id,0);if(v)IR.push([tp,v,c]);});
     const sd=g('fShortDesc',''); if(sd) SR.push([15,sd,'ShortDesc']);
     const um=g('fUseMsg','');    if(um) SR.push([14,um,'Use']);
   }
@@ -1575,6 +1714,12 @@ function buildSQL(){
       [160, gi('fWieldDiff',290), 'WieldDifficulty'],
     );
     const eb=gi('fElemBonus',0); if(eb) IR.push([204,eb,'ElementalDamageBonus']);
+    [[307,'fDmgRating','DamageRating'],[308,'fDmgResist','DamageResistRating'],
+     [313,'fCritRating','CritRating'],[314,'fCritDmgRating','CritDamageRating'],
+     [315,'fCritResRating','CritResistRating'],[317,'fHealResist','HealingResistRating'],
+     [323,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{
+      const v=gi(id,0); if(v) IR.push([tp,v,c]);
+    });
     const mm=gf('fMissileDef',0), mg=gf('fMagicDef',0), cm2=gf('fCritMult',1.0);
     FR.push(
       [22, gf('fDmgVar',0.4), 'DamageVariance'],
@@ -1601,6 +1746,12 @@ function buildSQL(){
       [93, 1044, 'PhysicsState'],
     );
     if(gi('fSpellcraft',0)) IR.push([106,gi('fSpellcraft',0),'ItemSpellcraft']);
+    [[307,'fDmgRating','DamageRating'],[308,'fDmgResist','DamageResistRating'],
+     [313,'fCritRating','CritRating'],[314,'fCritDmgRating','CritDamageRating'],
+     [315,'fCritResRating','CritResistRating'],[317,'fHealResist','HealingResistRating'],
+     [323,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{
+      const v=gi(id,0); if(v) IR.push([tp,v,c]);
+    });
     FR.push([39, gf('fScale',1.0), 'DefaultScale']);
     if(!isCloth){
       FR.push(
@@ -1620,30 +1771,55 @@ function buildSQL(){
     });
   }
   else if(t==='jewelry'){
-    const vl=gi('fValidLoc',134217728);
+    const vl=gi('fValidLoc',32768);
     IR.push(
-      [1, 2, 'ItemType - Jewelry'],
-      [3, gi('fPalette',20), 'PaletteTemplate'],
-      [4, vl, 'ClothingPriority'],
-      [5, gi('fEncumb',5), 'EncumbranceVal'],
+      [1, 8, 'ItemType - Jewelry'],
+      [3, gi('fPalette',1), 'PaletteTemplate'],
+      [5, gi('fEncumb',60), 'EncumbranceVal'],
+      [8, gi('fMass',90), 'Mass'],
       [9, vl, 'ValidLocations'],
-      [10, vl, 'CurrentWieldedLocation'],
-      [19, gi('fValue',1000), 'Value'],
-      [27, gi('fArmorType',1), 'ArmorType - Cloth'],
+      [16, 1, 'ItemUseable - No'],
+      [19, gi('fValue',50000), 'Value'],
+      [26, 1, 'AccountRequirements - AsheronsCall_Subscription'],
       [33, gi('fBonded',0), 'Bonded'],
-      [93, 1044, 'PhysicsState'],
+      [93, 1044, 'PhysicsState - Ethereal, IgnoreCollisions, Gravity'],
+      [106, gi('fSpellcraft',350), 'ItemSpellcraft'],
+      [107, gi('fItemCurMana',3000), 'ItemCurMana'],
+      [108, gi('fItemMaxMana',3000), 'ItemMaxMana'],
+      [109, gi('fItemDiff',0), 'ItemDifficulty'],
       [114, gi('fAttuned',0), 'Attuned'],
+      [151, 2, 'HookType - Wall'],
     );
-    if(gi('fSpellcraft',0)) IR.push([106,gi('fSpellcraft',0),'ItemSpellcraft']);
     [[307,'fDmgRating','DamageRating'],[308,'fDmgResist','DamageResistRating'],
      [313,'fCritRating','CritRating'],[314,'fCritDmgRating','CritDamageRating'],
      [315,'fCritResRating','CritResistRating'],[317,'fHealResist','HealingResistRating'],
      [323,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{
       const v=gi(id,0); if(v) IR.push([tp,v,c]);
     });
-    FR.push([39,gf('fScale',1.0),'DefaultScale']);
+    BR.push(
+      [11,'True','IgnoreCollisions'],
+      [13,'True','Ethereal'],
+      [14,'True','GravityStatus'],
+      [22,gi('fInscribable',1)?'True':'False','Inscribable'],
+    );
+    FR.push(
+      [5, gf('fManaRate',-0.033), 'ManaRate'],
+      [12, gf('fShade',0.66), 'Shade'],
+      [39, gf('fScale',0.5), 'DefaultScale'],
+    );
     const mc=gf('fManaConv',0); if(mc) FR.push([144,mc,'ManaConversionMod']);
     const sd=g('fShortDesc',''); if(sd) SR.push([15,sd,'ShortDesc']);
+    // Jewelry DID entries from reference
+    DR=[
+      [1, '0x020000F8', 'Setup'],
+      [3, '0x20000014', 'SoundTable'],
+      [6, '0x04000BEF', 'PaletteBase'],
+      [8, '0x06005BE3', 'Icon'],
+      [22, '0x3400002B', 'PhysicsEffectTable'],
+      [36, '0x0E000012', 'MutateFilter'],
+      [46, '0x38000032', 'TsysMutationFilter'],
+      [52, '0x06005B0C', 'IconUnderlay'],
+    ];
   }
 
   // Extra props from Advanced tab
@@ -1659,14 +1835,19 @@ function buildSQL(){
   emitFloat(FR);
   emitStr(SR);
 
-  // DID — always include base entries
-  const baseDR=[
-    [1, '0x02000178', 'Setup'],
-    [2, '0x09000008', 'MotionTable'],
-    [3, '0x20000008', 'SoundTable'],
-    [8, '0x06001036', 'Icon'],
-    [22, '0x34000026', 'PhysicsEffectTable'],
-  ];
+  // DID — jewelry sets its own DID above; others use defaults
+  let baseDR=[];
+  if(t!=='jewelry'){
+    baseDR=[
+      [1, '0x02000178', 'Setup'],
+      [2, '0x09000008', 'MotionTable'],
+      [3, '0x20000008', 'SoundTable'],
+      [8, '0x06001036', 'Icon'],
+      [22, '0x34000026', 'PhysicsEffectTable'],
+    ];
+  }
+  if(t==='creature'){const tr=gi('fTreasureTier',3100);if(tr)baseDR.push([35,tr,'DeathTreasureType']);}
+  extraDID.forEach(r=>{if(r.type&&r.value)DR.push([parseInt(r.type),r.value,PROP_DID[r.type]||'custom_'+r.type]);});
   emitDID([...baseDR,...DR]);
 
   // ── Attributes ────────────────────────────────────────────────────────────
@@ -1690,13 +1871,22 @@ function buildSQL(){
 
   // ── Skills ────────────────────────────────────────────────────────────────
   if(isCreature && $('sk_sac_6')){
-    const trained=ALL_SKILLS.filter(([id])=>gi('sk_sac_'+id,1)>1 && gi('sk_init_'+id,0)>0);
-    if(trained.length){
+    // Gather core skills
+    const coreSkillRows=CORE_SKILL_IDS.map(id=>({id,sac:gi('sk_sac_'+id,2),init:gi('sk_init_'+id,0)}))
+      .filter(s=>s.sac>1&&s.init>0);
+    // Gather extra skills from state
+    const extraSkillRows=extraSkills.map((sk,i)=>({
+      id:sk.id,
+      sac:gi('sk_sac_x_'+i,sk.sac||2),
+      init:gi('sk_init_x_'+i,sk.init||0)
+    })).filter(s=>s.init>0);
+    const allSkills=[...coreSkillRows,...extraSkillRows];
+    if(allSkills.length){
       lines.push(`INSERT INTO \`weenie_properties_skill\` (\`object_Id\`, \`type\`, \`level_From_P_P\`, \`s_a_c\`, \`p_p\`, \`init_Level\`, \`resistance_At_Last_Check\`, \`last_Used_Time\`)`);
-      trained.forEach(([id,name],i)=>{
-        const sac=gi('sk_sac_'+id,2), init=gi('sk_init_'+id,0);
+      allSkills.forEach((sk,i)=>{
+        const name=ALL_SKILLS.find(([sid])=>sid===sk.id)?.[1]||'Skill';
         const prefix=i===0?'VALUES ':'     , ';
-        lines.push(`${prefix}(${wcid}, ${id}, 0, ${sac}, 0, ${init}, 0, 0)${i===trained.length-1?';':''} /* ${name} — ${lookupName(SKILL_SAC,sac)} */`);
+        lines.push(`${prefix}(${wcid}, ${sk.id}, 0, ${sk.sac}, 0, ${sk.init}, 0, 0)${i===allSkills.length-1?';':''} /* ${name} — ${lookupName(SKILL_SAC,sk.sac)} */`);
       });
       lines.push('');
     }
@@ -1761,12 +1951,10 @@ function buildSQL(){
         lines.push(`INSERT INTO \`weenie_properties_emote_action\` (\`emote_Id\`, \`order\`, \`type\`, \`delay\`, \`extent\`, \`motion\`, \`message\`, \`test_String\`, \`min\`, \`max\`, \`min_64\`, \`max_64\`, \`min_Dbl\`, \`max_Dbl\`, \`stat\`, \`display\`, \`amount\`, \`amount_64\`, \`hero_X_P_64\`, \`percent\`, \`spell_Id\`, \`wealth_Rating\`, \`treasure_Class\`, \`treasure_Type\`, \`p_Script\`, \`sound\`, \`destination_Type\`, \`weenie_Class_Id\`, \`stack_Size\`, \`palette\`, \`shade\`, \`try_To_Bond\`, \`obj_Cell_Id\`, \`origin_X\`, \`origin_Y\`, \`origin_Z\`, \`angles_W\`, \`angles_X\`, \`angles_Y\`, \`angles_Z\`)`);
         em.actions.forEach((a,ai)=>{
           const typeName=lookupName(EMOTE_TYPES,a.type||10);
-          const msg=a.message?`'${String(a.message).replace(/'/g,"''")}'`:'NULL';
-          const amt=(a.amount!==undefined&&a.amount!=='')?a.amount:'NULL';
-          const pct=(a.percent!==undefined&&a.percent!=='')?a.percent:'NULL';
+          const _n=v=>(v!==undefined&&v!==''&&v!==null)?v:'NULL';
+          const _q=v=>v?`'${String(v).replace(/'/g,"''")}'`:'NULL';
           const prefix=ai===0?'VALUES ':'     , ';
-          lines.push(`${prefix}(@parent_id, ${ai}, ${a.type||10} /* ${typeName} */, ${a.delay||0}, 1, NULL, ${msg}, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ${amt}, NULL, NULL, ${pct}, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)`);
-        });
+          lines.push(`${prefix}(@parent_id, ${ai}, ${a.type||10} /* ${typeName} */, ${_n(a.delay)||0}, ${_n(a.extent)||1}, NULL, ${_q(a.message)}, ${_q(a.testString)}, ${_n(a.min)}, ${_n(a.max)}, NULL, NULL, NULL, NULL, NULL, NULL, ${_n(a.amount)}, ${_n(a.amount64)}, ${_n(a.heroXP64)}, ${_n(a.percent)}, ${_n(a.spellId)}, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ${_n(a.stackSize)}, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)`);
         lines.push(';');
       }
     });
@@ -1853,23 +2041,30 @@ function writeSQLOut(text){
 
 function getPlainSQL(){const el=$('sqlOut');return el?el.value:'';}  // textarea.value
 function copySQL(){navigator.clipboard.writeText(getPlainSQL()).then(()=>toast('Copied to clipboard'));}
-function downloadSQL(){
-  const name=g('fName','weenie').toLowerCase().replace(/[^a-z0-9]/g,'_');
-  const wcid=gi('fWcid',850000);
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([getPlainSQL()],{type:'text/plain'}));
-  a.download=curType==='quest'?name+'.sql':wcid+'_'+name+'.sql';a.click();
-}
 function saveSQL(){
   const sql=getPlainSQL(),wcid=gi('fWcid',850000),name=g('fName','weenie');
-  if(window.pywebview){window.pywebview.api.save_sql(sql,wcid,name).then(r=>{if(r.success)toast('Saved: '+r.filename);else toast('Error: '+r.error);});}
-  else downloadSQL();
+  if(!sql.trim()){toast('Nothing to save.');return;}
+  if(window.pywebview){
+    window.pywebview.api.save_sql(sql,wcid,name).then(r=>{
+      if(r.success){
+        toast('✓ Saved: '+r.filename,3000);
+        if(appConfig.auto_open_folder!==false)
+          window.pywebview.api.open_output_folder();
+      } else {
+        toast('✗ Error: '+r.error,4000);
+      }
+    });
+  } else {
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([sql],{type:'text/plain'}));
+    a.download=wcid+' '+name+'.sql';a.click();
+  }
 }
 function resetForm(){
   const c=TYPE_CFG[curType];
   setV('fName','New '+c.label);setV('fWcid',c.wcidFrom);
   spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
-  recipeReqs=[];recipeMods=[];cookbookEntries=[];createList=[];bodyParts=getBodyParts(31);
+  recipeReqs=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];bodyParts=getBodyParts(31);
   buildSubContent();
 }
 function openOutputFolder(){if(window.pywebview)window.pywebview.api.open_output_folder();}
@@ -1988,6 +2183,8 @@ function openSettings(){
       appConfig=cfg;
       setV('sProvider',cfg.provider||'anthropic');onProviderChange();
       setV('sModel',cfg.model||'claude-sonnet-4-20250514');
+      const autoOpen=$('sAutoOpen');
+      if(autoOpen) autoOpen.checked=(cfg.auto_open_folder!==false);
       setV('sBaseUrl',cfg.base_url||'');
       $('sApiKey').placeholder=cfg.api_key_set?'(already set — paste to change)':$('sApiKey').placeholder;
       setV('sServerName',cfg.server_name||'Server Name');
@@ -2055,6 +2252,7 @@ async function init(){
     window.pywebview.api.get_config().then(cfg=>{
       appConfig=cfg;
       if(cfg.custom_presets)customPresets=cfg.custom_presets;
+      if(cfg.auto_open_folder!==undefined)appConfig.auto_open_folder=cfg.auto_open_folder;
       updateAIButtonState();
     });
   } else {

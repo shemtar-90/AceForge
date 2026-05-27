@@ -27,6 +27,7 @@ DEFAULT_CONFIG = {
     "api_key":     "",
     "model":       "claude-sonnet-4-20250514",
     "base_url":    "",          # only used for "compatible" provider
+    "auto_open_folder": True,
     "server_name": "Server Name",
     "author":      "",
     "output_dir":  str(Path.home() / "Documents" / "ACEForge" / "output"),
