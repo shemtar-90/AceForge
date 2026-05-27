@@ -231,8 +231,15 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
         <button class="sql-btn" onclick="saveSQL()">+ Save</button>
       </div>
     </div>
-    <div class="sql-out" id="sqlOut" contenteditable="true" spellcheck="false"
-  oninput="onSQLEdit()" style="outline:none;cursor:text"></div>
+    <div id="sqlDirtyBanner" style="display:none;align-items:center;gap:8px;padding:6px 14px;background:#2a1800;border-bottom:1px solid #5a3000;flex-shrink:0">
+      <span style="color:var(--gold);font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em">⚠ MANUAL EDIT MODE</span>
+      <span style="color:#a08050;font-family:'Cinzel',serif;font-size:9px;flex:1">Values changed in SQL that could not sync to form fields.</span>
+      <button onclick="discardSQLEdit()" style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:1px solid #5a3000;background:transparent;color:#a08050;padding:3px 10px;cursor:pointer" onmouseover="this.style.borderColor='var(--crimson)';this.style.color='var(--crimson-lt)'" onmouseout="this.style.borderColor='#5a3000';this.style.color='#a08050'">↺ Discard &amp; Regen</button>
+    </div>
+    <textarea class="sql-out" id="sqlOut" spellcheck="false"
+      oninput="onSQLEdit()"
+      style="font-family:'Source Code Pro',monospace;font-size:12px;line-height:1.8;color:#c8b898;background:transparent;border:none;outline:none;resize:none;width:100%;white-space:pre;overflow-wrap:normal;overflow-x:auto"
+    ></textarea>
   </div>
 </div>
 
@@ -1066,24 +1073,31 @@ function buildAdvanced(){
 // Parse the live SQL preview and load all properties into the Advanced tables
 function syncAdvancedFromSQL(){
   const sql=getPlainSQL();
-  if(!sql){toast('No SQL to sync from.');return;}
+  if(!sql.trim()){toast('No SQL to sync from.');return;}
 
-  // Parse weenie_properties_int
-  const intMatches=[...sql.matchAll(/\(\s*\d+\s*,\s*(\d+)\s*,\s*(-?\d+)\s*\)/g)];
-  const parsedInt=[];
-  // We need table-aware parsing — look for the INSERT statements
   const intSection=extractInsertValues(sql,'weenie_properties_int');
   const boolSection=extractInsertValues(sql,'weenie_properties_bool');
   const floatSection=extractInsertValues(sql,'weenie_properties_float');
   const strSection=extractInsertValues(sql,'weenie_properties_string');
   const didSection=extractInsertValues(sql,'weenie_properties_d_i_d');
 
-  // Core properties already handled by the Properties tab — don't duplicate them
-  const SKIP_INT=new Set([1,2,3,4,5,6,7,9,10,11,12,13,16,19,25,27,28,33,40,44,45,47,48,49,93,133,134,146]);
-  const SKIP_BOOL=new Set([1,6,12,13,14,15,19,29,41,42,52,8,120]);
-  const SKIP_FLOAT=new Set([1,3,4,5,12,13,14,15,16,17,18,19,29,31,39,54,62,64,65,66,67,68,69,70,165,166,37,38]);
-  const SKIP_STR=new Set([1,15,16,14]);
-  const SKIP_DID=new Set([1,2,3,8,22,35]);
+  // Props already shown in the Properties tab — exclude from Advanced to avoid duplication
+  // Int: ItemType(1), CreatureType(2), Palette(3), ClothingPriority(4), Encumb(5),
+  //      ItemsCapacity(6), ContainersCapacity(7), ValidLoc(9), CurrentWieldLoc(10),
+  //      MaxStackSize(11), StackSize(12), StackUnitEncumb(13), ItemUseable(16),
+  //      Value(19), Level(25), ArmorType(27), ArmorLevel(28), Bonded(33), CombatMode(40),
+  //      Damage(44), DamageType(45), AttackType(47), WeaponSkill(48), WeaponTime(49),
+  //      PhysicsState(93), RadarBlipColor(95), ShowableOnRadar(133), PlayerKillerStatus(134),
+  //      XpOverride(146), WieldReq(158), WieldSkill(159), WieldDiff(160), LumAward(332)
+  const SKIP_INT=new Set([1,2,3,4,5,6,7,9,10,11,12,13,16,19,25,27,28,33,40,44,45,47,48,49,93,95,133,134,146,158,159,160,204,307,308,313,314,315,317,323,332]);
+  // Bool: all the standard creature bools handled by Properties
+  const SKIP_BOOL=new Set([1,6,7,8,11,12,13,14,15,18,19,22,23,29,39,41,42,50,52,63,65,66,79,91,98,120]);
+  // Float: all resistances, ArmorMods, scale, rates, etc. shown in Properties
+  const SKIP_FLOAT=new Set([1,3,4,5,12,13,14,15,16,17,18,19,21,22,29,31,34,37,38,39,41,43,54,62,64,65,66,67,68,69,70,71,72,73,74,75,80,104,122,125,136,144,149,150,152,165,166]);
+  // String: Name(1), Use(14), ShortDesc(15), LongDesc(16)
+  const SKIP_STR=new Set([1,14,15,16,17,18,20]);
+  // DID: Setup(1), MotionTable(2), SoundTable(3), Icon(8), PhysicsEffectTable(22), DeathTreasure(35)
+  const SKIP_DID=new Set([1,2,3,4,6,7,8,22,28,32,35,36,38,46,50,52,55]);
 
   extraInt=intSection.filter(r=>!SKIP_INT.has(r.type)).map(r=>({type:String(r.type),value:String(r.value)}));
   extraBool=boolSection.filter(r=>!SKIP_BOOL.has(r.type)).map(r=>({type:String(r.type),value:String(r.value)}));
@@ -1092,28 +1106,46 @@ function syncAdvancedFromSQL(){
   extraDID=didSection.filter(r=>!SKIP_DID.has(r.type)).map(r=>({type:String(r.type),value:String(r.value)}));
 
   rebuildPanel('advanced');
+  markSQLClean();
   const total=extraInt.length+extraBool.length+extraFloat.length+extraStr.length+extraDID.length;
-  toast(`Synced ${total} extra properties from SQL.`);
+  if(total===0){
+    toast('Nothing extra to sync — all properties are already in the form fields.');
+  } else {
+    toast(`Synced ${total} additional properties into Advanced tab.`);
+  }
 }
 
 function extractInsertValues(sql, tableName){
-  // Find the INSERT INTO `tableName` block and extract (wcid, type, value) rows
-  const re=new RegExp('INSERT INTO `'+tableName+'`[^;]+;','gs');
-  const match=re.exec(sql);
-  if(!match) return [];
-  const block=match[0];
+  // Find the INSERT INTO `tableName` ...;  block (plain text, no HTML)
+  const escapedName=tableName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const blockRe=new RegExp(
+    'INSERT\\s+INTO\\s+`'+escapedName+'`[\\s\\S]*?(?=INSERT\\s+INTO|DELETE\\s+FROM|SET\\s+@|$)',
+    'i'
+  );
+  const blockM=blockRe.exec(sql);
+  if(!blockM) return [];
+  const block=blockM[0];
+
   const results=[];
-  // Match rows: (number, number, number/string/'...')
-  const rowRe=/\(\s*\d+\s*,\s*(\d+)\s*,\s*([^)]+?)\s*\)\s*\/\*/g;
+  // Match each row tuple: (WCID, typeInt, value)
+  // Value can be: integer, float, hex (0x...), boolean (True/False), or 'string'
+  // Pattern: ( digits , digits , <value> ) optionally followed by /* comment */
+  const rowRe=/\(\s*\d+\s*,\s*(\d+)\s*,\s*((?:'(?:[^']|'')*'|0x[0-9a-fA-F]+|True|False|-?[\d.]+))\s*\)/g;
   let m;
   while((m=rowRe.exec(block))!==null){
     const type=parseInt(m[1]);
-    let val=m[2].trim();
-    // Strip string quotes
-    if(val.startsWith("'")&&val.endsWith("'")) val=val.slice(1,-1).replace(/''/g,"'");
-    // Try numeric parse
-    const num=parseFloat(val);
-    results.push({type, value:isNaN(num)?val:num});
+    let raw=m[2].trim();
+    // Unquote string values
+    if(raw.startsWith("'")&&raw.endsWith("'")){
+      results.push({type, value:raw.slice(1,-1).replace(/''/g,"'")});
+    } else if(raw==='True'||raw==='False'){
+      results.push({type, value:raw});
+    } else if(raw.startsWith('0x')){
+      results.push({type, value:raw});
+    } else {
+      const num=parseFloat(raw);
+      results.push({type, value:isNaN(num)?raw:num});
+    }
   }
   return results;
 }
@@ -1168,65 +1200,118 @@ function confirmSavePreset(){
 
 // ── SQL GENERATION ────────────────────────────────────────────────────────────
 // Prevent recursive regen→edit→regen loops
+// ── SQL EDIT / SYNC STATE ─────────────────────────────────────────────────────
 let _regenLock=false;
 let _userEditingSQL=false;
 let _sqlEditTimer=null;
+let _sqlDirty=false; // true when user has manually edited the SQL
 
 function regen(){
   if(_regenLock||_userEditingSQL) return;
   _regenLock=true;
   try{buildSQL();}catch(e){console.error('SQL:',e);}
   _regenLock=false;
+  // Regen from form always clears any manual SQL edits
+  if(_sqlDirty) markSQLClean();
+}
+
+function markSQLClean(){
+  _sqlDirty=false;
+  _userEditingSQL=false;
+  const banner=$('sqlDirtyBanner');
+  if(banner) banner.style.display='none';
+}
+
+function discardSQLEdit(){
+  // Re-run generation from form fields, discarding manual SQL edits
+  _sqlDirty=false;
+  _userEditingSQL=false;
+  clearTimeout(_sqlEditTimer);
+  const banner=$('sqlDirtyBanner');
+  if(banner) banner.style.display='none';
+  regen();
 }
 
 function onSQLEdit(){
-  // User typed in the SQL panel — pause auto-regen and parse back after a delay
+  // User is typing in the SQL textarea
   _userEditingSQL=true;
+  _sqlDirty=true;
+
+  // Show the dirty banner
+  const banner=$('sqlDirtyBanner');
+  if(banner) banner.style.display='flex';
+
   clearTimeout(_sqlEditTimer);
   _sqlEditTimer=setTimeout(()=>{
-    // Show a subtle indicator that the SQL has been manually edited
-    const out=$('sqlOut');
-    if(!out) return;
-    // Parse the edited SQL back into form fields
-    const sql=out.innerText||out.textContent;
-    parseSQLIntoForm(sql);
+    const sql=$('sqlOut')?.value||'';
+    const changed=parseSQLIntoForm(sql);
+    if(!changed){
+      // Nothing could be parsed back — banner stays, user is warned
+    }
     _userEditingSQL=false;
-  }, 800);
+  }, 600);
 }
 
+// Parse SQL text back into form fields.
+// Returns true if at least one field was updated.
 function parseSQLIntoForm(sql){
-  // Extract key single values back into form fields
+  if(!sql.trim()) return false;
+  let changed=false;
+
   const intVals=extractInsertValues(sql,'weenie_properties_int');
   const floatVals=extractInsertValues(sql,'weenie_properties_float');
   const strVals=extractInsertValues(sql,'weenie_properties_string');
+  const boolVals=extractInsertValues(sql,'weenie_properties_bool');
 
-  // Map type IDs back to field IDs
-  const intMap={25:'fLevel',44:'fDmg',45:'fDmgType',48:'fWepSkill',49:'fWepTime',
-    101:'fCombatStyle',47:'fAttackType',146:'fXp',332:'fLum',
-    28:'fArmorLevel',27:'fArmorType',9:'fValidLoc',5:'fEncumb',19:'fValue',
-    16:'fItemUse',33:'fBonded',114:'fAttuned',11:'fMaxStack',3:'fPalette',
-    160:'fWieldDiff',158:'fWieldReq',204:'fElemBonus',307:'fDmgRating',
-    308:'fDmgResist',313:'fCritRating',314:'fCritDmgRating',315:'fCritResRating',
-    106:'fSpellcraft',25:'fLevel'};
-  const floatMap={39:'fScale',22:'fDmgVar',29:'fWepDef',62:'fWepOff',
-    31:'fAggroRange',136:'fCritMult',149:'fMissileDef',150:'fMagicDef',
-    54:'fUseRadius',37:'fBuyRate',38:'fSellRate',144:'fManaConv'};
-  const strMap={1:'fName',15:'fShortDesc',16:'fLongDesc',14:'fUseMsg'};
+  // type_id → field_id mapping for fields shown in the Properties tab
+  const INT_MAP={
+    2:'cType', 3:'fPalette', 5:'fEncumb', 9:'fValidLoc', 11:'fMaxStack',
+    16:'fItemUse', 19:'fValue', 25:'fLevel', 27:'fArmorType', 28:'fArmorLevel',
+    33:'fBonded', 44:'fDmg', 45:'fDmgType', 47:'fAttackType', 48:'fWepSkill',
+    49:'fWepTime', 93:'', // PhysicsState — skip
+    95:'fRadarColor', 101:'fCombatStyle', 106:'fSpellcraft',
+    114:'fAttuned', 133:'', 134:'', // radar/PK — skip
+    146:'fXp', 160:'fWieldDiff', 204:'fElemBonus',
+    307:'fDmgRating', 308:'fDmgResist', 313:'fCritRating',
+    314:'fCritDmgRating', 315:'fCritResRating', 317:'fHealResist',
+    323:'fHealBoost', 332:'fLum',
+  };
+  const FLOAT_MAP={
+    13:'mSlash', 14:'mPierce', 15:'mBludge', 16:'mCold',
+    17:'mFire', 18:'mAcid', 19:'mElec', 165:'mNether',
+    22:'fDmgVar', 29:'fWepDef', 31:'fAggroRange', 37:'fBuyRate',
+    38:'fSellRate', 39:'fScale', 54:'fUseRadius', 62:'fWepOff',
+    64:'rSlash', 65:'rPierce', 66:'rBludge', 68:'rCold',
+    67:'rFire', 69:'rAcid', 70:'rElec', 166:'rNether',
+    136:'fCritMult', 144:'fManaConv', 149:'fMissileDef', 150:'fMagicDef',
+  };
+  const STR_MAP={1:'fName', 14:'fUseMsg', 15:'fShortDesc', 16:'fLongDesc'};
 
   _regenLock=true;
-  intVals.forEach(r=>{
-    const fid=intMap[r.type];
-    if(fid){const e=$(fid);if(e&&document.activeElement!==e)e.value=r.value;}
-  });
-  floatVals.forEach(r=>{
-    const fid=floatMap[r.type];
-    if(fid){const e=$(fid);if(e&&document.activeElement!==e)e.value=r.value;}
-  });
-  strVals.forEach(r=>{
-    const fid=strMap[r.type];
-    if(fid){const e=$(fid);if(e&&document.activeElement!==e)e.value=r.value;}
-  });
+  const setField=(id,val)=>{
+    if(!id) return;
+    const el=$(id);
+    if(el && String(el.value)!==String(val)){
+      el.value=val;
+      changed=true;
+    }
+  };
+
+  // Parse WCID from first VALUES row: (WCID, ...
+  const wcidM=sql.match(/VALUES\s*\((\d+)\s*,/);
+  if(wcidM) setField('fWcid', wcidM[1]);
+
+  intVals.forEach(r=>setField(INT_MAP[r.type], r.value));
+  floatVals.forEach(r=>setField(FLOAT_MAP[r.type], r.value));
+  strVals.forEach(r=>setField(STR_MAP[r.type], r.value));
+
+  // Bool: AiUsesMana (type 6)
+  const mana=boolVals.find(r=>r.type===6);
+  if(mana) setField('fUsesMana', mana.value==='True'||mana.value===true?'1':'0');
+
   _regenLock=false;
+  if(changed) markSQLClean();
+  return changed;
 }
 
 function buildSQL(){
@@ -1239,7 +1324,15 @@ function buildSQL(){
     p.push('');
     p.push(kw('INSERT INTO')+' `quest` (`name`, `min_Delta`, `max_Solves`, `message`, `last_Modified`)');
     p.push(kw('VALUES')+' ('+st(name)+', '+nm(gi('fMinDelta',0))+', '+nm(gi('fMaxSolves',1))+', '+st(g('fMsg',name))+', '+st('2025-01-01 00:00:00')+');');
-    $('sqlOut').innerHTML=p.join('\n');return;
+    // Strip HTML span tags for plain textarea — syntax color comes from CSS
+  const plain=p.join('\n').replace(/<span[^>]*>/g,'').replace(/<\/span>/g,'');
+  const el=$('sqlOut');
+  if(el&&!_userEditingSQL){
+    const pos=el.selectionStart;
+    el.value=plain;
+    // Restore cursor if user was in the textarea
+    try{el.selectionStart=pos;el.selectionEnd=pos;}catch(e){}
+  }return;
   }
   // Recipe
   if(t==='recipe'){buildRecipeSQL();return;}
@@ -1419,7 +1512,15 @@ function buildSQL(){
     });
   }
 
-  $('sqlOut').innerHTML=p.join('\n');
+  // Strip HTML span tags for plain textarea — syntax color comes from CSS
+  const plain=p.join('\n').replace(/<span[^>]*>/g,'').replace(/<\/span>/g,'');
+  const el=$('sqlOut');
+  if(el&&!_userEditingSQL){
+    const pos=el.selectionStart;
+    el.value=plain;
+    // Restore cursor if user was in the textarea
+    try{el.selectionStart=pos;el.selectionEnd=pos;}catch(e){}
+  }
 }
 
 function buildRecipeSQL(){
@@ -1459,10 +1560,18 @@ function buildRecipeSQL(){
     cookbookEntries.forEach((e,i)=>{const row='('+nm(rid)+', '+nm(e.src||0)+' '+( e.srcLabel?cm(e.srcLabel):'')+', '+nm(e.tgt||0)+', '+st(now)+')';p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
     p.push(';');
   }
-  $('sqlOut').innerHTML=p.join('\n');
+  // Strip HTML span tags for plain textarea — syntax color comes from CSS
+  const plain=p.join('\n').replace(/<span[^>]*>/g,'').replace(/<\/span>/g,'');
+  const el=$('sqlOut');
+  if(el&&!_userEditingSQL){
+    const pos=el.selectionStart;
+    el.value=plain;
+    // Restore cursor if user was in the textarea
+    try{el.selectionStart=pos;el.selectionEnd=pos;}catch(e){}
+  }
 }
 
-function getPlainSQL(){return $('sqlOut').innerText||$('sqlOut').textContent;}
+function getPlainSQL(){const el=$('sqlOut');return el?el.value:'';}  // textarea.value
 function copySQL(){navigator.clipboard.writeText(getPlainSQL()).then(()=>toast('Copied to clipboard'));}
 function downloadSQL(){
   const name=g('fName','weenie').toLowerCase().replace(/[^a-z0-9]/g,'_');
