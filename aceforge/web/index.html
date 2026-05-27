@@ -85,10 +85,10 @@ select option{background:#fff;color:#2a1e0a}
 .ptbl tr:hover td{background:rgba(200,184,152,.12)}
 .ptbl td input,.ptbl td select{font-size:13px;padding:2px;border-bottom-width:1px;font-weight:600}
 .sdrop-wrap{position:relative}
-.sdrop-box{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);box-shadow:0 6px 24px rgba(0,0,0,.18);z-index:400;display:none;flex-direction:column;max-height:280px}
+.sdrop-box{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);box-shadow:0 6px 24px rgba(0,0,0,.18);z-index:400;display:none;flex-direction:column;max-height:240px}
 .sdrop-box.open{display:flex}
 .sdrop-inp{font-family:'Crimson Text',serif;font-size:15px;font-weight:600;padding:8px 12px;border:none;border-bottom:2px solid var(--border);outline:none;color:var(--ink);width:100%}
-.sdrop-list{overflow-y:auto;flex:1}
+.sdrop-list{overflow-y:auto;flex:1;max-height:240px}
 .sdrop-item{padding:7px 12px;cursor:pointer;font-size:14px;font-weight:600;color:var(--ink);border-bottom:1px solid var(--border-lt)}
 .sdrop-item:hover{background:var(--parch-lt)}
 .sdrop-item small{color:var(--ink-dim);font-size:11px;margin-left:8px;font-weight:400}
@@ -223,7 +223,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
     <div class="form-scroll" id="formContent"></div>
   </div>
   <div class="sql-resize" id="sqlResize"></div>
-  <div class="sql-panel" id="sqlPanel">
+  <div class="sql-panel" id="sqlPanel" style="overflow-x:hidden">
     <div class="sql-hdr">
       <div class="sql-title">Generated SQL</div>
       <div class="sql-btns">
@@ -488,7 +488,7 @@ let curType='creature',curSub='properties',curMode='manual',curAIType='creature'
 let spells=[],emotes=[],customPresets={};
 let bodyParts=BODY_PARTS_BIPED.map(b=>({...b,dType:4,dVal:0,dVar:0,baseAL:80,sl:64,pi:56,bl:120,co:40,fi:120,ac:80,el:80,nt:24}));
 let extraInt=[],extraBool=[],extraFloat=[],extraStr=[],extraDID=[];
-let recipeReqs=[],recipeMods=[],cookbookEntries=[],createList=[];
+let recipeReqs=[],recipeReqsBool=[],recipeReqsFloat=[],recipeReqsStr=[],recipeMods=[],cookbookEntries=[],createList=[];
 let aiFullText='',aiGenerating=false;
 let appConfig={server_name:'Server Name',wcid_ranges:{},api_key_set:false};
 
@@ -540,7 +540,7 @@ function buildInnerTabs(){
 function switchType(type,btn){
   curType=type;curSub=TYPE_CFG[type].subTabs[0];
   spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
-  recipeReqs=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];
+  recipeReqs=[];recipeReqsBool=[];recipeReqsFloat=[];recipeReqsStr=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];
   bodyParts=getBodyParts(31);
   document.querySelectorAll('.itab').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
@@ -698,7 +698,13 @@ function buildProps(){
       <p class="note" style="margin-bottom:8px">Wire existing or custom items to drop on death. For items already in game (MMD notes, pyreals, etc.), enter the existing WCID — do NOT create a new file for them.</p>
       <div id="createListRows">${buildCreateListRows()}</div>
       <button class="add-btn" onclick="addCreateListRow()">+ Add Drop</button>
-    </div>`;
+    </div>
+    <div class="sec"><div class="sh" style="margin-top:14px"><div class="st">Creature Ratings</div><div class="sl"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323']].map(([l,id,fc])=>`
+      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
+        <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
+      </div>`).join('')}</div>`;
     }
     if(t==='npc'){
       const isVendor=gi('fWType',10)===12;
@@ -722,39 +728,50 @@ function buildProps(){
         </div></div>`;
       }
     }
+    h+=`<div class="sec"><div class="sh" style="margin-top:14px"><div class="st">Creature Ratings</div><div class="sl"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323']].map(([l,id,fc])=>`
+      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
+        <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
+      </div>`).join('')}</div>`;
   }
   if(t==='item'){
     h+=`<div class="sec"><div class="sh"><div class="st">Item Properties</div><div class="sl"></div></div>
-    <div class="grid g3">
-      <div class="fg"><div class="fl">Value <span class="fc">I-19</span></div><input type="number" id="fValue" value="100"></div>
-      <div class="fg"><div class="fl">Encumbrance <span class="fc">I-5</span></div><input type="number" id="fEncumb" value="10"></div>
-      <div class="fg"><div class="fl">Max Stack Size <span class="fc">I-11</span></div><input type="number" id="fMaxStack" value="1"></div>
-      <div class="fg"><div class="fl">Item Useable <span class="fc">I-16</span></div><select id="fItemUse">${opt(ITEM_USE,1)}</select></div>
-      <div class="fg"><div class="fl">Bonded <span class="fc">I-33</span></div><select id="fBonded">${opt(BONDED,1)}</select></div>
-      <div class="fg"><div class="fl">Attuned <span class="fc">I-114</span></div><select id="fAttuned">${opt(ATTUNED,1)}</select></div>
-      <div class="fg"><div class="fl">Default Scale <span class="fc">F-39</span></div><input type="text" id="fScale" value="1.0"></div>
-      <div class="fg"><div class="fl">Palette <span class="fc">I-3</span></div><select id="fPalette">${opt(PALETTES,39)}</select></div>
-      <div class="fg"><div class="fl">Spellcraft <span class="fc">I-106</span></div><input type="number" id="fSpellcraft" value="0"></div>
-      <div class="fg" style="grid-column:span 2"><div class="fl">Short Description <span class="fc">S-15</span></div><input type="text" id="fShortDesc" value=""></div>
-      <div class="fg" style="grid-column:span 3"><div class="fl">Use Message <span class="fc">S-14</span></div><input type="text" id="fUseMsg" value=""></div>
-    
-    <div class="sec"><div class="sh" style="margin-top:12px"><div class="st">Ratings</div><div class="sl"></div></div><div style="display:flex;gap:12px;flex-wrap:wrap">
-    <div class="fg" style="flex:1"><div class="fl">Dmg Rating <span class="fc">I-307</span></div><input type="number" id="fDmgRating" value="0"></div>
-    <div class="fg" style="flex:1"><div class="fl">Dmg Resist <span class="fc">I-308</span></div><input type="number" id="fDmgResist" value="0"></div>
-    <div class="fg" style="flex:1"><div class="fl">Crit Rating <span class="fc">I-313</span></div><input type="number" id="fCritRating" value="0"></div>
-    <div class="fg" style="flex:1"><div class="fl">CritDmg Rating <span class="fc">I-314</span></div><input type="number" id="fCritDmgRating" value="0"></div>
-    <div class="fg" style="flex:1"><div class="fl">CritRes Rating <span class="fc">I-315</span></div><input type="number" id="fCritResRating" value="0"></div>
-    <div class="fg" style="flex:1"><div class="fl">Heal Resist <span class="fc">I-317</span></div><input type="number" id="fHealResist" value="0"></div>
-    <div class="fg" style="flex:1"><div class="fl">Heal Boost <span class="fc">I-323</span></div><input type="number" id="fHealBoost" value="0"></div></div></div></div></div>
-    <div class="sh" style="margin-top:14px"><div class="st">Ratings</div><div class="sl"></div></div>
-    <div style="display:flex;gap:12px;flex-wrap:wrap">
-      <div class="fg"><div class="fl">Dmg Rating <span class="fc">I-307</span></div><input type="number" id="fDmgRating" value="0"></div>
-      <div class="fg"><div class="fl">Dmg Resist <span class="fc">I-308</span></div><input type="number" id="fDmgResist" value="0"></div>
-      <div class="fg"><div class="fl">Crit Rating <span class="fc">I-313</span></div><input type="number" id="fCritRating" value="0"></div>
-      <div class="fg"><div class="fl">CritDmg Rating <span class="fc">I-314</span></div><input type="number" id="fCritDmgRating" value="0"></div>
-      <div class="fg"><div class="fl">CritRes Rating <span class="fc">I-315</span></div><input type="number" id="fCritResRating" value="0"></div>
-      <div class="fg"><div class="fl">Heal Resist <span class="fc">I-317</span></div><input type="number" id="fHealResist" value="0"></div>
-      <div class="fg"><div class="fl">Heal Boost <span class="fc">I-323</span></div><input type="number" id="fHealBoost" value="0"></div>
+    ${[['Value','fValue','I-19','number'],['Encumbrance','fEncumb','I-5','number'],['Max Stack Size','fMaxStack','I-11','number'],['Default Scale','fScale','F-39','text'],['Spellcraft','fSpellcraft','I-106','number']].map(([l,id,fc,tp])=>`
+      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
+        <input type="${tp}" id="${id}" value="${tp==='number'?'0':'1.0'}" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
+      </div>`).join('')}
+    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Item Useable <span class="fc">I-16</span></div>
+      <select id="fItemUse" style="width:120px">${opt(ITEM_USE,1)}</select>
+    </div>
+    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Bonded <span class="fc">I-33</span></div>
+      <select id="fBonded" style="width:160px">${opt(BONDED,1)}</select>
+    </div>
+    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Attuned <span class="fc">I-114</span></div>
+      <select id="fAttuned" style="width:160px">${opt(ATTUNED,1)}</select>
+    </div>
+    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Palette <span class="fc">I-3</span></div>
+      <select id="fPalette" style="width:160px">${opt(PALETTES,39)}</select>
+    </div>
+    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Short Description <span class="fc">S-15</span></div>
+      <input type="text" id="fShortDesc" value="" style="flex:1;max-width:260px;border-bottom:1px solid var(--border)">
+    </div>
+    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Use Message <span class="fc">S-14</span></div>
+      <input type="text" id="fUseMsg" value="" style="flex:1;max-width:260px;border-bottom:1px solid var(--border)">
+    </div>
+    <div class="sh" style="margin-top:14px"><div class="st">Gear Ratings</div><div class="sl"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`
+      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
+        <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
+      </div>`).join('')}
     </div>`;
   }
   if(t==='weapon'){
@@ -783,16 +800,13 @@ function buildProps(){
       <div class="fg"><div class="fl">Crit Multiplier <span class="fc">F-136</span></div><input type="text" id="fCritMult" value="1.0"></div>
       <div class="fg"><div class="fl">Palette <span class="fc">I-3</span></div><select id="fPalette">${opt(PALETTES,20)}</select></div>
     </div></div>
-    <div class="sh" style="margin-top:14px"><div class="st">Ratings</div><div class="sl"></div></div>
-    <div style="display:flex;gap:12px;flex-wrap:wrap">
-      <div class="fg"><div class="fl">Dmg Rating <span class="fc">I-307</span></div><input type="number" id="fDmgRating" value="0"></div>
-      <div class="fg"><div class="fl">Dmg Resist <span class="fc">I-308</span></div><input type="number" id="fDmgResist" value="0"></div>
-      <div class="fg"><div class="fl">Crit Rating <span class="fc">I-313</span></div><input type="number" id="fCritRating" value="0"></div>
-      <div class="fg"><div class="fl">CritDmg Rating <span class="fc">I-314</span></div><input type="number" id="fCritDmgRating" value="0"></div>
-      <div class="fg"><div class="fl">CritRes Rating <span class="fc">I-315</span></div><input type="number" id="fCritResRating" value="0"></div>
-      <div class="fg"><div class="fl">Heal Resist <span class="fc">I-317</span></div><input type="number" id="fHealResist" value="0"></div>
-      <div class="fg"><div class="fl">Heal Boost <span class="fc">I-323</span></div><input type="number" id="fHealBoost" value="0"></div>
-    </div>`;
+    <div class="sh" style="margin-top:14px"><div class="st">Gear Ratings</div><div class="sl"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`
+      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
+        <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
+      </div>`).join('')}
+    `;
   }
   if(t==='armor'){
     h+=`<div class="sec"><div class="sh"><div class="st">Armor/Clothing Database Lookup</div><div class="sl"></div></div>
@@ -820,7 +834,14 @@ function buildProps(){
     <div class="sh" style="margin-top:12px"><div class="st">Resistances (Armor AL Overrides)</div><div class="sl"></div></div>
     <div class="rg">
       ${[['Slash AL','alSlash'],['Pierce AL','alPierce'],['Bludge AL','alBludge'],['Cold AL','alCold'],['Fire AL','alFire'],['Acid AL','alAcid'],['Elec AL','alElec'],['Nether AL','alNether']].map(([l,id])=>`<div class="fg"><div class="fl">${l} <span class="fc">I</span></div><input type="number" id="${id}" value="0"></div>`).join('')}
-    </div></div>`;
+    </div>
+    <div class="sh" style="margin-top:14px"><div class="st">Gear Ratings</div><div class="sl"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`
+      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
+        <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
+      </div>`).join('')}
+    </div>`;
   }
   return h;
 }
@@ -905,15 +926,12 @@ function buildJewelryProps(){
       <div class="fg"><div class="fl">Short Description <span class="fc">S-15</span></div><input type="text" id="fShortDesc" value=""></div>
     </div>
   </div>
-  <div class="sh" style="margin-top:14px"><div class="st">Ratings</div><div class="sl"></div></div>
-  <div style="display:flex;flex-direction:column;gap:10px">
-    <div style="display:flex;gap:12px">
-      ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist Rating','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['Crit Dmg Rating','fCritDmgRating','I-314']].map(([l,id,fc])=>`<div class="fg"><div class="fl">${l} <span class="fc">${fc}</span></div><input type="number" id="${id}" value="0"></div>`).join('')}
-    </div>
-    <div style="display:flex;gap:12px">
-      ${[['Crit Resist Rating','fCritResRating','I-315'],['Heal Resist Rating','fHealResist','I-317'],['Heal Boost Rating','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`<div class="fg"><div class="fl">${l} <span class="fc">${fc}</span></div><input type="number" id="${id}" value="0"></div>`).join('')}
-    </div>
-  </div>
+  <div class="sh" style="margin-top:14px"><div class="st">Gear Ratings</div><div class="sl"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`
+      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
+        <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
+      </div>`).join('')}
   </div>`;
 }
 
@@ -936,15 +954,21 @@ function onArmorTypeChange(){
 
 // ── RECIPE PROPS ──────────────────────────────────────────────────────────────
 function buildRecipeProps(){
-  const reqRows=recipeReqs.map((r,i)=>`
-    <div style="display:grid;grid-template-columns:110px 90px 90px 130px 1fr 28px;gap:8px;align-items:end;margin-bottom:6px">
-      <div class="fg"><div class="fl">Req Type</div><select id="rreq_t_${i}" onchange="recipeReqs[${i}].type=this.value;regen()">${opt(REQUIREMENT_TYPE,r.type)}</select></div>
-      <div class="fg"><div class="fl">Stat ID</div><input type="number" id="rreq_s_${i}" value="${r.stat}" oninput="recipeReqs[${i}].stat=this.value;regen()"></div>
-      <div class="fg"><div class="fl">Value</div><input type="number" id="rreq_v_${i}" value="${r.value||1}" oninput="recipeReqs[${i}].value=this.value;regen()"></div>
-      <div class="fg"><div class="fl">Compare</div><select id="rreq_c_${i}" onchange="recipeReqs[${i}].compare=this.value;regen()">${opt(COMPARE_TYPE,r.compare)}</select></div>
-      <div class="fg"><div class="fl">Message</div><input type="text" id="rreq_m_${i}" value="${r.message||''}" oninput="recipeReqs[${i}].message=this.value;regen()"></div>
-      <button class="del" onclick="recipeReqs.splice(${i},1);rebuildPanel('properties')">✕</button>
+  function makeReqRows(arr,nm){
+    return arr.map((r,i)=>`
+    <div style="display:grid;grid-template-columns:110px 90px 150px 130px 1fr 28px;gap:8px;align-items:end;margin-bottom:6px">
+      <div class="fg"><div class="fl">Req Type</div><select id="${nm}_t_${i}" onchange="${nm}[${i}].type=this.value;regen()">${opt(REQUIREMENT_TYPE,r.type)}</select></div>
+      <div class="fg"><div class="fl">Stat ID</div><input type="number" id="${nm}_s_${i}" value="${r.stat}" oninput="${nm}[${i}].stat=this.value;regen()"></div>
+      <div class="fg"><div class="fl">Value</div><input type="text" id="${nm}_v_${i}" value="${r.value||''}" oninput="${nm}[${i}].value=this.value;regen()"></div>
+      <div class="fg"><div class="fl">Compare</div><select id="${nm}_c_${i}" onchange="${nm}[${i}].compare=this.value;regen()">${opt(COMPARE_TYPE,r.compare)}</select></div>
+      <div class="fg"><div class="fl">Message</div><input type="text" id="${nm}_m_${i}" value="${r.message||''}" oninput="${nm}[${i}].message=this.value;regen()"></div>
+      <button class="del" onclick="${nm}.splice(${i},1);rebuildPanel('properties')">✕</button>
     </div>`).join('');
+  }
+  const reqRows=makeReqRows(recipeReqs,'recipeReqs');
+  const reqBoolRows=makeReqRows(recipeReqsBool,'recipeReqsBool');
+  const reqFloatRows=makeReqRows(recipeReqsFloat,'recipeReqsFloat');
+  const reqStrRows=makeReqRows(recipeReqsStr,'recipeReqsStr');
   const modRows=recipeMods.map((m,i)=>`
     <div style="display:grid;grid-template-columns:120px 80px 130px 130px 80px 28px;gap:8px;align-items:end;margin-bottom:6px">
       <div class="fg"><div class="fl">Mod Type</div><select id="rmod_t_${i}" onchange="recipeMods[${i}].type=this.value;regen()">${opt(MOD_TYPE,m.type)}</select></div>
@@ -978,9 +1002,18 @@ function buildRecipeProps(){
     <div class="fg"><div class="fl">Destroy Source (success)</div><input type="text" id="fDestroySourceSuccess" value="1"></div>
     <div class="fg"><div class="fl">Destroy Target (fail)</div><input type="text" id="fDestroyTargetFail" value="1"></div>
   </div>
-  <div class="sh" style="margin-top:14px"><div class="st">Requirements (recipe_requirements_int)</div><div class="sl"></div></div>
+  <div class="sh" style="margin-top:14px"><div class="st">Requirements — Int (recipe_requirements_int)</div><div class="sl"></div></div>
   ${reqRows}
-  <button class="add-btn" onclick="recipeReqs.push({type:0,stat:105,value:1,compare:6,message:'Requirement not met!'});rebuildPanel('properties')">+ Add Requirement</button>
+  <button class="add-btn" onclick="recipeReqs.push({type:0,stat:105,value:1,compare:6,message:'Requirement not met!'});rebuildPanel('properties')">+ Add Int Requirement</button>
+  <div class="sh" style="margin-top:14px"><div class="st">Requirements — Bool (recipe_requirements_bool)</div><div class="sl"></div></div>
+  ${reqBoolRows}
+  <button class="add-btn" onclick="recipeReqsBool.push({type:0,stat:1,value:'True',compare:6,message:'Requirement not met!'});rebuildPanel('properties')">+ Add Bool Requirement</button>
+  <div class="sh" style="margin-top:14px"><div class="st">Requirements — Float (recipe_requirements_float)</div><div class="sl"></div></div>
+  ${reqFloatRows}
+  <button class="add-btn" onclick="recipeReqsFloat.push({type:0,stat:3,value:'0.0',compare:6,message:'Requirement not met!'});rebuildPanel('properties')">+ Add Float Requirement</button>
+  <div class="sh" style="margin-top:14px"><div class="st">Requirements — String (recipe_requirements_string)</div><div class="sl"></div></div>
+  ${reqStrRows}
+  <button class="add-btn" onclick="recipeReqsStr.push({type:0,stat:1,value:'',compare:6,message:'Requirement not met!'});rebuildPanel('properties')">+ Add String Requirement</button>
   <div class="sh" style="margin-top:14px"><div class="st">Modifications (recipe_mods)</div><div class="sl"></div></div>
   <p class="note">Values with decimals go to recipe_mods_float, whole numbers to recipe_mods_int.</p>
   ${modRows}
@@ -1033,6 +1066,7 @@ function buildSkills(){
         <div style="flex:1;font-family:'Cinzel',serif;font-size:11px;font-weight:700;color:var(--ink-mid)">${name} <span class="fc">SK-${id}</span></div>
         <select id="sk_sac_${id}" style="width:150px">${opt(SKILL_SAC,2)}</select>
         <input type="number" id="sk_init_${id}" value="${base}" style="width:90px">
+        <button class="del" onclick="removeCoreSkill(${id})" title="Remove">✕</button>
       </div>`;
     }).join('')}
     ${extraRows}
@@ -1055,6 +1089,12 @@ function filterSkillSearch(q){
     ?matches.map(([id,name])=>`<div class="sdrop-item" onclick="addSkillById(${id})">${name}<small>SK-${id}</small></div>`).join('')
     :'<div class="sdrop-none">No skills found</div>';
   drop.classList.add('open');
+}
+
+function removeCoreSkill(id){
+  const idx=CORE_SKILL_IDS.indexOf(id);
+  if(idx>=0) CORE_SKILL_IDS.splice(idx,1);
+  rebuildPanel('skills');
 }
 
 function addSkillById(id){
@@ -1109,15 +1149,16 @@ function openSpellDrop(idx){
   // Show first 60 spells or filter by current text
   const ql=query.toLowerCase();
   const matches=ql.length>=1
-    ? SPELLS.filter(s=>s[1].toLowerCase().includes(ql)).slice(0,60)
-    : SPELLS.slice(0,8);
+    ? SPELLS.filter(s=>s[1].toLowerCase().includes(ql))
+    : SPELLS;
   const drop=$(`sp_drop_${idx}`);
   if(!drop)return;
   if(matches.length){
-    drop.innerHTML=matches.map(s=>{
+    const items=matches.map(s=>{
       const safeName=s[1].replace(/"/g,'&quot;').replace(/'/g,'&#39;');
       return `<div class="sdrop-item" onmousedown="event.preventDefault();selectSpell(${idx},${s[0]},'${safeName}')">${s[1]}<small>${s[0]}</small></div>`;
     }).join('');
+    drop.innerHTML=`<div class="sdrop-list">${items}</div>`;
   } else {
     drop.innerHTML='<div class="sdrop-none">No results</div>';
   }
@@ -1134,10 +1175,11 @@ function filterSpells(idx,query){
   const matches=q.length>=1
     ?SPELLS.filter(s=>s[1].toLowerCase().includes(q)).slice(0,50)
     :SPELLS.slice(0,60);
-  drop.innerHTML=matches.length?matches.map(s=>{
+  const items2=matches.map(s=>{
     const safeName=s[1].replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     return `<div class="sdrop-item" onmousedown="event.preventDefault();selectSpell(${idx},${s[0]},'${safeName}')">${s[1]}<small>${s[0]}</small></div>`;
-  }).join(''):'<div class="sdrop-none">No results</div>';
+  }).join('');
+  drop.innerHTML=matches.length?`<div class="sdrop-list">${items2}</div>`:'<div class="sdrop-none">No results</div>';
   if(q.length>=1||drop.classList.contains('open')) drop.classList.add('open');
 }
 function selectSpell(idx,id,name){
@@ -2058,16 +2100,23 @@ function buildRecipeSQL(){
   const sm=successMsg.replace(/'/g,"''"), fm=failMsg.replace(/'/g,"''");
   lines.push(`VALUES (${rid}, 0, ${skill}, ${diff}, 0, ${successWcid}, ${successAmt}, '${sm}', ${failWcid}, 0, '${fm}', ${dst}, 1, NULL, 0, 0, NULL, 1, 1, NULL, ${dtf}, 1, NULL, 0, '${now}');`,'');
 
-  if(recipeReqs.length){
-    lines.push(`INSERT INTO \`recipe_requirements_int\` (\`recipe_Id\`, \`index\`, \`stat\`, \`value\`, \`enum\`, \`message\`)`);
-    recipeReqs.forEach((r,i)=>{
+  // Helper to emit a recipe_requirements table
+  function emitRecipeReqs(arr, tableName, propNames){
+    if(!arr||!arr.length) return;
+    lines.push(`INSERT INTO \`${tableName}\` (\`recipe_Id\`, \`index\`, \`stat\`, \`value\`, \`enum\`, \`message\`)`);
+    arr.forEach((r,i)=>{
       const msg=(r.message||'Requirement not met!').replace(/'/g,"''");
       const cmp=lookupName(COMPARE_TYPE,r.compare), req=lookupName(REQUIREMENT_TYPE,r.type);
       const prefix=i===0?'VALUES ':'     , ';
-      lines.push(`${prefix}(${rid}, ${i}, ${r.stat||105}, ${r.value||1}, ${r.compare}, '${msg}') /* ${req}.${PROP_INT[r.stat]||r.stat} ${cmp} ${r.value} */`);
+      const val=tableName.includes('string')?`'${String(r.value||'').replace(/'/g,"''")}'`:r.value||0;
+      lines.push(`${prefix}(${rid}, ${i}, ${r.stat||0}, ${val}, ${r.compare}, '${msg}')${i===arr.length-1?';':''} /* ${req}.${propNames[r.stat]||r.stat} ${cmp} ${r.value} */`);
     });
-    lines.push(';','');
+    lines.push('');
   }
+  emitRecipeReqs(recipeReqs,'recipe_requirements_int',PROP_INT);
+  emitRecipeReqs(recipeReqsBool,'recipe_requirements_bool',PROP_BOOL);
+  emitRecipeReqs(recipeReqsFloat,'recipe_requirements_float',PROP_FLOAT);
+  emitRecipeReqs(recipeReqsStr,'recipe_requirements_string',PROP_STRING);
 
   lines.push(`INSERT INTO \`recipe_mod\` (\`recipe_Id\`, \`executes_On_Success\`, \`health\`, \`stamina\`, \`mana\`, \`unknown_7\`, \`data_Id\`, \`unknown_9\`, \`instance_Id\`)`);
   lines.push(`VALUES (${rid}, True, 0, 0, 0, False, 0, 0, 0);`,'');
@@ -2144,7 +2193,7 @@ function resetForm(){
   const c=TYPE_CFG[curType];
   setV('fName','New '+c.label);setV('fWcid',c.wcidFrom);
   spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
-  recipeReqs=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];bodyParts=getBodyParts(31);
+  recipeReqs=[];recipeReqsBool=[];recipeReqsFloat=[];recipeReqsStr=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];bodyParts=getBodyParts(31);
   buildSubContent();
 }
 function openOutputFolder(){if(window.pywebview)window.pywebview.api.open_output_folder();}
