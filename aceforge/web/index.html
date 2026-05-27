@@ -231,7 +231,8 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
         <button class="sql-btn" onclick="saveSQL()">+ Save</button>
       </div>
     </div>
-    <div class="sql-out" id="sqlOut"></div>
+    <div class="sql-out" id="sqlOut" contenteditable="true" spellcheck="false"
+  oninput="onSQLEdit()" style="outline:none;cursor:text"></div>
   </div>
 </div>
 
@@ -391,8 +392,8 @@ const PROP_BOOL={1:'Stuck',6:'AiUsesMana',7:'AiUseHumanMagicAnimations',8:'Allow
 const PROP_FLOAT={1:'HeartbeatInterval',3:'HealthRate',4:'StaminaRate',5:'ManaRate',12:'Shade',13:'ArmorModVsSlash',14:'ArmorModVsPierce',15:'ArmorModVsBludgeon',16:'ArmorModVsCold',17:'ArmorModVsFire',18:'ArmorModVsAcid',19:'ArmorModVsElectric',21:'WeaponLength',22:'DamageVariance',29:'WeaponDefense',31:'VisualAwarenessRange',34:'PowerupTime',37:'BuyPrice',38:'SellPrice',39:'DefaultScale',41:'RegenerationInterval',43:'GeneratorRadius',54:'UseRadius',62:'WeaponOffense',64:'ResistSlash',65:'ResistPierce',66:'ResistBludgeon',67:'ResistFire',68:'ResistCold',69:'ResistAcid',70:'ResistElectric',71:'ResistHealthBoost',72:'ResistStaminaDrain',75:'ResistManaBoost',80:'AiUseMagicDelay',104:'ObviousRadarRange',125:'ResistHealthDrain',136:'CriticalMultiplier',144:'ManaConversionMod',149:'WeaponMissileDefense',150:'WeaponMagicDefense',152:'ElementalDamageMod',165:'ArmorModVsNether',166:'ResistNether'};
 const PROP_STRING={1:'Name',7:'Inscription',14:'Use',15:'ShortDesc',16:'LongDesc',17:'ActivationTalk',18:'UseMessage',20:'PluralName',22:'ActivationFailure',33:'Quest',34:'GeneratorEvent',38:'AppraisalPortalDestination',45:'KillQuest',49:'KillQuest2',50:'KillQuest3'};
 const PROP_DID={1:'Setup',2:'MotionTable',3:'SoundTable',4:'CombatTable',6:'PaletteBase',7:'ClothingBase',8:'Icon',22:'PhysicsEffectTable',28:'Spell',32:'WieldedTreasureType',35:'DeathTreasureType',36:'MutateFilter',38:'UseCreateItem',46:'TsysMutationFilter',50:'IconOverlay',52:'IconUnderlay',55:'ProcSpell'};
-const EMOTE_CATS=[[1,'Refuse'],[2,'Vendor'],[3,'Death'],[4,'Portal'],[5,'HeartBeat'],[6,'Give'],[7,'Use'],[8,'Activation'],[9,'Generation'],[10,'PickUp'],[11,'Drop'],[12,'QuestSuccess'],[13,'QuestFailure'],[14,'Taunt'],[15,'WoundedTaunt'],[16,'KillTaunt'],[17,'NewEnemy'],[18,'Scream'],[19,'Homesick'],[20,'ReceiveCritical'],[21,'ResistSpell'],[22,'TestSuccess'],[23,'TestFailure'],[24,'HearChat'],[25,'Wield'],[26,'UnWield'],[27,'EventSuccess'],[28,'EventFailure'],[29,'TestNoQuality'],[32,'GotoSet'],[33,'NumFellowsSuccess'],[34,'NumFellowsFailure']];
-const EMOTE_TYPES=[[2,'AwardXP'],[3,'Give'],[4,'MoveHome'],[5,'Motion'],[6,'Move'],[8,'Say'],[9,'Sound'],[10,'Tell'],[11,'Turn'],[12,'TurnToTarget'],[13,'TextDirect'],[14,'CastSpell'],[15,'Activate'],[16,'WorldBroadcast'],[17,'LocalBroadcast'],[18,'DirectBroadcast'],[19,'CastSpellInstant'],[20,'UpdateQuest'],[21,'InqQuest'],[22,'StampQuest'],[23,'StartEvent'],[24,'StopEvent'],[30,'InqQuestSolves'],[31,'EraseQuest'],[32,'DecrementQuest'],[33,'IncrementQuest'],[34,'AddCharacterTitle'],[47,'AwardTrainingCredits'],[48,'InflictVitaePenalty'],[49,'AwardLevelProportionalXP'],[50,'AwardLevelProportionalSkillXP'],[67,'Goto'],[68,'PopUp'],[72,'Generate'],[74,'TakeItems'],[75,'InqYesNo'],[77,'DeleteSelf'],[78,'KillSelf'],[79,'UpdateMyQuest'],[80,'InqMyQuest'],[81,'StampMyQuest'],[82,'InqMyQuestSolves'],[83,'EraseMyQuest'],[112,'SpendLuminance'],[113,'AwardLuminance']];
+const EMOTE_CATS=[[3,'Death'],[7,'Use'],[8,'Activation'],[9,'Generation'],[10,'PickUp'],[11,'Drop'],[14,'Taunt'],[15,'WoundedTaunt'],[16,'KillTaunt'],[17,'NewEnemy'],[18,'Scream'],[19,'Homesick'],[20,'ReceiveCritical'],[21,'ResistSpell'],[24,'HearChat'],[25,'Wield'],[26,'UnWield'],[1,'Refuse'],[2,'Vendor'],[4,'Portal'],[5,'HeartBeat'],[6,'Give'],[12,'QuestSuccess'],[13,'QuestFailure'],[22,'TestSuccess'],[23,'TestFailure'],[27,'EventSuccess'],[28,'EventFailure'],[29,'TestNoQuality'],[32,'GotoSet'],[33,'NumFellowsSuccess'],[34,'NumFellowsFailure']];
+const EMOTE_TYPES=[[1,'Act'],[2,'AwardXP'],[3,'Give'],[4,'MoveHome'],[5,'Motion'],[6,'Move'],[8,'Say'],[10,'Tell'],[11,'Turn'],[12,'TurnToTarget'],[14,'CastSpell'],[15,'Activate'],[16,'WorldBroadcast'],[17,'LocalBroadcast'],[18,'DirectBroadcast'],[19,'CastSpellInstant'],[21,'InqQuest'],[22,'StampQuest'],[23,'StartEvent'],[24,'StopEvent'],[27,'TeachSpell'],[30,'InqQuestSolves'],[31,'EraseQuest'],[32,'DecrementQuest'],[33,'IncrementQuest'],[34,'AddCharacterTitle'],[35,'InqBoolStat'],[36,'InqIntStat'],[37,'InqFloatStat'],[38,'InqStringStat'],[39,'InqAttributeStat'],[40,'InqRawAttributeStat'],[41,'InqSecondaryAttributeStat'],[42,'InqRawSecondaryAttributeStat'],[43,'InqSkillStat'],[44,'InqRawSkillStat'],[45,'InqSkillTrained'],[46,'InqSkillSpecialized'],[47,'AwardTrainingCredits'],[48,'InflictVitaePenalty'],[49,'AwardLevelProportionalXP'],[50,'AwardLevelProportionalSkillXP'],[51,'InqEvent'],[52,'ForceMotion'],[53,'SetIntStat'],[54,'IncrementIntStat'],[55,'DecrementIntStat'],[56,'CreateTreasure'],[57,'ResetHomePosition'],[58,'InqFellowQuest'],[60,'UpdateFellowQuest'],[61,'StampFellowQuest'],[62,'AwardNoShareXP'],[63,'SetSanctuaryPosition'],[64,'TellFellow'],[65,'FellowBroadcast'],[66,'LockFellow'],[67,'Goto'],[68,'PopUp'],[69,'SetBoolStat'],[70,'SetQuestCompletions'],[71,'InqNumCharacterTitles'],[73,'PetCastSpellOnOwner'],[74,'TakeItems'],[75,'InqYesNo'],[76,'InqOwnsItems'],[77,'DeleteSelf'],[79,'UpdateMyQuest'],[80,'InqMyQuest'],[81,'StampMyQuest'],[82,'InqMyQuestSolves'],[83,'EraseMyQuest'],[84,'DecrementMyQuest'],[85,'IncrementMyQuest'],[86,'SetMyQuestCompletions'],[87,'MoveToPos'],[88,'LocalSignal'],[89,'InqPackSpace'],[90,'RemoveVitaePenalty'],[91,'SetEyeTexture'],[92,'SetEyePalette'],[93,'SetNoseTexture'],[94,'SetNosePalette'],[95,'SetMouthTexture'],[96,'SetMouthPalette'],[97,'SetHeadObject'],[98,'SetHeadPalette'],[99,'TeleportTarget'],[100,'TeleportSelf'],[101,'StartBarber'],[110,'UntrainSkill'],[112,'SpendLuminance'],[113,'AwardLuminance'],[114,'InqInt64Stat'],[115,'SetInt64Stat'],[118,'SetFloatStat'],[119,'AddContract'],[120,'RemoveContract']];
 const RECIPE_SOURCE_TYPE=[[0,'Player'],[1,'Source'],[60,'Dye']];
 const MOD_TYPE=[[0,'SuccessTarget'],[1,'SuccessSource'],[2,'SuccessPlayer'],[3,'SuccessResult'],[4,'FailureTarget'],[5,'FailureSource'],[6,'FailurePlayer'],[7,'FailureResult']];
 const MOD_OP=[[0,'None'],[1,'SetValue'],[2,'Add'],[3,'CopySourceToTarget'],[4,'CopySourceToResult'],[7,'AddSpell'],[8,'SetBitsOn'],[9,'SetBitsOff']];
@@ -430,7 +431,7 @@ const TYPE_CFG={
       {l:'Container',d:{fName:'Bag of Holding',fValue:'500',fEncumb:'50',fMaxStack:'1',fItemUse:'4',fBonded:'1',fAttuned:'0',fWType:'21'}},
     ]},
   weapon:{label:'Weapon',icon:'⚔',desc:'Melee weapons, missile launchers, and casters.',wcidFrom:'870000',wcidTo:'879999',wcidRange:'870,000 – 879,999',wTypes:[[6,'MeleeWeapon'],[3,'MissileLauncher'],[35,'Caster'],[4,'Missile']],
-    subTabs:['properties','advanced'],
+    subTabs:['properties','emotes','advanced'],
     presets:[
       {l:'Heavy Sword',d:{fName:'Enchanted Longsword',fDmg:'85',fDmgType:'1',fWepTime:'45',fDmgVar:'0.4',fWepSkill:'44',fWepDef:'1.02',fWepOff:'1.03',fWieldDiff:'290',fValue:'12000',fEncumb:'450',fScale:'1.0'}},
       {l:'Light Spear',d:{fName:'Swift Spear',fDmg:'60',fDmgType:'2',fWepTime:'35',fDmgVar:'0.3',fWepSkill:'45',fWepDef:'1.04',fWepOff:'1.02',fWieldDiff:'250',fValue:'9000',fEncumb:'300',fScale:'1.0'}},
@@ -438,7 +439,7 @@ const TYPE_CFG={
       {l:'War Staff (Caster)',d:{fName:'Staff of War',fDmg:'0',fDmgType:'0',fWepTime:'0',fDmgVar:'0',fWepSkill:'34',fWepDef:'1.05',fWepOff:'1.0',fWieldDiff:'300',fValue:'15000',fEncumb:'250',fScale:'1.0',fWType:'35'}},
     ]},
   armor:{label:'Armor/Clothing',icon:'⛨',desc:'Clothing and armor for all body slots.',wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 – 819,999',wTypes:[[2,'Clothing/Armor']],
-    subTabs:['properties','advanced'],
+    subTabs:['properties','emotes','advanced'],
     presets:[
       {l:'Plate Chest',d:{fName:'Platemail Cuirass',fArmorLevel:'200',fArmorType:'11',fValidLoc:'512',fValue:'8000',fEncumb:'600',fScale:'1.0'}},
       {l:'Leather Cap',d:{fName:'Leather Cap',fArmorLevel:'60',fArmorType:'2',fValidLoc:'1',fValue:'800',fEncumb:'80',fScale:'1.0'}},
@@ -447,7 +448,7 @@ const TYPE_CFG={
       {l:'Cloth Robe',d:{fName:'Cloth Robe',fArmorLevel:'0',fArmorType:'1',fValidLoc:'2',fValue:'100',fEncumb:'80',fScale:'1.0'}},
     ]},
   jewelry:{label:'Jewelry',icon:'◎',desc:'Rings, necklaces, bracelets, and wristlets.',wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 – 819,999',wTypes:[[38,'Gem (Jewelry)']],
-    subTabs:['properties','advanced'],
+    subTabs:['properties','emotes','advanced'],
     presets:[
       {l:'Ring',d:{fName:'Ring of Vigor',fValue:'1000',fEncumb:'5',fBonded:'0',fAttuned:'0',fValidLoc:'134217728',fScale:'1.0'}},
       {l:'Necklace',d:{fName:'Amulet of Warding',fValue:'2000',fEncumb:'8',fBonded:'0',fAttuned:'0',fValidLoc:'1048576',fScale:'1.0'}},
@@ -1027,7 +1028,7 @@ function addEmote(){emotes.push({category:7,prob:1,wcidFilter:0,questFilter:'',a
 
 // ── ADVANCED (FULL PROPERTY EDITOR) ──────────────────────────────────────────
 function buildAdvanced(){
-  function tbl(arrRef,propNames,ptype){
+  function tbl(arrRef,propNames){
     const arr=window[arrRef]||[];
     const typeOpts=Object.entries(propNames).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('');
     const rows=arr.map((row,i)=>`<tr>
@@ -1035,26 +1036,86 @@ function buildAdvanced(){
       <td><input type="text" id="${arrRef}_v_${i}" value="${row.value||''}" oninput="window.${arrRef}[${i}].value=this.value;regen()" style="font-size:13px;font-weight:600"></td>
       <td style="text-align:center"><button class="del" onclick="window.${arrRef}.splice(${i},1);rebuildPanel('advanced')">✕</button></td>
     </tr>`).join('');
-    return `<table class="ptbl"><thead><tr><th style="width:260px">Property</th><th>Value</th><th style="width:30px"></th></tr></thead><tbody>${rows}</tbody></table>`;
+    return `<table class="ptbl"><thead><tr><th style="width:260px">Property</th><th>Value</th><th style="width:30px"></th></tr></thead><tbody>${rows||'<tr><td colspan=3 style="color:var(--ink-faint);font-style:italic;padding:8px 6px;font-size:13px">None — click + to add</td></tr>'}</tbody></table>`;
   }
   const firstInt=Object.keys(PROP_INT)[0],firstBool=Object.keys(PROP_BOOL)[0],firstFloat=Object.keys(PROP_FLOAT)[0],firstStr=Object.keys(PROP_STRING)[0],firstDID=Object.keys(PROP_DID)[0];
   return `<div class="sec">
+    <div class="sh"><div class="st">Advanced Properties</div><div class="sl"></div></div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+      <button class="top-btn" onclick="syncAdvancedFromSQL()" style="padding:6px 14px;font-size:9px">↓ Sync from Live Preview</button>
+      <span style="font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:12px">Pulls all properties currently in the SQL preview into these tables so you can edit them.</span>
+    </div>
     <div class="sh"><div class="st">Int Properties</div><div class="sl"></div></div>
-    ${tbl('extraInt',PROP_INT,'int')}
+    ${tbl('extraInt',PROP_INT)}
     <button class="add-btn" onclick="extraInt.push({type:'${firstInt}',value:'0'});rebuildPanel('advanced')">+ Add Int Property</button>
     <div class="sh" style="margin-top:14px"><div class="st">Bool Properties</div><div class="sl"></div></div>
-    ${tbl('extraBool',PROP_BOOL,'bool')}
+    ${tbl('extraBool',PROP_BOOL)}
     <button class="add-btn" onclick="extraBool.push({type:'${firstBool}',value:'False'});rebuildPanel('advanced')">+ Add Bool Property</button>
     <div class="sh" style="margin-top:14px"><div class="st">Float Properties</div><div class="sl"></div></div>
-    ${tbl('extraFloat',PROP_FLOAT,'float')}
+    ${tbl('extraFloat',PROP_FLOAT)}
     <button class="add-btn" onclick="extraFloat.push({type:'${firstFloat}',value:'0.0'});rebuildPanel('advanced')">+ Add Float Property</button>
     <div class="sh" style="margin-top:14px"><div class="st">String Properties</div><div class="sl"></div></div>
-    ${tbl('extraStr',PROP_STRING,'string')}
+    ${tbl('extraStr',PROP_STRING)}
     <button class="add-btn" onclick="extraStr.push({type:'${firstStr}',value:''});rebuildPanel('advanced')">+ Add String Property</button>
     <div class="sh" style="margin-top:14px"><div class="st">DID Properties</div><div class="sl"></div></div>
-    ${tbl('extraDID',PROP_DID,'did')}
+    ${tbl('extraDID',PROP_DID)}
     <button class="add-btn" onclick="extraDID.push({type:'${firstDID}',value:'0x00000000'});rebuildPanel('advanced')">+ Add DID Property</button>
   </div>`;
+}
+
+// Parse the live SQL preview and load all properties into the Advanced tables
+function syncAdvancedFromSQL(){
+  const sql=getPlainSQL();
+  if(!sql){toast('No SQL to sync from.');return;}
+
+  // Parse weenie_properties_int
+  const intMatches=[...sql.matchAll(/\(\s*\d+\s*,\s*(\d+)\s*,\s*(-?\d+)\s*\)/g)];
+  const parsedInt=[];
+  // We need table-aware parsing — look for the INSERT statements
+  const intSection=extractInsertValues(sql,'weenie_properties_int');
+  const boolSection=extractInsertValues(sql,'weenie_properties_bool');
+  const floatSection=extractInsertValues(sql,'weenie_properties_float');
+  const strSection=extractInsertValues(sql,'weenie_properties_string');
+  const didSection=extractInsertValues(sql,'weenie_properties_d_i_d');
+
+  // Core properties already handled by the Properties tab — don't duplicate them
+  const SKIP_INT=new Set([1,2,3,4,5,6,7,9,10,11,12,13,16,19,25,27,28,33,40,44,45,47,48,49,93,133,134,146]);
+  const SKIP_BOOL=new Set([1,6,12,13,14,15,19,29,41,42,52,8,120]);
+  const SKIP_FLOAT=new Set([1,3,4,5,12,13,14,15,16,17,18,19,29,31,39,54,62,64,65,66,67,68,69,70,165,166,37,38]);
+  const SKIP_STR=new Set([1,15,16,14]);
+  const SKIP_DID=new Set([1,2,3,8,22,35]);
+
+  extraInt=intSection.filter(r=>!SKIP_INT.has(r.type)).map(r=>({type:String(r.type),value:String(r.value)}));
+  extraBool=boolSection.filter(r=>!SKIP_BOOL.has(r.type)).map(r=>({type:String(r.type),value:String(r.value)}));
+  extraFloat=floatSection.filter(r=>!SKIP_FLOAT.has(r.type)).map(r=>({type:String(r.type),value:String(r.value)}));
+  extraStr=strSection.filter(r=>!SKIP_STR.has(r.type)).map(r=>({type:String(r.type),value:String(r.value)}));
+  extraDID=didSection.filter(r=>!SKIP_DID.has(r.type)).map(r=>({type:String(r.type),value:String(r.value)}));
+
+  rebuildPanel('advanced');
+  const total=extraInt.length+extraBool.length+extraFloat.length+extraStr.length+extraDID.length;
+  toast(`Synced ${total} extra properties from SQL.`);
+}
+
+function extractInsertValues(sql, tableName){
+  // Find the INSERT INTO `tableName` block and extract (wcid, type, value) rows
+  const re=new RegExp('INSERT INTO `'+tableName+'`[^;]+;','gs');
+  const match=re.exec(sql);
+  if(!match) return [];
+  const block=match[0];
+  const results=[];
+  // Match rows: (number, number, number/string/'...')
+  const rowRe=/\(\s*\d+\s*,\s*(\d+)\s*,\s*([^)]+?)\s*\)\s*\/\*/g;
+  let m;
+  while((m=rowRe.exec(block))!==null){
+    const type=parseInt(m[1]);
+    let val=m[2].trim();
+    // Strip string quotes
+    if(val.startsWith("'")&&val.endsWith("'")) val=val.slice(1,-1).replace(/''/g,"'");
+    // Try numeric parse
+    const num=parseFloat(val);
+    results.push({type, value:isNaN(num)?val:num});
+  }
+  return results;
 }
 
 // ── SEARCH FUNCTIONS ──────────────────────────────────────────────────────────
@@ -1106,7 +1167,67 @@ function confirmSavePreset(){
 }
 
 // ── SQL GENERATION ────────────────────────────────────────────────────────────
-function regen(){try{buildSQL();}catch(e){console.error('SQL:',e);}}
+// Prevent recursive regen→edit→regen loops
+let _regenLock=false;
+let _userEditingSQL=false;
+let _sqlEditTimer=null;
+
+function regen(){
+  if(_regenLock||_userEditingSQL) return;
+  _regenLock=true;
+  try{buildSQL();}catch(e){console.error('SQL:',e);}
+  _regenLock=false;
+}
+
+function onSQLEdit(){
+  // User typed in the SQL panel — pause auto-regen and parse back after a delay
+  _userEditingSQL=true;
+  clearTimeout(_sqlEditTimer);
+  _sqlEditTimer=setTimeout(()=>{
+    // Show a subtle indicator that the SQL has been manually edited
+    const out=$('sqlOut');
+    if(!out) return;
+    // Parse the edited SQL back into form fields
+    const sql=out.innerText||out.textContent;
+    parseSQLIntoForm(sql);
+    _userEditingSQL=false;
+  }, 800);
+}
+
+function parseSQLIntoForm(sql){
+  // Extract key single values back into form fields
+  const intVals=extractInsertValues(sql,'weenie_properties_int');
+  const floatVals=extractInsertValues(sql,'weenie_properties_float');
+  const strVals=extractInsertValues(sql,'weenie_properties_string');
+
+  // Map type IDs back to field IDs
+  const intMap={25:'fLevel',44:'fDmg',45:'fDmgType',48:'fWepSkill',49:'fWepTime',
+    101:'fCombatStyle',47:'fAttackType',146:'fXp',332:'fLum',
+    28:'fArmorLevel',27:'fArmorType',9:'fValidLoc',5:'fEncumb',19:'fValue',
+    16:'fItemUse',33:'fBonded',114:'fAttuned',11:'fMaxStack',3:'fPalette',
+    160:'fWieldDiff',158:'fWieldReq',204:'fElemBonus',307:'fDmgRating',
+    308:'fDmgResist',313:'fCritRating',314:'fCritDmgRating',315:'fCritResRating',
+    106:'fSpellcraft',25:'fLevel'};
+  const floatMap={39:'fScale',22:'fDmgVar',29:'fWepDef',62:'fWepOff',
+    31:'fAggroRange',136:'fCritMult',149:'fMissileDef',150:'fMagicDef',
+    54:'fUseRadius',37:'fBuyRate',38:'fSellRate',144:'fManaConv'};
+  const strMap={1:'fName',15:'fShortDesc',16:'fLongDesc',14:'fUseMsg'};
+
+  _regenLock=true;
+  intVals.forEach(r=>{
+    const fid=intMap[r.type];
+    if(fid){const e=$(fid);if(e&&document.activeElement!==e)e.value=r.value;}
+  });
+  floatVals.forEach(r=>{
+    const fid=floatMap[r.type];
+    if(fid){const e=$(fid);if(e&&document.activeElement!==e)e.value=r.value;}
+  });
+  strVals.forEach(r=>{
+    const fid=strMap[r.type];
+    if(fid){const e=$(fid);if(e&&document.activeElement!==e)e.value=r.value;}
+  });
+  _regenLock=false;
+}
 
 function buildSQL(){
   const t=curType;

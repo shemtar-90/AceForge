@@ -137,20 +137,37 @@ class APIClient:
         try:
             import openai
             client = self._build_openai_client()
-            # models.list() verifies the key without consuming tokens
-            # Fall back to a tiny chat call for providers that don't support models.list()
+            # Try models.list() first — lightweight, just checks auth
             try:
-                client.models.list()
+                models = list(client.models.list())
+                # If we got a model list and the configured model is set,
+                # verify it actually exists (optional warning only — don't fail)
+                if self._model and models:
+                    ids = [m.id for m in models]
+                    if self._model not in ids:
+                        # Return success but warn about model name
+                        return True, f"Key valid, but model '{self._model}' not in provider's list. Available: {', '.join(ids[:5])}…"
+                return True, ""
+            except openai.AuthenticationError:
+                return False, "Invalid API key. Check your key at your provider's dashboard."
             except Exception:
-                client.chat.completions.create(
-                    model=self._model or "gpt-4o-mini", max_tokens=1,
-                    messages=[{"role": "user", "content": "hi"}],
-                )
-            return True, ""
+                # Some providers don't support models.list() — try a minimal chat call
+                try:
+                    client.chat.completions.create(
+                        model=self._model or "llama-3-8b-8192",
+                        max_tokens=1,
+                        messages=[{"role": "user", "content": "hi"}],
+                    )
+                    return True, ""
+                except openai.AuthenticationError:
+                    return False, "Invalid API key. Check your key at your provider's dashboard."
+                except openai.NotFoundError:
+                    # Key works but model name is wrong — still connected
+                    return True, f"Key valid, but model '{self._model}' not found. Check the model name."
+                except Exception as e2:
+                    return False, _friendly_error(e2, "openai")
         except ImportError:
             return False, "openai package not installed. Run: pip install openai"
-        except openai.AuthenticationError:
-            return False, "Invalid API key. Check your key at your provider's dashboard."
         except Exception as e:
             return False, _friendly_error(e, "openai")
 
@@ -238,21 +255,42 @@ class APIClient:
             import openai
             client = self._build_openai_client()
             full = []
-            stream = client.chat.completions.create(
-                model=self._model, max_tokens=8000, stream=True,
+
+            # Build kwargs — some providers (Groq, Mistral) accept max_tokens,
+            # others use max_completion_tokens. Start with max_tokens and fall back.
+            kwargs = dict(
+                model=self._model,
+                stream=True,
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user",   "content": user},
                 ],
             )
+            # Try with max_tokens first (works for Groq, Mistral, Ollama, etc.)
+            try:
+                kwargs["max_tokens"] = 8000
+                stream = client.chat.completions.create(**kwargs)
+            except openai.BadRequestError as e:
+                if "max_tokens" in str(e).lower() or "max_completion_tokens" in str(e).lower():
+                    kwargs.pop("max_tokens", None)
+                    kwargs["max_completion_tokens"] = 8000
+                    stream = client.chat.completions.create(**kwargs)
+                else:
+                    raise
+
             for chunk in stream:
-                text = chunk.choices[0].delta.content or ""
+                delta = chunk.choices[0].delta
+                text = delta.content if delta.content is not None else ""
                 if text:
                     full.append(text)
                     on_chunk(text)
             on_done("".join(full))
         except ImportError:
             on_error("openai package not installed. Run: pip install openai")
+        except openai.AuthenticationError:
+            on_error("Invalid API key. Check your key in Settings.")
+        except openai.NotFoundError as e:
+            on_error(f"Model not found: '{self._model}'. Check the model name for your provider.")
         except Exception as e:
             on_error(_friendly_error(e, "openai"))
 
