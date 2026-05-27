@@ -223,7 +223,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
     <div class="form-scroll" id="formContent"></div>
   </div>
   <div class="sql-resize" id="sqlResize"></div>
-  <div class="sql-panel" id="sqlPanel" style="overflow-x:hidden">
+  <div class="sql-panel" id="sqlPanel">
     <div class="sql-hdr">
       <div class="sql-title">Generated SQL</div>
       <div class="sql-btns">
@@ -235,12 +235,12 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
       <span style="color:var(--gold);font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em">⚠ MANUAL EDIT MODE</span>
       <span style="color:#a08050;font-family:'Cinzel',serif;font-size:9px;flex:1">Values changed in SQL that could not sync to form fields.</span>
       <button onclick="discardSQLEdit()" style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:1px solid #5a3000;background:transparent;color:#a08050;padding:3px 10px;cursor:pointer" onmouseover="this.style.borderColor='var(--crimson)';this.style.color='var(--crimson-lt)'" onmouseout="this.style.borderColor='#5a3000';this.style.color='#a08050'">↺ Discard &amp; Regen</button>
-    </div>
+    <div style="flex:1;overflow-x:auto;overflow-y:auto">
     <textarea class="sql-out" id="sqlOut" spellcheck="false"
       oninput="onSQLEdit()"
-      style="font-family:'Source Code Pro',monospace;font-size:12px;line-height:1.8;color:#c8b898;background:transparent;border:none;outline:none;resize:none;width:100%;white-space:pre;overflow-wrap:normal;overflow-x:auto"
+      style="font-family:'Source Code Pro',monospace;font-size:12px;line-height:1.8;color:#c8b898;background:transparent;border:none;outline:none;resize:none;min-width:max-content;width:100%;white-space:pre;overflow-wrap:normal"
     ></textarea>
-  </div>
+    </div>
 </div>
 
 <!-- AI WORKSPACE -->
@@ -403,7 +403,7 @@ const PROP_INT={1:'ItemType',2:'CreatureType',3:'PaletteTemplate',4:'ClothingPri
 const PROP_BOOL={1:'Stuck',6:'AiUsesMana',7:'AiUseHumanMagicAnimations',8:'AllowGive',11:'IgnoreCollisions',12:'ReportCollisions',13:'Ethereal',14:'GravityStatus',15:'LightsStatus',18:'Visibility',19:'Attackable',22:'Inscribable',23:'DestroyOnSell',29:'NoCorpse',39:'DealMagicalItems',41:'ReportCollisionsAsEnvironment',42:'AllowEdgeSlide',50:'NeverFailCasting',52:'AiImmobile',63:'UnlimitedUse',65:'IgnoreMagicResist',66:'IgnoreMagicArmor',79:'AiAcceptEverything',91:'Retained',98:'Invincible',120:'TreasureCorpse'};
 const PROP_FLOAT={1:'HeartbeatInterval',3:'HealthRate',4:'StaminaRate',5:'ManaRate',12:'Shade',13:'ArmorModVsSlash',14:'ArmorModVsPierce',15:'ArmorModVsBludgeon',16:'ArmorModVsCold',17:'ArmorModVsFire',18:'ArmorModVsAcid',19:'ArmorModVsElectric',21:'WeaponLength',22:'DamageVariance',29:'WeaponDefense',31:'VisualAwarenessRange',34:'PowerupTime',37:'BuyPrice',38:'SellPrice',39:'DefaultScale',41:'RegenerationInterval',43:'GeneratorRadius',54:'UseRadius',62:'WeaponOffense',64:'ResistSlash',65:'ResistPierce',66:'ResistBludgeon',67:'ResistFire',68:'ResistCold',69:'ResistAcid',70:'ResistElectric',71:'ResistHealthBoost',72:'ResistStaminaDrain',75:'ResistManaBoost',80:'AiUseMagicDelay',104:'ObviousRadarRange',125:'ResistHealthDrain',136:'CriticalMultiplier',144:'ManaConversionMod',149:'WeaponMissileDefense',150:'WeaponMagicDefense',152:'ElementalDamageMod',165:'ArmorModVsNether',166:'ResistNether'};
 const PROP_STRING={1:'Name',7:'Inscription',14:'Use',15:'ShortDesc',16:'LongDesc',17:'ActivationTalk',18:'UseMessage',20:'PluralName',22:'ActivationFailure',33:'Quest',34:'GeneratorEvent',38:'AppraisalPortalDestination',45:'KillQuest',49:'KillQuest2',50:'KillQuest3'};
-const PROP_DID={1:'Setup',2:'MotionTable',3:'SoundTable',4:'CombatTable',6:'PaletteBase',7:'ClothingBase',8:'Icon',22:'PhysicsEffectTable',28:'Spell',32:'WieldedTreasureType',35:'DeathTreasureType',36:'MutateFilter',38:'UseCreateItem',46:'TsysMutationFilter',50:'IconOverlay',52:'IconUnderlay',55:'ProcSpell'};
+const PROP_DID={1:'Setup',2:'MotionTable',3:'SoundTable',4:'CombatTable',6:'PaletteBase',7:'ClothingBase',8:'Icon',9:'EyesTexture',10:'NoseTexture',11:'MouthTexture',12:'DefaultStyle',13:'DefaultSubStyle',14:'HeadObject',15:'HairTexture',16:'DefaultHairColor',17:'DefaultEyesColor',18:'DefaultSkinColor',19:'DefaultHairTexture',20:'IconHires',21:'ObjCells',22:'PhysicsEffectTable',23:'UseSound',24:'UseTargetAnimation',25:'UseTargetFailedAnimation',26:'ItemSkillLevelLimit',27:'LastPortal',28:'LinkedPortalOne',29:'WieldedTreasureType',30:'InventoryTreasureType',31:'ShopTreasureType',32:'DeathTreasureType',33:'MutateFilter',34:'UseCreateItem',35:'TsysMutationFilter',36:'IconOverlay',37:'IconOverlay2',38:'IconUnderlay',39:'AugmentationMutationData',40:'AugmentationEffect',41:'ProcSpell',42:'AugmentationCreateItem',43:'AlternateCurrency',44:'BlueSurgeSpell',45:'YellowSurgeSpell',46:'RedSurgeSpell',47:'OlthoiDeathTreasureType',48:'VendorShopTemplate',49:'LinkedLifestone',50:'LinkedPortalTwo',51:'OriginalPortal',52:'BiomeCombatTable',53:'UseItemAnimation',54:'UseItemFailAnimation',55:'CreateItemWielded',56:'EquipmentSetID',57:'WieldedTreasure2',58:'WieldedTreasure3',59:'WieldedTreasure4',60:'NpcLooksLikeObject',61:'PCAPPhysicsBurden'};
 const EMOTE_CATS=[[3,'Death'],[7,'Use'],[8,'Activation'],[9,'Generation'],[10,'PickUp'],[11,'Drop'],[14,'Taunt'],[15,'WoundedTaunt'],[16,'KillTaunt'],[17,'NewEnemy'],[18,'Scream'],[19,'Homesick'],[20,'ReceiveCritical'],[21,'ResistSpell'],[24,'HearChat'],[25,'Wield'],[26,'UnWield'],[1,'Refuse'],[2,'Vendor'],[4,'Portal'],[5,'HeartBeat'],[6,'Give'],[12,'QuestSuccess'],[13,'QuestFailure'],[22,'TestSuccess'],[23,'TestFailure'],[27,'EventSuccess'],[28,'EventFailure'],[29,'TestNoQuality'],[32,'GotoSet'],[33,'NumFellowsSuccess'],[34,'NumFellowsFailure']];
 const EMOTE_TYPES=[[1,'Act'],[2,'AwardXP'],[3,'Give'],[4,'MoveHome'],[5,'Motion'],[6,'Move'],[8,'Say'],[10,'Tell'],[11,'Turn'],[12,'TurnToTarget'],[14,'CastSpell'],[15,'Activate'],[16,'WorldBroadcast'],[17,'LocalBroadcast'],[18,'DirectBroadcast'],[19,'CastSpellInstant'],[21,'InqQuest'],[22,'StampQuest'],[23,'StartEvent'],[24,'StopEvent'],[27,'TeachSpell'],[30,'InqQuestSolves'],[31,'EraseQuest'],[32,'DecrementQuest'],[33,'IncrementQuest'],[34,'AddCharacterTitle'],[35,'InqBoolStat'],[36,'InqIntStat'],[37,'InqFloatStat'],[38,'InqStringStat'],[39,'InqAttributeStat'],[40,'InqRawAttributeStat'],[41,'InqSecondaryAttributeStat'],[42,'InqRawSecondaryAttributeStat'],[43,'InqSkillStat'],[44,'InqRawSkillStat'],[45,'InqSkillTrained'],[46,'InqSkillSpecialized'],[47,'AwardTrainingCredits'],[48,'InflictVitaePenalty'],[49,'AwardLevelProportionalXP'],[50,'AwardLevelProportionalSkillXP'],[51,'InqEvent'],[52,'ForceMotion'],[53,'SetIntStat'],[54,'IncrementIntStat'],[55,'DecrementIntStat'],[56,'CreateTreasure'],[57,'ResetHomePosition'],[58,'InqFellowQuest'],[60,'UpdateFellowQuest'],[61,'StampFellowQuest'],[62,'AwardNoShareXP'],[63,'SetSanctuaryPosition'],[64,'TellFellow'],[65,'FellowBroadcast'],[66,'LockFellow'],[67,'Goto'],[68,'PopUp'],[69,'SetBoolStat'],[70,'SetQuestCompletions'],[71,'InqNumCharacterTitles'],[73,'PetCastSpellOnOwner'],[74,'TakeItems'],[75,'InqYesNo'],[76,'InqOwnsItems'],[77,'DeleteSelf'],[79,'UpdateMyQuest'],[80,'InqMyQuest'],[81,'StampMyQuest'],[82,'InqMyQuestSolves'],[83,'EraseMyQuest'],[84,'DecrementMyQuest'],[85,'IncrementMyQuest'],[86,'SetMyQuestCompletions'],[87,'MoveToPos'],[88,'LocalSignal'],[89,'InqPackSpace'],[90,'RemoveVitaePenalty'],[91,'SetEyeTexture'],[92,'SetEyePalette'],[93,'SetNoseTexture'],[94,'SetNosePalette'],[95,'SetMouthTexture'],[96,'SetMouthPalette'],[97,'SetHeadObject'],[98,'SetHeadPalette'],[99,'TeleportTarget'],[100,'TeleportSelf'],[101,'StartBarber'],[110,'UntrainSkill'],[112,'SpendLuminance'],[113,'AwardLuminance'],[114,'InqInt64Stat'],[115,'SetInt64Stat'],[118,'SetFloatStat'],[119,'AddContract'],[120,'RemoveContract']];
 const RECIPE_SOURCE_TYPE=[[0,'Player'],[1,'Source'],[60,'Dye']];
@@ -704,7 +704,22 @@ function buildProps(){
       <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
         <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
-      </div>`).join('')}</div>`;
+      </div>`).join('')}
+    
+    <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
+    <div id="did_rows_form">${buildDIDRows()}</div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+      <div class="fg" style="flex:2">
+        <div class="fl">Property</div>
+        <select id="did_add_type" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+      </div>
+      <div class="fg" style="flex:1">
+        <div class="fl">Value (hex or decimal)</div>
+        <input type="text" id="did_add_val" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+      </div>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty()">+ Add / Update</button>
+    </div>
+    </div>`;
     }
     if(t==='npc'){
       const isVendor=gi('fWType',10)===12;
@@ -733,7 +748,21 @@ function buildProps(){
       <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
         <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
-      </div>`).join('')}</div>`;
+      </div>`).join('')}
+    <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
+    <div id="did_rows_form">${buildDIDRows()}</div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+      <div class="fg" style="flex:2">
+        <div class="fl">Property</div>
+        <select id="did_add_type" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+      </div>
+      <div class="fg" style="flex:1">
+        <div class="fl">Value (hex or decimal)</div>
+        <input type="text" id="did_add_val" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+      </div>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty()">+ Add / Update</button>
+    </div>
+    </div>`;
   }
   if(t==='item'){
     h+=`<div class="sec"><div class="sh"><div class="st">Item Properties</div><div class="sl"></div></div>
@@ -772,6 +801,19 @@ function buildProps(){
         <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
       </div>`).join('')}
+    <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
+    <div id="did_rows_form">${buildDIDRows()}</div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+      <div class="fg" style="flex:2">
+        <div class="fl">Property</div>
+        <select id="did_add_type" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+      </div>
+      <div class="fg" style="flex:1">
+        <div class="fl">Value (hex or decimal)</div>
+        <input type="text" id="did_add_val" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+      </div>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty()">+ Add / Update</button>
+    </div>
     </div>`;
   }
   if(t==='weapon'){
@@ -806,6 +848,19 @@ function buildProps(){
         <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
       </div>`).join('')}
+    <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
+    <div id="did_rows_form">${buildDIDRows()}</div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+      <div class="fg" style="flex:2">
+        <div class="fl">Property</div>
+        <select id="did_add_type" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+      </div>
+      <div class="fg" style="flex:1">
+        <div class="fl">Value (hex or decimal)</div>
+        <input type="text" id="did_add_val" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+      </div>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty()">+ Add / Update</button>
+    </div>
     `;
   }
   if(t==='armor'){
@@ -841,9 +896,77 @@ function buildProps(){
         <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
       </div>`).join('')}
+    <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
+    <div id="did_rows_form">${buildDIDRows()}</div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+      <div class="fg" style="flex:2">
+        <div class="fl">Property</div>
+        <select id="did_add_type" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+      </div>
+      <div class="fg" style="flex:1">
+        <div class="fl">Value (hex or decimal)</div>
+        <input type="text" id="did_add_val" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+      </div>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty()">+ Add / Update</button>
+    </div>
     </div>`;
   }
   return h;
+}
+
+function buildDIDRows(){
+  // Show current DID properties from _lastSQLProps if available
+  const lp=window._lastSQLProps||{};
+  const didRows=(lp.did||[]);
+  if(!didRows.length) return '<div style="color:var(--ink-faint);font-style:italic;font-size:13px;padding:4px 0">None yet — add one below, or switch to ≡ Properties tab after generating SQL.</div>';
+  return didRows.map((r,i)=>{
+    const name=PROP_DID[r.type]||'Unknown';
+    return `<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="min-width:200px;font-family:'Cinzel',serif;font-size:10px;font-weight:700;color:var(--ink-mid)">${r.type} · ${name}</div>
+      <input type="text" value="${r.value||''}" oninput="updateDIDRow(${i},this.value)" style="flex:1;font-family:'Source Code Pro',monospace;font-size:12px;font-weight:600;border-bottom:1px solid var(--border)">
+      <button class="del" onclick="removeDIDRow(${i})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function updateDIDRow(idx,val){
+  const lp=window._lastSQLProps||{};
+  if(lp.did&&lp.did[idx]){
+    lp.did[idx].value=val;
+    // Push change into extraDID so regen() picks it up
+    const type=String(lp.did[idx].type);
+    const existing=extraDID.findIndex(r=>String(r.type)===type);
+    if(existing>=0) extraDID[existing].value=val;
+    else extraDID.push({type,value:val});
+    regen();
+  }
+}
+
+function removeDIDRow(idx){
+  const lp=window._lastSQLProps||{};
+  if(lp.did&&lp.did[idx]){
+    const type=String(lp.did[idx].type);
+    extraDID=extraDID.filter(r=>String(r.type)!==type);
+    lp.did.splice(idx,1);
+    regen();
+    // Refresh the did_rows_form div in place
+    const el=$('did_rows_form');if(el)el.innerHTML=buildDIDRows();
+  }
+}
+
+function addDIDProperty(){
+  const typeEl=$('did_add_type'),valEl=$('did_add_val');
+  if(!typeEl||!valEl) return;
+  const type=String(typeEl.value),val=valEl.value.trim()||'0x00000000';
+  // Add/update in extraDID
+  const existing=extraDID.findIndex(r=>String(r.type)===type);
+  if(existing>=0) extraDID[existing].value=val;
+  else extraDID.push({type,value:val});
+  extraDID.sort((a,b)=>parseInt(a.type)-parseInt(b.type));
+  regen();
+  // Refresh the display
+  const el=$('did_rows_form');if(el)el.innerHTML=buildDIDRows();
+  toast('DID '+type+' · '+PROP_DID[type]+' = '+val);
 }
 
 function buildCreateListRows(){
@@ -932,6 +1055,19 @@ function buildJewelryProps(){
         <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
       </div>`).join('')}
+  <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
+  <div id="did_rows_form">${buildDIDRows()}</div>
+  <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+    <div class="fg" style="flex:2">
+      <div class="fl">Property</div>
+      <select id="did_add_type" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+    </div>
+    <div class="fg" style="flex:1">
+      <div class="fl">Value (hex or decimal)</div>
+      <input type="text" id="did_add_val" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+    </div>
+    <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty()">+ Add / Update</button>
+  </div>
   </div>`;
 }
 
