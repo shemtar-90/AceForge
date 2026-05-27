@@ -249,7 +249,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
       <textarea id="aiPrompt" style="width:100%;height:120px;font-family:'IM Fell English',serif;font-style:italic;font-size:15px;color:var(--ink);background:transparent;border:none;outline:none;resize:none;line-height:1.6;user-select:text" placeholder="e.g. A level 180 ice drudge for a snowy biome. High cold resist, weak to fire. Drops T6 loot. Casts Frost Bolt and Frost Volley."></textarea>
     </div>
     <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
-      <button class="ai-gen-btn" id="aiGenBtn" onclick="startGeneration()">▶ Generate</button>
+      <button class="ai-gen-btn" id="aiGenBtn" onclick="startGeneration()" disabled title="Connect an API key in Settings first">▶ Generate</button>
       <button class="ai-stop-btn" id="aiStopBtn" onclick="stopGeneration()" style="display:none">⏹ Stop</button>
       <button class="ai-gen-btn" onclick="clearAI()" style="background:transparent;border:1px solid var(--border);color:var(--ink-mid)">🗑 Clear</button>
       <span class="ai-status" id="aiStatus"></span>
@@ -1514,6 +1514,13 @@ function switchAIType(type,btn){
   $('aiPrompt').placeholder=AI_PROMPTS[type]||'Describe what you want…';
 }
 
+function updateAIButtonState(){
+  const btn=$('aiGenBtn');if(!btn)return;
+  const hasKey=appConfig.api_key_set||appConfig._testPassed;
+  btn.disabled=!hasKey;
+  btn.title=hasKey?'Generate SQL with AI':'Connect an API key in Settings first';
+}
+
 function startGeneration(){
   const prompt=$('aiPrompt').value.trim();
   if(!prompt){toast('Enter a prompt first.');return;}
@@ -1550,7 +1557,7 @@ function clearAI(){aiFullText='';aiGenerating=false;$('aiOut').textContent='';$(
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
 const MODEL_HINTS={
   anthropic:['claude-sonnet-4-20250514','claude-opus-4-20250514','claude-haiku-4-5-20251001'],
-  google:['gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-pro','gemini-1.5-flash'],
+  google:['gemini-2.5-flash','gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-pro'],
   openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo'],
   compatible:['mistral-medium','mistral-small','llama-3-70b-instruct','mixtral-8x7b','gemma-7b-it'],
 };
@@ -1563,7 +1570,7 @@ function onProviderChange(){
   else note.innerHTML='';
   const hints=MODEL_HINTS[p]||[];
   $('sModelHints').innerHTML=hints.map(m=>`<button onclick="setV('sModel','${m}')" style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.05em;padding:4px 12px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:10px;margin:2px" onmouseover="this.style.borderColor='var(--crimson)';this.style.color='var(--crimson)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--ink-dim)'">${m}</button>`).join('');
-  const dm={anthropic:'claude-sonnet-4-20250514',google:'gemini-2.0-flash',openai:'gpt-4o',compatible:'mistral-medium'};
+  const dm={anthropic:'claude-sonnet-4-20250514',google:'gemini-2.5-flash',openai:'gpt-4o',compatible:'mistral-medium'};
   if(!$('sModel').value||Object.values(dm).includes($('sModel').value))setV('sModel',dm[p]||'');
   const kh={anthropic:'sk-ant-…',google:'AIza… (from aistudio.google.com/apikey)',openai:'sk-…',compatible:'Your provider key (or any string for local models)'};
   $('sApiKey').placeholder=kh[p]||'API key';
@@ -1575,7 +1582,11 @@ function testAPIKey(){
   if(!apiKey){result.textContent='✗ Enter an API key first.';result.style.color='var(--crimson-lt)';return;}
   if(window.pywebview){
     window.pywebview.api.validate_key_with(provider,apiKey,model,baseUrl).then(r=>{
-      if(r.valid){result.textContent='✓ Connected';result.style.color='var(--green)';}
+      if(r.valid){
+        result.textContent='✓ Connected';result.style.color='var(--green)';
+        // Mark key as provisionally valid so AI Mode becomes usable after save
+        appConfig._testPassed=true;
+      }
       else{result.textContent='✗ '+r.error;result.style.color='var(--crimson-lt)';}
     });
   } else {result.textContent='(browser only)';result.style.color='var(--ink-dim)';}
@@ -1634,7 +1645,12 @@ function saveSettings(){
   if(Object.keys(ranges).length)data.wcid_ranges=ranges;
   if(window.pywebview){
     window.pywebview.api.save_config(data).then(r=>{
-      if(r.success){toast('Settings saved.');closeSettings();appConfig.api_key_set=appConfig.api_key_set||!!data.api_key;appConfig.server_name=data.server_name;}
+      if(r.success){
+        toast('Settings saved.');closeSettings();
+        appConfig.api_key_set=appConfig.api_key_set||!!data.api_key;
+        appConfig.server_name=data.server_name;
+        updateAIButtonState();
+      }
       else toast('Error: '+r.error);
     });
   } else {closeSettings();toast('Settings saved (browser mode).');}
@@ -1650,7 +1666,10 @@ async function init(){
     window.pywebview.api.get_config().then(cfg=>{
       appConfig=cfg;
       if(cfg.custom_presets)customPresets=cfg.custom_presets;
+      updateAIButtonState();
     });
+  } else {
+    updateAIButtonState();
   }
 }
 

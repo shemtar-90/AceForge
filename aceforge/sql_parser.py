@@ -58,8 +58,25 @@ def parse_and_save_files(
     segments = FILE_HEADER_LOOSE_RE.split(full_response)
 
     if len(segments) <= 1:
-        # No markers found — save as single file
-        fname = "output.sql"
+        # No FILE: markers found — try to extract a WCID and name from the SQL
+        # Look for: INSERT INTO `weenie` ... VALUES (WCID, 'classname', ...
+        import re as _re
+        wcid_match = _re.search(r"VALUES\s*\((\d+)\s*,\s*'([^']+)'", full_response)
+        # Or quest table: VALUES ('QuestName', ...)
+        quest_match = _re.search(r"INSERT INTO\s*`quest`[^;]+VALUES\s*\('([^']+)'", full_response, _re.IGNORECASE)
+
+        if wcid_match:
+            wcid = wcid_match.group(1)
+            cname = wcid_match.group(2).strip()
+            # Capitalize for display
+            display = cname.replace("_", " ").title()
+            fname = sanitize_filename(f"{wcid} {display}.sql")
+        elif quest_match:
+            qname = quest_match.group(1).strip()
+            fname = sanitize_filename(f"{qname}.sql")
+        else:
+            fname = "output.sql"
+
         fpath = output_path / fname
         fpath.write_text(full_response.strip(), encoding="utf-8")
         written.append(str(fpath))

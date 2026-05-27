@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 DEFAULT_WCID_RANGES = {
-    "campaign_creatures": {"start": 800000, "next": 800064, "label": "Campaign Creatures"},
+    "campaign_creatures": {"start": 800000, "next": 800065, "label": "Campaign Creatures"},
     "custom_items":       {"start": 810000, "next": 810062, "label": "Custom Items"},
     "custom_portals":     {"start": 820000, "next": 820006, "label": "Custom Portals"},
     "structures":         {"start": 830000, "next": 830032, "label": "Structures"},
@@ -109,7 +109,7 @@ class Config:
 
     @property
     def server_name(self) -> str:
-        return self._data.get("server_name", "My Server")
+        return self._data.get("server_name", "Server Name")
 
     @server_name.setter
     def server_name(self, value: str):

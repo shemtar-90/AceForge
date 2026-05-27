@@ -115,13 +115,12 @@ class AppAPI:
             output_dir = self.config.output_dir or str(
                 Path.home() / "Documents" / "ACEForge" / "output"
             )
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            subfolder = Path(output_dir) / f"manual_{timestamp}"
-            subfolder.mkdir(parents=True, exist_ok=True)
+            out_path = Path(output_dir)
+            out_path.mkdir(parents=True, exist_ok=True)
 
             safe_name = name.lower().replace(" ", "_").replace("'", "")[:40]
-            filename  = f"{wcid}_{safe_name}.sql"
-            fpath     = subfolder / filename
+            filename  = f"{wcid} {name}.sql"
+            fpath     = out_path / filename
             fpath.write_text(sql_text, encoding="utf-8")
             return {"success": True, "path": str(fpath), "filename": filename}
         except Exception as e:
@@ -132,14 +131,13 @@ class AppAPI:
             output_dir = self.config.output_dir or str(
                 Path.home() / "Documents" / "ACEForge" / "output"
             )
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            subfolder = f"{content_type}_{timestamp}"
-            written   = parse_and_save_files(full_response, output_dir, subfolder)
+            # Save all files flat into output_dir — no per-generation subfolder
+            written = parse_and_save_files(full_response, output_dir, subfolder="")
             return {
                 "success": True,
                 "files":  [os.path.basename(f) for f in written],
                 "count":  len(written),
-                "folder": str(Path(output_dir) / subfolder),
+                "folder": output_dir,
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
