@@ -1955,6 +1955,7 @@ function buildSQL(){
           const _q=v=>v?`'${String(v).replace(/'/g,"''")}'`:'NULL';
           const prefix=ai===0?'VALUES ':'     , ';
           lines.push(`${prefix}(@parent_id, ${ai}, ${a.type||10} /* ${typeName} */, ${_n(a.delay)||0}, ${_n(a.extent)||1}, NULL, ${_q(a.message)}, ${_q(a.testString)}, ${_n(a.min)}, ${_n(a.max)}, NULL, NULL, NULL, NULL, NULL, NULL, ${_n(a.amount)}, ${_n(a.amount64)}, ${_n(a.heroXP64)}, ${_n(a.percent)}, ${_n(a.spellId)}, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ${_n(a.stackSize)}, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)`);
+        });
         lines.push(';');
       }
     });
