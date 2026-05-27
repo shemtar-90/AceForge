@@ -476,7 +476,7 @@ let curType='creature',curSub='properties',curMode='manual',curAIType='creature'
 let spells=[],emotes=[],customPresets={};
 let bodyParts=BODY_PARTS_BIPED.map(b=>({...b,dType:4,dVal:0,dVar:0,baseAL:80,sl:64,pi:56,bl:120,co:40,fi:120,ac:80,el:80,nt:24}));
 let extraInt=[],extraBool=[],extraFloat=[],extraStr=[],extraDID=[];
-let recipeReqs=[],recipeMods=[],cookbookEntries=[];
+let recipeReqs=[],recipeMods=[],cookbookEntries=[],createList=[];
 let aiFullText='',aiGenerating=false;
 let appConfig={server_name:'Server Name',wcid_ranges:{},api_key_set:false};
 
@@ -528,7 +528,7 @@ function buildInnerTabs(){
 function switchType(type,btn){
   curType=type;curSub=TYPE_CFG[type].subTabs[0];
   spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
-  recipeReqs=[];recipeMods=[];cookbookEntries=[];
+  recipeReqs=[];recipeMods=[];cookbookEntries=[];createList=[];
   bodyParts=getBodyParts(31);
   document.querySelectorAll('.itab').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
@@ -677,7 +677,12 @@ function buildProps(){
         <div class="fg"><div class="fl">Luminance Award <span class="fc">I-332</span></div><input type="number" id="fLum" value="5000"></div>
         <div class="fg"><div class="fl">Aggro Range <span class="fc">F-31</span></div><input type="text" id="fAggroRange" value="16.0"></div>
         <div class="fg"><div class="fl">Casts Magic <span class="fc">B-6</span></div><select id="fUsesMana"><option value="0">No</option><option value="1">Yes</option></select></div>
-      </div></div>`;
+      </div></div>
+    <div class="sec"><div class="sh"><div class="st">Guaranteed Drops</div><div class="sl"></div></div>
+      <p class="note" style="margin-bottom:8px">Wire existing or custom items to drop on death. For items already in game (MMD notes, pyreals, etc.), enter the existing WCID — do NOT create a new file for them.</p>
+      <div id="createListRows">${buildCreateListRows()}</div>
+      <button class="add-btn" onclick="addCreateListRow()">+ Add Drop</button>
+    </div>\`;
     }
     if(t==='npc'){
       const isVendor=gi('fWType',10)===12;
@@ -774,6 +779,31 @@ function buildProps(){
     </div></div>`;
   }
   return h;
+}
+
+function buildCreateListRows(){
+  const DEST={0:'Contain',1:'Wield',2:'CorpseDrop',3:'Treasure',4:'Contains'};
+  return createList.map((r,i)=>`
+    <div style="display:grid;grid-template-columns:120px 1fr 80px 28px;gap:8px;align-items:end;margin-bottom:8px">
+      <div class="fg"><div class="fl">Destination</div>
+        <select id="cl_dest_${i}" onchange="createList[${i}].dest=parseInt(this.value);regen()">
+          <option value="2"${r.dest===2?' selected':''}>2 · CorpseDrop</option>
+          <option value="1"${r.dest===1?' selected':''}>1 · Wield</option>
+          <option value="0"${r.dest===0?' selected':''}>0 · Contain</option>
+        </select></div>
+      <div class="fg">
+        <div class="fl">Item WCID <span style="color:var(--ink-faint);font-size:9px">(existing items: 20634=100MMD, 273=Pyreal)</span></div>
+        <input type="number" id="cl_wcid_${i}" value="${r.wcid||0}" oninput="createList[${i}].wcid=parseInt(this.value);regen()">
+      </div>
+      <div class="fg"><div class="fl">Stack Size</div>
+        <input type="number" id="cl_stack_${i}" value="${r.stack||1}" oninput="createList[${i}].stack=parseInt(this.value);regen()"></div>
+      <button class="del" onclick="createList.splice(${i},1);rebuildPanel('properties')">✕</button>
+    </div>`).join('');
+}
+
+function addCreateListRow(){
+  createList.push({dest:2,wcid:0,stack:1});
+  rebuildPanel('properties');
 }
 
 function buildQuestProps(){
@@ -1316,257 +1346,507 @@ function parseSQLIntoForm(sql){
 
 function buildSQL(){
   const t=curType;
-  // Quest: simple format
+
+  // ── QUEST ────────────────────────────────────────────────────────────────────
   if(t==='quest'){
     const name=g('fName','NewQuest').replace(/\s+/g,'');
-    const p=[];
-    p.push(kw('DELETE FROM')+' `quest` '+kw('WHERE')+' `name` = '+st(name)+';');
-    p.push('');
-    p.push(kw('INSERT INTO')+' `quest` (`name`, `min_Delta`, `max_Solves`, `message`, `last_Modified`)');
-    p.push(kw('VALUES')+' ('+st(name)+', '+nm(gi('fMinDelta',0))+', '+nm(gi('fMaxSolves',1))+', '+st(g('fMsg',name))+', '+st('2025-01-01 00:00:00')+');');
-    // Strip HTML span tags for plain textarea — syntax color comes from CSS
-  const plain=p.join('\n').replace(/<span[^>]*>/g,'').replace(/<\/span>/g,'');
-  const el=$('sqlOut');
-  if(el&&!_userEditingSQL){
-    const pos=el.selectionStart;
-    el.value=plain;
-    // Restore cursor if user was in the textarea
-    try{el.selectionStart=pos;el.selectionEnd=pos;}catch(e){}
-  }return;
+    const minDelta=gi('fMinDelta',0);
+    const maxSolves=gi('fMaxSolves',1);
+    const msg=g('fMsg',name);
+    const lines=[
+      `DELETE FROM \`quest\` WHERE \`name\` = '${name}';`,
+      '',
+      `INSERT INTO \`quest\` (\`name\`, \`min_Delta\`, \`max_Solves\`, \`message\`, \`last_Modified\`)`,
+      `VALUES ('${name}', ${minDelta}, ${maxSolves}, '${msg}', '2025-01-01 00:00:00');`,
+    ];
+    writeSQLOut(lines.join('\n'));
+    return;
   }
-  // Recipe
+
+  // ── RECIPE ───────────────────────────────────────────────────────────────────
   if(t==='recipe'){buildRecipeSQL();return;}
 
+  // ── WEENIE CONTENT ───────────────────────────────────────────────────────────
   const wcid=gi('fWcid',850000);
-  const name=g('fName','New '+TYPE_CFG[t].label);
+  const name=g('fName','New Weenie');
   const wType=gi('fWType',10);
   const className=name.toLowerCase().replace(/[^a-z0-9]/g,'');
-  const now=new Date().toISOString().replace('T',' ').slice(0,19);
-  const typeNames={1:'Generic',2:'Clothing',3:'MissileLauncher',4:'Missile',6:'MeleeWeapon',7:'Portal',8:'Book',9:'Coin',10:'Creature',12:'Vendor',18:'Food',19:'Door',20:'Chest',21:'Container',22:'Key',28:'Healer',29:'LightSource',32:'SpellComponent',34:'Scroll',35:'Caster',37:'ManaStone',38:'Gem',51:'Stackable'};
-  const typeName=typeNames[wType]||'Generic';
+  const now='2025-01-01 00:00:00';
   const isCreature=t==='creature'||t==='npc';
-  const p=[];
-  p.push(cm('===== FILE: '+wcid+' '+name+'.sql ====='));p.push('');
-  p.push(kw('DELETE FROM')+' `weenie` '+kw('WHERE')+' `class_Id` = '+nm(wcid)+';');p.push('');
-  p.push(kw('INSERT INTO')+' `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)');
-  p.push(kw('VALUES')+' ('+nm(wcid)+', '+st(className)+', '+nm(wType)+', '+st(now)+') '+cm(typeName+' - custom content')+';');p.push('');
 
+  const lines=[];
+
+  // DELETE + weenie row
+  lines.push(`DELETE FROM \`weenie\` WHERE \`class_Id\` = ${wcid};`,'');
+  lines.push(`INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)`);
+  lines.push(`VALUES (${wcid}, '${className}', ${wType}, '${now}');`,'');
+
+  // Helper: emit a properties INSERT block
+  // rows: [[type, value, comment], ...]
+  // Generic emit helper — semicolon on last row BEFORE the comment (matches reference format)
+  function emitBlock(tableName, colNames, rows, rowFn){
+    if(!rows.length) return;
+    lines.push(`INSERT INTO \`${tableName}\` (${colNames})`);
+    rows.forEach((r,i)=>{
+      const isLast=(i===rows.length-1);
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}${rowFn(r,isLast)}`);
+    });
+    lines.push('');
+  }
+  function emitInt(rows){
+    emitBlock('weenie_properties_int','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
+      const comment=c?` /* ${c} */`:'';
+      return `(${wcid}, ${tp}, ${v})${isLast?';':''}${comment}`;
+    });
+  }
+  function emitBool(rows){
+    emitBlock('weenie_properties_bool','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
+      const comment=c?` /* ${c} */`:'';
+      return `(${wcid}, ${tp}, ${v})${isLast?';':''}${comment}`;
+    });
+  }
+  function emitFloat(rows){
+    emitBlock('weenie_properties_float','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
+      const comment=c?` /* ${c} */`:'';
+      const vs=Number.isInteger(v)?v.toFixed(1):parseFloat(v).toString();
+      return `(${wcid}, ${tp}, ${vs})${isLast?';':''}${comment}`;
+    });
+  }
+  function emitStr(rows){
+    emitBlock('weenie_properties_string','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
+      const comment=c?` /* ${c} */`:'';
+      const escaped=String(v).replace(/'/g,"''");
+      return `(${wcid}, ${tp}, '${escaped}')${isLast?';':''}${comment}`;
+    });
+  }
+  function emitDID(rows){
+    emitBlock('weenie_properties_d_i_d','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
+      const comment=c?` /* ${c} */`:'';
+      return `(${wcid}, ${tp}, ${v})${isLast?';':''}${comment}`;
+    });
+  }
+
+  // ── Build property arrays ─────────────────────────────────────────────────
   let IR=[],BR=[],FR=[],SR=[[1,name,'Name']],DR=[];
 
   if(isCreature){
     const ct=gi('cType',31);
-    IR.push([1,16,'ItemType - Creature'],[2,ct,'CreatureType - '+lookupName(CREATURE_TYPES,ct)],[3,gi('fPalette',9),'PaletteTemplate'],[6,-1,'ItemsCapacity'],[7,-1,'ContainersCapacity'],[16,t==='npc'?32:1,'ItemUseable'],[25,gi('fLevel',100),'Level']);
+    IR.push(
+      [1, 16, 'ItemType - Creature'],
+      [2, ct, 'CreatureType - '+lookupName(CREATURE_TYPES,ct)],
+      [3, gi('fPalette',9), 'PaletteTemplate'],
+      [6, -1, 'ItemsCapacity'],
+      [7, -1, 'ContainersCapacity'],
+      [16, t==='npc'?32:1, 'ItemUseable'],
+      [25, gi('fLevel',100), 'Level'],
+    );
     if(t==='creature'){
-      IR.push([40,2,'CombatMode - Melee'],[44,gi('fDmg',80),'Damage'],[45,gi('fDmgType',1),'DamageType - '+lookupName(DMG_TYPES,gi('fDmgType',1))],[47,gi('fAttackType',4),'AttackType'],[48,gi('fWepSkill',44),'WeaponSkill - '+lookupName(WEP_SKILLS,gi('fWepSkill',44))],[101,gi('fCombatStyle',2),'AiAllowedCombatStyle'],[133,4,'ShowableOnRadar - Always'],[146,gi('fXp',50000),'XpOverride'],[332,gi('fLum',5000),'LuminanceAward'],[93,3080,'PhysicsState - Creature']);
-      BR.push([1,'True','Stuck'],[6,gi('fUsesMana',0)?'True':'False','AiUsesMana'],[12,'True','ReportCollisions'],[13,'False','Ethereal'],[14,'True','GravityStatus'],[15,'True','LightsStatus'],[19,'True','Attackable'],[120,'False','TreasureCorpse']);
-      const rs=gf('rSlash',1),rp=gf('rPierce',1),rb=gf('rBludge',1),rc=gf('rCold',1),rf=gf('rFire',1),ra=gf('rAcid',1),re=gf('rElec',1),rn=gf('rNether',1);
-      FR=[[1,5,'HeartbeatInterval'],[3,0.5,'HealthRate'],[4,0.4,'StaminaRate'],[5,1.5,'ManaRate'],[12,1.0,'Shade'],[13,rs,'ArmorModVsSlash'],[14,rp,'ArmorModVsPierce'],[15,rb,'ArmorModVsBludgeon'],[16,rc,'ArmorModVsCold'],[17,rf,'ArmorModVsFire'],[18,ra,'ArmorModVsAcid'],[19,re,'ArmorModVsElectric'],[31,gf('fAggroRange',16),'VisualAwarenessRange'],[39,gf('fScale',1),'DefaultScale'],[64,rs,'ResistSlash'],[65,rp,'ResistPierce'],[66,rb,'ResistBludgeon'],[67,rf,'ResistFire'],[68,rc,'ResistCold'],[69,ra,'ResistAcid'],[70,re,'ResistElectric'],[165,rn,'ArmorModVsNether'],[166,rn,'ResistNether']];
+      IR.push(
+        [40, 2, 'CombatMode - Melee'],
+        [44, gi('fDmg',80), 'Damage'],
+        [45, gi('fDmgType',1), 'DamageType - '+lookupName(DMG_TYPES,gi('fDmgType',1))],
+        [47, gi('fAttackType',4), 'AttackType'],
+        [48, gi('fWepSkill',44), 'WeaponSkill - '+lookupName(WEP_SKILLS,gi('fWepSkill',44))],
+        [93, 3080, 'PhysicsState'],
+        [101, gi('fCombatStyle',2), 'AiAllowedCombatStyle'],
+        [133, 4, 'ShowableOnRadar'],
+        [146, gi('fXp',50000), 'XpOverride'],
+        [332, gi('fLum',5000), 'LuminanceAward'],
+      );
+      BR.push(
+        [1, 'True', 'Stuck'],
+        [6, gi('fUsesMana',0)?'True':'False', 'AiUsesMana'],
+        [12, 'True', 'ReportCollisions'],
+        [13, 'False', 'Ethereal'],
+        [14, 'True', 'GravityStatus'],
+        [15, 'True', 'LightsStatus'],
+        [19, 'True', 'Attackable'],
+        [120, 'False', 'TreasureCorpse'],
+      );
+      const rs=gf('rSlash',1),rp=gf('rPierce',1),rb=gf('rBludge',1),rc=gf('rCold',1),
+            rf=gf('rFire',1),ra=gf('rAcid',1),re=gf('rElec',1),rn=gf('rNether',1);
+      const sc=gf('fScale',1.0),ar=gf('fAggroRange',16.0);
+      FR.push(
+        [1, 5, 'HeartbeatInterval'],
+        [3, 0.5, 'HealthRate'],
+        [4, 0.4, 'StaminaRate'],
+        [5, 1.5, 'ManaRate'],
+        [12, 1.0, 'Shade'],
+        [13, rs, 'ArmorModVsSlash'],
+        [14, rp, 'ArmorModVsPierce'],
+        [15, rb, 'ArmorModVsBludgeon'],
+        [16, rc, 'ArmorModVsCold'],
+        [17, rf, 'ArmorModVsFire'],
+        [18, ra, 'ArmorModVsAcid'],
+        [19, re, 'ArmorModVsElectric'],
+        [31, ar, 'VisualAwarenessRange'],
+        [39, sc, 'DefaultScale'],
+        [64, rs, 'ResistSlash'],
+        [65, rp, 'ResistPierce'],
+        [66, rb, 'ResistBludgeon'],
+        [67, rf, 'ResistFire'],
+        [68, rc, 'ResistCold'],
+        [69, ra, 'ResistAcid'],
+        [70, re, 'ResistElectric'],
+        [165, rn, 'ArmorModVsNether'],
+        [166, rn, 'ResistNether'],
+      );
+      const tr=gi('fTreasureTier',3100);
+      if(tr) DR.push([35, tr, 'DeathTreasureType']);
     }
     if(t==='npc'){
-      IR.push([95,gi('fRadarColor',8),'RadarBlipColor'],[133,4,'ShowableOnRadar'],[134,16,'PlayerKillerStatus - RubberGlue'],[146,0,'XpOverride'],[93,6292504,'PhysicsState - NPC']);
-      if(wType===12)IR.push([74,gi('fMerchItemTypes',0),'MerchandiseItemTypes'],[75,gi('fMerchMinVal',0),'MerchandiseMinValue'],[76,gi('fMerchMaxVal',0),'MerchandiseMaxValue'],[126,gi('fVendorHappy',0),'VendorHappyMean']);
-      BR.push([1,'True','Stuck'],[8,'True','AllowGive'],[12,'True','ReportCollisions'],[13,'False','Ethereal'],[14,'True','GravityStatus'],[19,'False','Attackable'],[29,'True','NoCorpse'],[41,'True','ReportCollisionsAsEnvironment'],[42,'True','AllowEdgeSlide'],[52,'True','AiImmobile']);
-      FR=[[1,60,'HeartbeatInterval'],[3,0.16,'HealthRate'],[4,5,'StaminaRate'],[5,1,'ManaRate'],[39,gf('fScale',1),'DefaultScale'],[54,gf('fUseRadius',3),'UseRadius']];
-      if(wType===12)FR.push([37,gf('fBuyRate',1),'BuyPrice'],[38,gf('fSellRate',1.1),'SellPrice']);
-      const sd=g('fShortDesc','');if(sd)SR.push([15,sd,'ShortDesc']);
-      const ld=g('fLongDesc','');if(ld)SR.push([16,ld,'LongDesc']);
+      IR.push(
+        [93, 6292504, 'PhysicsState'],
+        [95, gi('fRadarColor',8), 'RadarBlipColor'],
+        [133, 4, 'ShowableOnRadar'],
+        [134, 16, 'PlayerKillerStatus - RubberGlue'],
+        [146, 0, 'XpOverride'],
+      );
+      if(wType===12) IR.push(
+        [74, gi('fMerchItemTypes',0), 'MerchandiseItemTypes'],
+        [75, gi('fMerchMinVal',0), 'MerchandiseMinValue'],
+        [76, gi('fMerchMaxVal',0), 'MerchandiseMaxValue'],
+        [126, gi('fVendorHappy',0), 'VendorHappyMean'],
+      );
+      BR.push(
+        [1, 'True', 'Stuck'],
+        [8, 'True', 'AllowGive'],
+        [12, 'True', 'ReportCollisions'],
+        [13, 'False', 'Ethereal'],
+        [14, 'True', 'GravityStatus'],
+        [19, 'False', 'Attackable'],
+        [29, 'True', 'NoCorpse'],
+        [41, 'True', 'ReportCollisionsAsEnvironment'],
+        [42, 'True', 'AllowEdgeSlide'],
+        [52, 'True', 'AiImmobile'],
+      );
+      FR.push(
+        [1, 60, 'HeartbeatInterval'],
+        [3, 0.16, 'HealthRate'],
+        [4, 5.0, 'StaminaRate'],
+        [5, 1.0, 'ManaRate'],
+        [39, gf('fScale',1.0), 'DefaultScale'],
+        [54, gf('fUseRadius',3.0), 'UseRadius'],
+      );
+      if(wType===12) FR.push(
+        [37, gf('fBuyRate',1.0), 'BuyPrice'],
+        [38, gf('fSellRate',1.1), 'SellPrice'],
+      );
+      const sd=g('fShortDesc',''); if(sd) SR.push([15,sd,'ShortDesc']);
+      const ld=g('fLongDesc','');  if(ld) SR.push([16,ld,'LongDesc']);
     }
-  } else if(t==='item'){
-    const enc=gi('fEncumb',10),ms=gi('fMaxStack',1);
-    IR.push([1,2048,'ItemType - Gem'],[3,gi('fPalette',39),'PaletteTemplate'],[5,enc,'EncumbranceVal'],[11,ms,'MaxStackSize'],[12,1,'StackSize'],[13,enc,'StackUnitEncumbrance'],[16,gi('fItemUse',1),'ItemUseable'],[19,gi('fValue',100),'Value'],[33,gi('fBonded',1),'Bonded'],[93,1044,'PhysicsState'],[114,gi('fAttuned',1),'Attuned']);
-    if(gi('fSpellcraft',0))IR.push([106,gi('fSpellcraft',0),'ItemSpellcraft']);
-    FR=[[39,gf('fScale',1),'DefaultScale']];
-    const sd=g('fShortDesc','');if(sd)SR.push([15,sd,'ShortDesc']);
-    const um=g('fUseMsg','');if(um)SR.push([14,um,'Use']);
-  } else if(t==='weapon'){
+  }
+  else if(t==='item'){
+    const enc=gi('fEncumb',10), ms=gi('fMaxStack',1);
+    IR.push(
+      [1, 2048, 'ItemType - Gem'],
+      [3, gi('fPalette',39), 'PaletteTemplate'],
+      [5, enc, 'EncumbranceVal'],
+      [11, ms, 'MaxStackSize'],
+      [12, 1, 'StackSize'],
+      [13, enc, 'StackUnitEncumbrance'],
+      [16, gi('fItemUse',1), 'ItemUseable'],
+      [19, gi('fValue',100), 'Value'],
+      [33, gi('fBonded',1), 'Bonded'],
+      [93, 1044, 'PhysicsState'],
+      [114, gi('fAttuned',1), 'Attuned'],
+    );
+    if(gi('fSpellcraft',0)) IR.push([106,gi('fSpellcraft',0),'ItemSpellcraft']);
+    FR.push([39, gf('fScale',1.0), 'DefaultScale']);
+    const sd=g('fShortDesc',''); if(sd) SR.push([15,sd,'ShortDesc']);
+    const um=g('fUseMsg','');    if(um) SR.push([14,um,'Use']);
+  }
+  else if(t==='weapon'){
     const ws=gi('fWepSkill',44);
-    IR.push([1,1,'ItemType - MeleeWeapon'],[3,gi('fPalette',20),'PaletteTemplate'],[5,gi('fEncumb',400),'EncumbranceVal'],[19,gi('fValue',5000),'Value'],[44,gi('fDmg',80),'Damage'],[45,gi('fDmgType',1),'DamageType - '+lookupName(DMG_TYPES,gi('fDmgType',1))],[47,gi('fAttackType',4),'AttackType'],[48,ws,'WeaponSkill - '+lookupName(WEP_SKILLS,ws)],[49,gi('fWepTime',45),'WeaponTime'],[93,1044,'PhysicsState'],[158,1,'WieldRequirements - Skill'],[159,ws,'WieldSkilltype'],[160,gi('fWieldDiff',290),'WieldDifficulty']);
-    if(gi('fElemBonus',0))IR.push([204,gi('fElemBonus',0),'ElementalDamageBonus']);
-    const mm=gf('fMissileDef',0),mg=gf('fMagicDef',0),cm2=gf('fCritMult',1);
-    FR=[[22,gf('fDmgVar',0.4),'DamageVariance'],[29,gf('fWepDef',1),'WeaponDefense'],[39,gf('fScale',1),'DefaultScale'],[62,gf('fWepOff',1),'WeaponOffense']];
-    if(mm)FR.push([149,mm,'WeaponMissileDefense']);if(mg)FR.push([150,mg,'WeaponMagicDefense']);if(cm2!==1)FR.push([136,cm2,'CriticalMultiplier']);
-  } else if(t==='armor'){
-    const at=gi('fArmorType',11),vl=gi('fValidLoc',512),isCloth=at===1;
-    IR.push([1,2,'ItemType - Armor'],[3,gi('fPalette',9),'PaletteTemplate'],[4,vl,'ClothingPriority'],[5,gi('fEncumb',300),'EncumbranceVal'],[9,vl,'ValidLocations'],[10,vl,'CurrentWieldedLocation'],[19,gi('fValue',3000),'Value'],[27,at,'ArmorType - '+lookupName(ARMOR_TYPES,at)],[28,gi('fArmorLevel',100),'ArmorLevel'],[93,1044,'PhysicsState']);
-    if(gi('fSpellcraft',0))IR.push([106,gi('fSpellcraft',0),'ItemSpellcraft']);
-    FR=[[39,gf('fScale',1),'DefaultScale']];
-    if(!isCloth){const fs=[['mSlash',13,'ArmorModVsSlash'],['mPierce',14,'ArmorModVsPierce'],['mBludge',15,'ArmorModVsBludgeon'],['mCold',16,'ArmorModVsCold'],['mFire',17,'ArmorModVsFire'],['mAcid',18,'ArmorModVsAcid'],['mElec',19,'ArmorModVsElectric'],['mNether',165,'ArmorModVsNether']];fs.forEach(([id,tp,c])=>FR.push([tp,gf(id,1),c]));}
-    [['alSlash',13],['alPierce',14],['alBludge',15],['alCold',16],['alFire',17],['alAcid',18],['alElec',19],['alNether',165]].forEach(([id,tp])=>{const v=gi(id,0);if(v)IR.push([tp,v,'ArmorLevel_vs_'+id.replace('al','')]);});
-  } else if(t==='jewelry'){
+    IR.push(
+      [1, 1, 'ItemType - MeleeWeapon'],
+      [3, gi('fPalette',20), 'PaletteTemplate'],
+      [5, gi('fEncumb',400), 'EncumbranceVal'],
+      [19, gi('fValue',5000), 'Value'],
+      [44, gi('fDmg',80), 'Damage'],
+      [45, gi('fDmgType',1), 'DamageType - '+lookupName(DMG_TYPES,gi('fDmgType',1))],
+      [47, gi('fAttackType',4), 'AttackType'],
+      [48, ws, 'WeaponSkill - '+lookupName(WEP_SKILLS,ws)],
+      [49, gi('fWepTime',45), 'WeaponTime'],
+      [93, 1044, 'PhysicsState'],
+      [158, 1, 'WieldRequirements - Skill'],
+      [159, ws, 'WieldSkilltype'],
+      [160, gi('fWieldDiff',290), 'WieldDifficulty'],
+    );
+    const eb=gi('fElemBonus',0); if(eb) IR.push([204,eb,'ElementalDamageBonus']);
+    const mm=gf('fMissileDef',0), mg=gf('fMagicDef',0), cm2=gf('fCritMult',1.0);
+    FR.push(
+      [22, gf('fDmgVar',0.4), 'DamageVariance'],
+      [29, gf('fWepDef',1.0), 'WeaponDefense'],
+      [39, gf('fScale',1.0), 'DefaultScale'],
+      [62, gf('fWepOff',1.0), 'WeaponOffense'],
+    );
+    if(mm) FR.push([149,mm,'WeaponMissileDefense']);
+    if(mg) FR.push([150,mg,'WeaponMagicDefense']);
+    if(cm2!==1.0) FR.push([136,cm2,'CriticalMultiplier']);
+  }
+  else if(t==='armor'){
+    const at=gi('fArmorType',11), vl=gi('fValidLoc',512), isCloth=(at===1);
+    IR.push(
+      [1, 2, 'ItemType - Armor'],
+      [3, gi('fPalette',9), 'PaletteTemplate'],
+      [4, vl, 'ClothingPriority'],
+      [5, gi('fEncumb',300), 'EncumbranceVal'],
+      [9, vl, 'ValidLocations'],
+      [10, vl, 'CurrentWieldedLocation'],
+      [19, gi('fValue',3000), 'Value'],
+      [27, at, 'ArmorType - '+lookupName(ARMOR_TYPES,at)],
+      [28, gi('fArmorLevel',100), 'ArmorLevel'],
+      [93, 1044, 'PhysicsState'],
+    );
+    if(gi('fSpellcraft',0)) IR.push([106,gi('fSpellcraft',0),'ItemSpellcraft']);
+    FR.push([39, gf('fScale',1.0), 'DefaultScale']);
+    if(!isCloth){
+      FR.push(
+        [13, gf('mSlash',1.0), 'ArmorModVsSlash'],
+        [14, gf('mPierce',1.0), 'ArmorModVsPierce'],
+        [15, gf('mBludge',1.0), 'ArmorModVsBludgeon'],
+        [16, gf('mCold',1.0), 'ArmorModVsCold'],
+        [17, gf('mFire',1.0), 'ArmorModVsFire'],
+        [18, gf('mAcid',1.0), 'ArmorModVsAcid'],
+        [19, gf('mElec',1.0), 'ArmorModVsElectric'],
+        [165, gf('mNether',1.0), 'ArmorModVsNether'],
+      );
+    }
+    [['alSlash',13],['alPierce',14],['alBludge',15],['alCold',16],
+     ['alFire',17],['alAcid',18],['alElec',19],['alNether',165]].forEach(([id,tp])=>{
+      const v=gi(id,0); if(v) IR.push([tp,v,'ArmorLevel_'+id.replace('al','')]);
+    });
+  }
+  else if(t==='jewelry'){
     const vl=gi('fValidLoc',134217728);
-    IR.push([1,2,'ItemType - Jewelry'],[3,gi('fPalette',20),'PaletteTemplate'],[4,vl,'ClothingPriority'],[5,gi('fEncumb',5),'EncumbranceVal'],[9,vl,'ValidLocations'],[10,vl,'CurrentWieldedLocation'],[19,gi('fValue',1000),'Value'],[27,gi('fArmorType',1),'ArmorType'],[33,gi('fBonded',0),'Bonded'],[93,1044,'PhysicsState'],[114,gi('fAttuned',0),'Attuned']);
-    if(gi('fSpellcraft',0))IR.push([106,gi('fSpellcraft',0),'ItemSpellcraft']);
-    [['fDmgRating',307],['fDmgResist',308],['fCritRating',313],['fCritDmgRating',314],['fCritResRating',315],['fHealResist',317],['fHealBoost',323]].forEach(([id,tp])=>{const v=gi(id,0);if(v)IR.push([tp,v,PROP_INT[tp]||id]);});
-    FR=[[39,gf('fScale',1),'DefaultScale']];const mc=gf('fManaConv',0);if(mc)FR.push([144,mc,'ManaConversionMod']);
-    const sd=g('fShortDesc','');if(sd)SR.push([15,sd,'ShortDesc']);
+    IR.push(
+      [1, 2, 'ItemType - Jewelry'],
+      [3, gi('fPalette',20), 'PaletteTemplate'],
+      [4, vl, 'ClothingPriority'],
+      [5, gi('fEncumb',5), 'EncumbranceVal'],
+      [9, vl, 'ValidLocations'],
+      [10, vl, 'CurrentWieldedLocation'],
+      [19, gi('fValue',1000), 'Value'],
+      [27, gi('fArmorType',1), 'ArmorType - Cloth'],
+      [33, gi('fBonded',0), 'Bonded'],
+      [93, 1044, 'PhysicsState'],
+      [114, gi('fAttuned',0), 'Attuned'],
+    );
+    if(gi('fSpellcraft',0)) IR.push([106,gi('fSpellcraft',0),'ItemSpellcraft']);
+    [[307,'fDmgRating','DamageRating'],[308,'fDmgResist','DamageResistRating'],
+     [313,'fCritRating','CritRating'],[314,'fCritDmgRating','CritDamageRating'],
+     [315,'fCritResRating','CritResistRating'],[317,'fHealResist','HealingResistRating'],
+     [323,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{
+      const v=gi(id,0); if(v) IR.push([tp,v,c]);
+    });
+    FR.push([39,gf('fScale',1.0),'DefaultScale']);
+    const mc=gf('fManaConv',0); if(mc) FR.push([144,mc,'ManaConversionMod']);
+    const sd=g('fShortDesc',''); if(sd) SR.push([15,sd,'ShortDesc']);
   }
 
   // Extra props from Advanced tab
-  extraInt.forEach(r=>{if(r.type)IR.push([parseInt(r.type),parseInt(r.value)||0,PROP_INT[r.type]||'custom_'+r.type]);});
-  extraBool.forEach(r=>{if(r.type)BR.push([parseInt(r.type),r.value||'False',PROP_BOOL[r.type]||'custom_'+r.type]);});
-  extraFloat.forEach(r=>{if(r.type)FR.push([parseInt(r.type),parseFloat(r.value)||0,PROP_FLOAT[r.type]||'custom_'+r.type]);});
-  extraStr.forEach(r=>{if(r.type&&r.value)SR.push([parseInt(r.type),r.value,PROP_STRING[r.type]||'custom_'+r.type]);});
-  extraDID.forEach(r=>{if(r.type&&r.value)DR.push([parseInt(r.type),r.value,PROP_DID[r.type]||'custom_'+r.type]);});
+  extraInt.forEach(r=>{if(r.type) IR.push([parseInt(r.type), parseInt(r.value)||0, PROP_INT[r.type]||'custom_'+r.type]);});
+  extraBool.forEach(r=>{if(r.type) BR.push([parseInt(r.type), r.value||'False', PROP_BOOL[r.type]||'custom_'+r.type]);});
+  extraFloat.forEach(r=>{if(r.type) FR.push([parseInt(r.type), parseFloat(r.value)||0, PROP_FLOAT[r.type]||'custom_'+r.type]);});
+  extraStr.forEach(r=>{if(r.type&&r.value) SR.push([parseInt(r.type), r.value, PROP_STRING[r.type]||'custom_'+r.type]);});
+  extraDID.forEach(r=>{if(r.type&&r.value) DR.push([parseInt(r.type), r.value, PROP_DID[r.type]||'custom_'+r.type]);});
 
-  function writeRows(label,cols,rows){
-    if(!rows.length)return;
-    p.push(kw('INSERT INTO')+' `'+label+'` ('+cols+')');
-    rows.forEach((r,i)=>{const[tp,v,c]=r;const row='('+nm(wcid)+', '+pad(nm(tp),5)+', '+pad(nm(v),13)+') '+cm(c);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
-    p.push(';');p.push('');
-  }
-  writeRows('weenie_properties_int','`object_Id`, `type`, `value`',IR);
-  if(BR.length){
-    p.push(kw('INSERT INTO')+' `weenie_properties_bool` (`object_Id`, `type`, `value`)');
-    BR.forEach((r,i)=>{const[tp,v,c]=r;const row='('+nm(wcid)+', '+pad(nm(tp),5)+', '+String(v).padEnd(6)+') '+cm(c);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
-    p.push(';');p.push('');
-  }
-  if(FR.length){
-    p.push(kw('INSERT INTO')+' `weenie_properties_float` (`object_Id`, `type`, `value`)');
-    FR.forEach((r,i)=>{const[tp,v,c]=r;const row='('+nm(wcid)+', '+pad(nm(tp),5)+', '+String(v).padEnd(9)+') '+cm(c);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
-    p.push(';');p.push('');
-  }
+  // Emit standard tables
+  emitInt(IR);
+  emitBool(BR);
+  emitFloat(FR);
+  emitStr(SR);
 
-  // String props
-  const extraStrings=isCreature&&t==='creature'?[]:[];
-  p.push(kw('INSERT INTO')+' `weenie_properties_string` (`object_Id`, `type`, `value`)');
-  SR.forEach((r,i)=>{const[tp,v,c]=r;const row='('+nm(wcid)+', '+pad(nm(tp),5)+', '+st(v)+') '+cm(c);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
-  p.push(';');p.push('');
+  // DID — always include base entries
+  const baseDR=[
+    [1, '0x02000178', 'Setup'],
+    [2, '0x09000008', 'MotionTable'],
+    [3, '0x20000008', 'SoundTable'],
+    [8, '0x06001036', 'Icon'],
+    [22, '0x34000026', 'PhysicsEffectTable'],
+  ];
+  emitDID([...baseDR,...DR]);
 
-  // DID props
-  const baseDR=[[1,'0x02000178','Setup'],[2,'0x09000008','MotionTable'],[3,'0x20000008','SoundTable'],[8,'0x06001036','Icon'],[22,'0x34000026','PhysicsEffectTable']];
-  if(t==='creature'){const tr=gi('fTreasureTier',3100);if(tr)baseDR.push([35,tr,'DeathTreasureType']);}
-  const allDR=[...baseDR,...DR];
-  p.push(kw('INSERT INTO')+' `weenie_properties_d_i_d` (`object_Id`, `type`, `value`)');
-  allDR.forEach((r,i)=>{const[tp,v,c]=r;const row='('+nm(wcid)+', '+pad(nm(tp),5)+', '+(typeof v==='number'?nm(v):v.padEnd(14))+') '+cm(c);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
-  p.push(';');p.push('');
-
-  // Attributes (always emit when tab is rendered and values exist)
-  if(isCreature&&$('attr_1')){
+  // ── Attributes ────────────────────────────────────────────────────────────
+  if(isCreature && $('attr_1')){
     const attrs=[[1,'Strength'],[2,'Endurance'],[3,'Quickness'],[4,'Coordination'],[5,'Focus'],[6,'Self']];
-    p.push(kw('INSERT INTO')+' `weenie_properties_attribute` (`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`)');
-    attrs.forEach(([tp,n],i)=>{const v=gi('attr_'+tp,260);const row='('+nm(wcid)+', '+nm(tp)+', '+nm(v)+', 0, 0) '+cm(n);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
-    p.push(';');p.push('');
-    const vits=[[1,'MaxHealth',gi('vital_1',2000)],[3,'MaxStamina',gi('vital_3',2000)],[5,'MaxMana',gi('vital_5',800)]];
-    p.push(kw('INSERT INTO')+' `weenie_properties_attribute_2nd` (`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`, `current_Level`)');
-    vits.forEach(([tp,n,v],i)=>{const row='('+nm(wcid)+', '+nm(tp)+', '+nm(v)+', 0, 0, '+nm(v)+') '+cm(n);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
-    p.push(';');p.push('');
-  }
-
-  // Skills
-  if(isCreature&&$('sk_sac_6')){
-    const trained=ALL_SKILLS.filter(([id])=>gi('sk_sac_'+id,1)>1&&gi('sk_init_'+id,0)>0);
-    if(trained.length){
-      p.push(kw('INSERT INTO')+' `weenie_properties_skill` (`object_Id`, `type`, `level_From_P_P`, `s_a_c`, `p_p`, `init_Level`, `resistance_At_Last_Check`, `last_Used_Time`)');
-      trained.forEach(([id,name],i)=>{const sac=gi('sk_sac_'+id,2),init=gi('sk_init_'+id,0);const row='('+nm(wcid)+', '+pad(nm(id),4)+', 0, '+nm(sac)+', 0, '+nm(init)+', 0, 0) '+cm(name+' — '+lookupName(SKILL_SAC,sac));p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
-      p.push(';');p.push('');
-    }
-  }
-
-  // Spell book
-  if(spells.length&&$('fWcid')){
-    const valid=spells.filter(sp=>sp.id);
-    if(valid.length){
-      p.push(kw('INSERT INTO')+' `weenie_properties_spell_book` (`object_Id`, `spell`, `probability`)');
-      valid.forEach((sp,i)=>{const row='('+nm(wcid)+', '+pad(nm(sp.id),7)+', '+nm(sp.prob||2.0)+') '+cm(sp.name||'');p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
-      p.push(';');p.push('');
-    }
-  }
-
-  // Body parts
-  if(isCreature&&$('bp_dt_0')){
-    p.push(kw('INSERT INTO')+' `weenie_properties_body_part`');
-    p.push('  (`object_Id`, `key`, `d_Type`, `d_Val`, `d_Var`, `base_Armor`,');
-    p.push('   `armor_Vs_Slash`, `armor_Vs_Pierce`, `armor_Vs_Bludgeon`, `armor_Vs_Cold`,');
-    p.push('   `armor_Vs_Fire`, `armor_Vs_Acid`, `armor_Vs_Electric`, `armor_Vs_Nether`,');
-    p.push('   `b_h`, `h_l_f`, `m_l_f`, `l_l_f`, `h_r_f`, `m_r_f`, `l_r_f`,');
-    p.push('   `h_l_b`, `m_l_b`, `l_l_b`, `h_r_b`, `m_r_b`, `l_r_b`)');
-    bodyParts.forEach((bp,i)=>{
-      const dt=gi('bp_dt_'+i,4),dv=gi('bp_dv_'+i,0),al=gi('bp_al_'+i,80),sl=gi('bp_sl_'+i,bp.sl||64),pi=gi('bp_pi_'+i,bp.pi||56),bl=gi('bp_bl_'+i,bp.bl||120),co=gi('bp_co_'+i,bp.co||40),fi=gi('bp_fi_'+i,bp.fi||120),ac=gi('bp_ac_'+i,bp.ac||80),el=gi('bp_el_'+i,bp.el||80),nt=gi('bp_nt_'+i,0);
-      const row='('+nm(wcid)+', '+nm(bp.k)+', '+nm(dt)+', '+nm(dv)+', 0, '+nm(al)+', '+nm(sl)+', '+nm(pi)+', '+nm(bl)+', '+nm(co)+', '+nm(fi)+', '+nm(ac)+', '+nm(el)+', '+nm(nt)+', 1, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0) '+cm(bp.n);
-      p.push(i===0?kw('VALUES')+' '+row:'     , '+row);
+    lines.push(`INSERT INTO \`weenie_properties_attribute\` (\`object_Id\`, \`type\`, \`init_Level\`, \`level_From_C_P\`, \`c_P_Spent\`)`);
+    attrs.forEach(([tp,n],i)=>{
+      const v=gi('attr_'+tp,260);
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(${wcid}, ${tp}, ${v}, 0, 0)${i===attrs.length-1?';':''} /* ${n} */`);
     });
-    p.push(';');p.push('');
+    lines.push('');
+    const vits=[[1,'MaxHealth',gi('vital_1',2000)],[3,'MaxStamina',gi('vital_3',2000)],[5,'MaxMana',gi('vital_5',800)]];
+    lines.push(`INSERT INTO \`weenie_properties_attribute_2nd\` (\`object_Id\`, \`type\`, \`init_Level\`, \`level_From_C_P\`, \`c_P_Spent\`, \`current_Level\`)`);
+    vits.forEach(([tp,n,v],i)=>{
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(${wcid}, ${tp}, ${v}, 0, 0, ${v})${i===vits.length-1?';':''} /* ${n} */`);
+    });
+    lines.push('');
   }
 
-  // Emotes
+  // ── Skills ────────────────────────────────────────────────────────────────
+  if(isCreature && $('sk_sac_6')){
+    const trained=ALL_SKILLS.filter(([id])=>gi('sk_sac_'+id,1)>1 && gi('sk_init_'+id,0)>0);
+    if(trained.length){
+      lines.push(`INSERT INTO \`weenie_properties_skill\` (\`object_Id\`, \`type\`, \`level_From_P_P\`, \`s_a_c\`, \`p_p\`, \`init_Level\`, \`resistance_At_Last_Check\`, \`last_Used_Time\`)`);
+      trained.forEach(([id,name],i)=>{
+        const sac=gi('sk_sac_'+id,2), init=gi('sk_init_'+id,0);
+        const prefix=i===0?'VALUES ':'     , ';
+        lines.push(`${prefix}(${wcid}, ${id}, 0, ${sac}, 0, ${init}, 0, 0)${i===trained.length-1?';':''} /* ${name} — ${lookupName(SKILL_SAC,sac)} */`);
+      });
+      lines.push('');
+    }
+  }
+
+  // ── Spell book ───────────────────────────────────────────────────────────
+  const validSpells=spells.filter(sp=>sp.id);
+  if(validSpells.length){
+    lines.push(`INSERT INTO \`weenie_properties_spell_book\` (\`object_Id\`, \`spell\`, \`probability\`)`);
+    validSpells.forEach((sp,i)=>{
+      const prefix=i===0?'VALUES ':'     , ';
+      const name=sp.name?` /* ${sp.name} */`:'';
+      lines.push(`${prefix}(${wcid}, ${sp.id}, ${sp.prob||2.0})${i===validSpells.length-1?';':''}${name}`);
+    });
+    lines.push('');
+  }
+
+  // ── Body parts ───────────────────────────────────────────────────────────
+  if(isCreature && $('bp_dt_0')){
+    lines.push(`INSERT INTO \`weenie_properties_body_part\``);
+    lines.push(`  (\`object_Id\`, \`key\`, \`d_Type\`, \`d_Val\`, \`d_Var\`, \`base_Armor\`,`);
+    lines.push(`   \`armor_Vs_Slash\`, \`armor_Vs_Pierce\`, \`armor_Vs_Bludgeon\`, \`armor_Vs_Cold\`,`);
+    lines.push(`   \`armor_Vs_Fire\`, \`armor_Vs_Acid\`, \`armor_Vs_Electric\`, \`armor_Vs_Nether\`,`);
+    lines.push(`   \`b_h\`, \`h_l_f\`, \`m_l_f\`, \`l_l_f\`, \`h_r_f\`, \`m_r_f\`, \`l_r_f\`,`);
+    lines.push(`   \`h_l_b\`, \`m_l_b\`, \`l_l_b\`, \`h_r_b\`, \`m_r_b\`, \`l_r_b\`)`);
+    bodyParts.forEach((bp,i)=>{
+      const dt=gi('bp_dt_'+i,4), dv=gi('bp_dv_'+i,0), al=gi('bp_al_'+i,80);
+      const sl=gi('bp_sl_'+i,64), pi=gi('bp_pi_'+i,56), bl=gi('bp_bl_'+i,120);
+      const co=gi('bp_co_'+i,40), fi=gi('bp_fi_'+i,120), ac=gi('bp_ac_'+i,80);
+      const el=gi('bp_el_'+i,80), nt=gi('bp_nt_'+i,0);
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(${wcid}, ${bp.k}, ${dt}, ${dv}, 0, ${al}, ${sl}, ${pi}, ${bl}, ${co}, ${fi}, ${ac}, ${el}, ${nt}, 1, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0)${i===bodyParts.length-1?';':''} /* ${bp.n} */`);
+    });
+    lines.push('');
+  }
+
+  // ── Create List (guaranteed drops) ───────────────────────────────────────
+  if(createList.length){
+    lines.push(`INSERT INTO \`weenie_properties_create_list\` (\`object_Id\`, \`destination\`, \`weenie_Class_Id\`, \`stack_Size\`, \`palette\`, \`shade\`, \`try_To_Bond\`)`);
+    createList.forEach((r,i)=>{
+      const isLast=(i===createList.length-1);
+      const destNames={0:'Contain',1:'Wield',2:'CorpseDrop',3:'Treasure',4:'Contains'};
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(${wcid}, ${r.dest}, ${r.wcid||0}, ${r.stack||1}, 0, 0, False)${isLast?';':''} /* ${destNames[r.dest]||'Drop'}: ${r.stack}x WCID ${r.wcid} */`);
+    });
+    lines.push('');
+  }
+
+  // ── Emotes ───────────────────────────────────────────────────────────────
   if(emotes.length){
     emotes.forEach(em=>{
       const catName=lookupName(EMOTE_CATS,em.category||7);
-      p.push('');
-      p.push(kw('INSERT INTO')+' `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)');
-      const wf=em.wcidFilter&&em.wcidFilter!=='0'&&em.wcidFilter!==0?nm(em.wcidFilter):'NULL';
-      const qf=em.questFilter?st(em.questFilter):'NULL';
-      p.push(kw('VALUES')+' ('+nm(wcid)+', '+nm(em.category||7)+' '+cm(catName)+', '+nm(em.prob||1)+', '+wf+', NULL, NULL, '+qf+', NULL, NULL, NULL);');
-      p.push('');p.push(kw('SET')+' @parent_id = LAST_INSERT_ID();');
+      const wf=(em.wcidFilter&&em.wcidFilter!=='0'&&em.wcidFilter!==0)?em.wcidFilter:'NULL';
+      const qf=em.questFilter?`'${em.questFilter}'`:'NULL';
+      lines.push('');
+      lines.push(`INSERT INTO \`weenie_properties_emote\` (\`object_Id\`, \`category\`, \`probability\`, \`weenie_Class_Id\`, \`style\`, \`substyle\`, \`quest\`, \`vendor_Type\`, \`min_Health\`, \`max_Health\`)`);
+      lines.push(`VALUES (${wcid}, ${em.category||7} /* ${catName} */, ${em.prob||1}, ${wf}, NULL, NULL, ${qf}, NULL, NULL, NULL);`);
+      lines.push('');
+      lines.push(`SET @parent_id = LAST_INSERT_ID();`);
       if(em.actions&&em.actions.length){
-        p.push('');
-        p.push(kw('INSERT INTO')+' `weenie_properties_emote_action` (`emote_Id`, `order`, `type`, `delay`, `extent`, `motion`, `message`, `test_String`, `min`, `max`, `min_64`, `max_64`, `min_Dbl`, `max_Dbl`, `stat`, `display`, `amount`, `amount_64`, `hero_X_P_64`, `percent`, `spell_Id`, `wealth_Rating`, `treasure_Class`, `treasure_Type`, `p_Script`, `sound`, `destination_Type`, `weenie_Class_Id`, `stack_Size`, `palette`, `shade`, `try_To_Bond`, `obj_Cell_Id`, `origin_X`, `origin_Y`, `origin_Z`, `angles_W`, `angles_X`, `angles_Y`, `angles_Z`)');
+        lines.push('');
+        lines.push(`INSERT INTO \`weenie_properties_emote_action\` (\`emote_Id\`, \`order\`, \`type\`, \`delay\`, \`extent\`, \`motion\`, \`message\`, \`test_String\`, \`min\`, \`max\`, \`min_64\`, \`max_64\`, \`min_Dbl\`, \`max_Dbl\`, \`stat\`, \`display\`, \`amount\`, \`amount_64\`, \`hero_X_P_64\`, \`percent\`, \`spell_Id\`, \`wealth_Rating\`, \`treasure_Class\`, \`treasure_Type\`, \`p_Script\`, \`sound\`, \`destination_Type\`, \`weenie_Class_Id\`, \`stack_Size\`, \`palette\`, \`shade\`, \`try_To_Bond\`, \`obj_Cell_Id\`, \`origin_X\`, \`origin_Y\`, \`origin_Z\`, \`angles_W\`, \`angles_X\`, \`angles_Y\`, \`angles_Z\`)`);
         em.actions.forEach((a,ai)=>{
           const typeName=lookupName(EMOTE_TYPES,a.type||10);
-          const msg=a.message?st(a.message):'NULL';const amt=a.amount?nm(a.amount):'NULL';const pct=a.percent?nm(a.percent):'NULL';
-          const row='(@parent_id, '+nm(ai)+', '+nm(a.type||10)+' '+cm(typeName)+', '+nm(a.delay||0)+', 1, NULL, '+msg+', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '+amt+', NULL, NULL, '+pct+', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)';
-          p.push(ai===0?kw('VALUES')+' '+row:'     , '+row);
+          const msg=a.message?`'${String(a.message).replace(/'/g,"''")}'`:'NULL';
+          const amt=(a.amount!==undefined&&a.amount!=='')?a.amount:'NULL';
+          const pct=(a.percent!==undefined&&a.percent!=='')?a.percent:'NULL';
+          const prefix=ai===0?'VALUES ':'     , ';
+          lines.push(`${prefix}(@parent_id, ${ai}, ${a.type||10} /* ${typeName} */, ${a.delay||0}, 1, NULL, ${msg}, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ${amt}, NULL, NULL, ${pct}, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)`);
         });
-        p.push(';');
+        lines.push(';');
       }
     });
+    lines.push('');
   }
 
-  // Strip HTML span tags for plain textarea — syntax color comes from CSS
-  const plain=p.join('\n').replace(/<span[^>]*>/g,'').replace(/<\/span>/g,'');
-  const el=$('sqlOut');
-  if(el&&!_userEditingSQL){
-    const pos=el.selectionStart;
-    el.value=plain;
-    // Restore cursor if user was in the textarea
-    try{el.selectionStart=pos;el.selectionEnd=pos;}catch(e){}
-  }
+  writeSQLOut(lines.join('\n'));
 }
 
 function buildRecipeSQL(){
-  const rid=gi('fWcid',600000),skill=gi('fRecipeSkill',38),diff=gi('fRecipeDiff',900);
-  const successWcid=gi('fSuccessWcid',0),successAmt=gi('fSuccessAmt',1),failWcid=gi('fFailWcid',0);
-  const successMsg=g('fSuccessMsg','You apply the recipe successfully.'),failMsg=g('fFailMsg','You apply the recipe but destroy the target.');
-  const dst=gf('fDestroySourceSuccess',1),dtf=gf('fDestroyTargetFail',1);
-  const now='2025-01-01 00:00:00';const p=[];
-  p.push(cm('===== RECIPE: '+rid+' ====='));p.push('');
-  p.push(kw('DELETE FROM')+' `recipe` '+kw('WHERE')+' `id` = '+nm(rid)+';');p.push('');
-  p.push(kw('INSERT INTO')+' `recipe` (`id`, `unknown_1`, `skill`, `difficulty`, `salvage_Type`, `success_W_C_I_D`, `success_Amount`, `success_Message`, `fail_W_C_I_D`, `fail_Amount`, `fail_Message`, `success_Destroy_Source_Chance`, `success_Destroy_Source_Amount`, `success_Destroy_Source_Message`, `success_Destroy_Target_Chance`, `success_Destroy_Target_Amount`, `success_Destroy_Target_Message`, `fail_Destroy_Source_Chance`, `fail_Destroy_Source_Amount`, `fail_Destroy_Source_Message`, `fail_Destroy_Target_Chance`, `fail_Destroy_Target_Amount`, `fail_Destroy_Target_Message`, `data_Id`, `last_Modified`)');
-  p.push(kw('VALUES')+' ('+nm(rid)+', 0, '+nm(skill)+', '+nm(diff)+', 0, '+nm(successWcid)+', '+nm(successAmt)+', '+st(successMsg)+', '+nm(failWcid)+', 0, '+st(failMsg)+', '+nm(dst)+', 1, NULL, 0, 0, NULL, 1, 1, NULL, '+nm(dtf)+', 1, NULL, 0, '+st(now)+');');
-  p.push('');
+  const rid=gi('fWcid',600000), skill=gi('fRecipeSkill',38), diff=gi('fRecipeDiff',900);
+  const successWcid=gi('fSuccessWcid',0), successAmt=gi('fSuccessAmt',1), failWcid=gi('fFailWcid',0);
+  const successMsg=g('fSuccessMsg','You apply the recipe successfully.');
+  const failMsg=g('fFailMsg','You apply the recipe but destroy the target.');
+  const dst=gf('fDestroySourceSuccess',1), dtf=gf('fDestroyTargetFail',1);
+  const now='2025-01-01 00:00:00';
+  const lines=[];
+
+  lines.push(`DELETE FROM \`recipe\` WHERE \`id\` = ${rid};`,'');
+  lines.push(`INSERT INTO \`recipe\` (\`id\`, \`unknown_1\`, \`skill\`, \`difficulty\`, \`salvage_Type\`, \`success_W_C_I_D\`, \`success_Amount\`, \`success_Message\`, \`fail_W_C_I_D\`, \`fail_Amount\`, \`fail_Message\`, \`success_Destroy_Source_Chance\`, \`success_Destroy_Source_Amount\`, \`success_Destroy_Source_Message\`, \`success_Destroy_Target_Chance\`, \`success_Destroy_Target_Amount\`, \`success_Destroy_Target_Message\`, \`fail_Destroy_Source_Chance\`, \`fail_Destroy_Source_Amount\`, \`fail_Destroy_Source_Message\`, \`fail_Destroy_Target_Chance\`, \`fail_Destroy_Target_Amount\`, \`fail_Destroy_Target_Message\`, \`data_Id\`, \`last_Modified\`)`);
+  const sm=successMsg.replace(/'/g,"''"), fm=failMsg.replace(/'/g,"''");
+  lines.push(`VALUES (${rid}, 0, ${skill}, ${diff}, 0, ${successWcid}, ${successAmt}, '${sm}', ${failWcid}, 0, '${fm}', ${dst}, 1, NULL, 0, 0, NULL, 1, 1, NULL, ${dtf}, 1, NULL, 0, '${now}');`,'');
+
   if(recipeReqs.length){
-    p.push(kw('INSERT INTO')+' `recipe_requirements_int` (`recipe_Id`, `index`, `stat`, `value`, `enum`, `message`)');
-    recipeReqs.forEach((r,i)=>{const cmp=lookupName(COMPARE_TYPE,r.compare),req=lookupName(REQUIREMENT_TYPE,r.type);const row='('+nm(rid)+', '+nm(i)+', '+nm(r.stat||105)+', '+nm(r.value||1)+', '+nm(r.compare)+', '+st(r.message||'Requirement not met!')+ ') '+cm(req+'.'+( PROP_INT[r.stat]||r.stat)+' '+cmp+' '+r.value);p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
-    p.push(';');p.push('');
+    lines.push(`INSERT INTO \`recipe_requirements_int\` (\`recipe_Id\`, \`index\`, \`stat\`, \`value\`, \`enum\`, \`message\`)`);
+    recipeReqs.forEach((r,i)=>{
+      const msg=(r.message||'Requirement not met!').replace(/'/g,"''");
+      const cmp=lookupName(COMPARE_TYPE,r.compare), req=lookupName(REQUIREMENT_TYPE,r.type);
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(${rid}, ${i}, ${r.stat||105}, ${r.value||1}, ${r.compare}, '${msg}') /* ${req}.${PROP_INT[r.stat]||r.stat} ${cmp} ${r.value} */`);
+    });
+    lines.push(';','');
   }
-  p.push(kw('INSERT INTO')+' `recipe_mod` (`recipe_Id`, `executes_On_Success`, `health`, `stamina`, `mana`, `unknown_7`, `data_Id`, `unknown_9`, `instance_Id`)');
-  p.push(kw('VALUES')+' ('+nm(rid)+', True, 0, 0, 0, False, 0, 0, 0);');
-  p.push('');p.push(kw('SET')+' @parent_id = LAST_INSERT_ID();');p.push('');
+
+  lines.push(`INSERT INTO \`recipe_mod\` (\`recipe_Id\`, \`executes_On_Success\`, \`health\`, \`stamina\`, \`mana\`, \`unknown_7\`, \`data_Id\`, \`unknown_9\`, \`instance_Id\`)`);
+  lines.push(`VALUES (${rid}, True, 0, 0, 0, False, 0, 0, 0);`,'');
+  lines.push(`SET @parent_id = LAST_INSERT_ID();`,'');
+
   const intMods=recipeMods.filter(m=>!String(m.value||0).includes('.'));
   const floatMods=recipeMods.filter(m=>String(m.value||0).includes('.'));
+
   if(intMods.length){
-    p.push(kw('INSERT INTO')+' `recipe_mods_int` (`recipe_Mod_Id`, `index`, `stat`, `value`, `enum`, `source`)');
-    intMods.forEach((m,i)=>{const row='(@parent_id, '+nm(i)+', '+nm(m.stat||0)+', '+nm(parseInt(m.value)||0)+', '+nm(m.operation)+', '+nm(m.source)+') '+cm('On '+lookupName(RECIPE_SOURCE_TYPE,m.source)+'.'+lookupName(MOD_TYPE,m.type)+' '+lookupName(MOD_OP,m.operation)+' '+( PROP_INT[m.stat]||m.stat));p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
-    p.push(';');p.push('');
+    lines.push(`INSERT INTO \`recipe_mods_int\` (\`recipe_Mod_Id\`, \`index\`, \`stat\`, \`value\`, \`enum\`, \`source\`)`);
+    intMods.forEach((m,i)=>{
+      const c=`On ${lookupName(RECIPE_SOURCE_TYPE,m.source)}.${lookupName(MOD_TYPE,m.type)} ${lookupName(MOD_OP,m.operation)} ${PROP_INT[m.stat]||m.stat}`;
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(@parent_id, ${i}, ${m.stat||0}, ${parseInt(m.value)||0}, ${m.operation}, ${m.source}) /* ${c} */`);
+    });
+    lines.push(';','');
   }
   if(floatMods.length){
-    p.push(kw('INSERT INTO')+' `recipe_mods_float` (`recipe_Mod_Id`, `index`, `stat`, `value`, `enum`, `source`)');
-    floatMods.forEach((m,i)=>{const row='(@parent_id, '+nm(i)+', '+nm(m.stat||0)+', '+nm(parseFloat(m.value)||0)+', '+nm(m.operation)+', '+nm(m.source)+') '+cm('On '+lookupName(RECIPE_SOURCE_TYPE,m.source)+'.'+lookupName(MOD_TYPE,m.type)+' '+lookupName(MOD_OP,m.operation)+' '+( PROP_FLOAT[m.stat]||m.stat));p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
-    p.push(';');p.push('');
+    lines.push(`INSERT INTO \`recipe_mods_float\` (\`recipe_Mod_Id\`, \`index\`, \`stat\`, \`value\`, \`enum\`, \`source\`)`);
+    floatMods.forEach((m,i)=>{
+      const c=`On ${lookupName(RECIPE_SOURCE_TYPE,m.source)}.${lookupName(MOD_TYPE,m.type)} ${lookupName(MOD_OP,m.operation)} ${PROP_FLOAT[m.stat]||m.stat}`;
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(@parent_id, ${i}, ${m.stat||0}, ${parseFloat(m.value)||0}, ${m.operation}, ${m.source}) /* ${c} */`);
+    });
+    lines.push(';','');
   }
+
   if(cookbookEntries.length){
-    p.push('');p.push(kw('DELETE FROM')+' `cook_book` '+kw('WHERE')+' `recipe_Id` = '+nm(rid)+';');p.push('');
-    p.push(kw('INSERT INTO')+' `cook_book` (`recipe_Id`, `source_W_C_I_D`, `target_W_C_I_D`, `last_Modified`)');
-    cookbookEntries.forEach((e,i)=>{const row='('+nm(rid)+', '+nm(e.src||0)+' '+( e.srcLabel?cm(e.srcLabel):'')+', '+nm(e.tgt||0)+', '+st(now)+')';p.push(i===0?kw('VALUES')+' '+row:'     , '+row);});
-    p.push(';');
+    lines.push('');
+    lines.push(`DELETE FROM \`cook_book\` WHERE \`recipe_Id\` = ${rid};`,'');
+    lines.push(`INSERT INTO \`cook_book\` (\`recipe_Id\`, \`source_W_C_I_D\`, \`target_W_C_I_D\`, \`last_Modified\`)`);
+    cookbookEntries.forEach((e,i)=>{
+      const lbl=e.srcLabel?` /* ${e.srcLabel} */`:'';
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(${rid}, ${e.src||0}${lbl}, ${e.tgt||0}, '${now}')`);
+    });
+    lines.push(';');
   }
-  // Strip HTML span tags for plain textarea — syntax color comes from CSS
-  const plain=p.join('\n').replace(/<span[^>]*>/g,'').replace(/<\/span>/g,'');
+
+  writeSQLOut(lines.join('\n'));
+}
+
+function writeSQLOut(text){
   const el=$('sqlOut');
   if(el&&!_userEditingSQL){
     const pos=el.selectionStart;
-    el.value=plain;
-    // Restore cursor if user was in the textarea
+    el.value=text;
     try{el.selectionStart=pos;el.selectionEnd=pos;}catch(e){}
   }
 }
@@ -1589,7 +1869,7 @@ function resetForm(){
   const c=TYPE_CFG[curType];
   setV('fName','New '+c.label);setV('fWcid',c.wcidFrom);
   spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
-  recipeReqs=[];recipeMods=[];cookbookEntries=[];bodyParts=getBodyParts(31);
+  recipeReqs=[];recipeMods=[];cookbookEntries=[];createList=[];bodyParts=getBodyParts(31);
   buildSubContent();
 }
 function openOutputFolder(){if(window.pywebview)window.pywebview.api.open_output_folder();}
