@@ -1,6 +1,19 @@
 # ACEForge Content Generation Skill
 
 ---
+## ABSOLUTE OUTPUT RULES — NEVER VIOLATE
+
+1. **NEVER use `--` line comments** in any SQL output. ACE's importer does not handle them and will fail to import the file. Use `/* block comments */` only.
+   - ❌ `-- This is a comment`
+   - ✅ `/* This is a comment */`
+
+2. **Generator files are ALWAYS separate files.** Never append generator SQL to the creature/NPC file. Output the generator as its own file with its own `/* ===== FILE: ... ===== */` header at WCID = creature_WCID + 1,000,000.
+
+3. **Every Creature and NPC MUST have a generator file** — no exceptions.
+
+4. **Quest flags follow the naming convention:** QuestName + QuestNameStart + QuestNameTimer (or KillTask variants). See quest_npcs.md for full details.
+
+---
 ## FATAL ERROR PREVENTION: Forbidden SQL Tables
 
 The following tables **DO NOT EXIST** in ACE-World-16PY. Generating INSERT statements

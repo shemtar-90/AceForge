@@ -36,6 +36,48 @@ def sanitize_filename(name: str) -> str:
     return name
 
 
+def strip_sql_comments(sql: str) -> str:
+    """
+    Remove -- line comments from SQL that break ACE's importer.
+    Preserves /* block comments */ which ACE handles fine.
+    Only removes -- comments that appear at the start of a line or
+    after a semicolon (i.e. not -- inside string literals).
+    """
+    import re
+    lines = sql.split("\n")
+    cleaned = []
+    for line in lines:
+        # Remove -- comments: find -- not inside a string literal
+        # Simple approach: strip from first -- that isn't inside quotes
+        in_single = False
+        result = []
+        i = 0
+        while i < len(line):
+            c = line[i]
+            if c == "\'" and not in_single:
+                in_single = True
+                result.append(c)
+            elif c == "\'" and in_single:
+                # Check for escaped quote ''
+                if i + 1 < len(line) and line[i+1] == "\'":
+                    result.append("\'\'"  )
+                    i += 2
+                    continue
+                in_single = False
+                result.append(c)
+            elif c == "-" and not in_single and i + 1 < len(line) and line[i+1] == "-":
+                # Found -- comment outside string - strip rest of line
+                break
+            else:
+                result.append(c)
+            i += 1
+        stripped = "".join(result).rstrip()
+        # Skip lines that are now empty (were pure -- comment lines)
+        if stripped:
+            cleaned.append(stripped)
+    return "\n".join(cleaned)
+
+
 def parse_and_save_files(
     full_response: str,
     output_dir: str,
@@ -78,7 +120,7 @@ def parse_and_save_files(
             fname = "output.sql"
 
         fpath = output_path / fname
-        fpath.write_text(full_response.strip(), encoding="utf-8")
+        fpath.write_text(strip_sql_comments(full_response.strip()), encoding="utf-8")
         written.append(str(fpath))
         return written
 
@@ -95,7 +137,7 @@ def parse_and_save_files(
 
         fname = sanitize_filename(raw_name)
         fpath = output_path / fname
-        fpath.write_text(content, encoding="utf-8")
+        fpath.write_text(strip_sql_comments(content), encoding="utf-8")
         written.append(str(fpath))
 
     return written

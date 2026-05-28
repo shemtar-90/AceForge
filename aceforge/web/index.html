@@ -323,6 +323,16 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
         <button class="top-btn" onclick="testAPIKey()">⚡ Test Connection</button>
         <span id="sTestResult" style="font-family:'Cinzel',serif;font-size:10px;font-weight:700"></span>
       </div>
+      <div class="sec-title">Content Libraries</div>
+      <p style="font-family:'IM Fell English',serif;font-style:italic;font-size:13px;color:var(--ink-dim);margin-bottom:14px">
+        Large assets (icons, weenie database) are installed separately. Load their index files here to enable them.
+      </p>
+      <div id="libStatus" style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px"></div>
+      <button class="top-btn" onclick="browseIndexFile()" style="padding:8px 18px;font-size:11px;display:flex;align-items:center;gap:8px;margin-top:4px">
+        <span>📂</span> <span>Load Index File…</span>
+      </button>
+      <div id="libLoadResult" style="font-family:'Cinzel',serif;font-size:10px;margin-top:8px;min-height:16px"></div>
+
       <div class="sec-title">Save Behavior</div>
       <div class="sf" style="display:flex;align-items:center;gap:12px">
         <input type="checkbox" id="sAutoOpen" style="width:auto;border:none;border-bottom:none;padding:0;margin:0;cursor:pointer;accent-color:var(--crimson)" checked>
@@ -2145,32 +2155,32 @@ function buildSQL(){
     lines.push('');
   }
 
-  // ── Auto-Generator for Creature/NPC ─────────────────────────────────────────
+  // ── Auto-Generator for Creature/NPC (appended as separate section) ──────────
   if(isCreature){
-    const genWcid=wcid+1000000; // Generator WCID: creature WCID + 1,000,000 offset
+    const genWcid=wcid+1000000;
     const creatureName=g('fName','creature');
-    const respawnSec=300; // 5 min default respawn
-    const genLines=[
-      '',
-      `/* ═══════════════════════════════════════════════════════════════════════`,
-      ` * GENERATOR — ${creatureName}`,
-      ` * Place this in your landblock SQL or use with a spawn tool.`,
-      ` * Spawns ${creatureName} (WCID ${wcid}) with ${respawnSec}s respawn timer.`,
-      ` ═══════════════════════════════════════════════════════════════════════ */`,
-      '',
-      `DELETE FROM \`weenie\` WHERE \`class_Id\` = ${genWcid};`,
-      '',
-      `INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)`,
-      `VALUES (${genWcid}, '${creatureName.toLowerCase().replace(/\s+/g,'_')}_gen', 7, '2025-01-01 00:00:00');`,
-      '',
-      `INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)`,
-      `VALUES (${genWcid}, 93, 262144) /* PhysicsState - Hidden */`,
-      `     , (${genWcid}, 133, 4); /* ShowableOnRadar */`,
-      '',
-      `INSERT INTO \`weenie_properties_generator\` (\`object_Id\`, \`probability\`, \`weenie_Class_Id\`, \`delay\`, \`init_Create\`, \`max_Create\`, \`when_Create\`, \`where_Create\`, \`stack_Size\`, \`palette_Id\`, \`shade\`, \`obj_Cell_Id\`, \`origin_X\`, \`origin_Y\`, \`origin_Z\`, \`angles_W\`, \`angles_X\`, \`angles_Y\`, \`angles_Z\`)`,
-      `VALUES (${genWcid}, 1, ${wcid}, ${respawnSec}, 1, 1, 2, 4, -1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);`,
-    ];
-    lines.push(...genLines);
+    const respawnSec=gi('genRespawn',300)||300;
+    const initCreate=gi('genInitCreate',1)||1;
+    const maxCreate=gi('genMaxCreate',1)||1;
+    const genName=creatureName.toLowerCase().replace(/\s+/g,'_')+'_gen';
+    lines.push('');
+    lines.push(`/* ════════════════════════════════════════════════════════════`);
+    lines.push(` * GENERATOR — ${creatureName} (WCID ${genWcid})`);
+    lines.push(` * Copy this section into a separate file for landblock use.`);
+    lines.push(` * Fill in obj_Cell_Id and origin coordinates before importing.`);
+    lines.push(` ════════════════════════════════════════════════════════════ */`);
+    lines.push('');
+    lines.push(`DELETE FROM \`weenie\` WHERE \`class_Id\` = ${genWcid};`);
+    lines.push('');
+    lines.push(`INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)`);
+    lines.push(`VALUES (${genWcid}, '${genName}', 7, '2025-01-01 00:00:00');`);
+    lines.push('');
+    lines.push(`INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)`);
+    lines.push(`VALUES (${genWcid}, 93, 262144) /* PhysicsState - Hidden */`);
+    lines.push(`     , (${genWcid}, 133, 4); /* ShowableOnRadar */`);
+    lines.push('');
+    lines.push(`INSERT INTO \`weenie_properties_generator\` (\`object_Id\`, \`probability\`, \`weenie_Class_Id\`, \`delay\`, \`init_Create\`, \`max_Create\`, \`when_Create\`, \`where_Create\`, \`stack_Size\`, \`palette_Id\`, \`shade\`, \`obj_Cell_Id\`, \`origin_X\`, \`origin_Y\`, \`origin_Z\`, \`angles_W\`, \`angles_X\`, \`angles_Y\`, \`angles_Z\`)`);
+    lines.push(`VALUES (${genWcid}, 1, ${wcid}, ${respawnSec}, ${initCreate}, ${maxCreate}, 2, 4, -1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);`);
   }
 
   writeSQLOut(lines.join('\n'));
@@ -2431,8 +2441,56 @@ function testAPIKey(){
   } else {result.textContent='(browser only)';result.style.color='var(--ink-dim)';}
 }
 
+function refreshLibStatus(){
+  if(!window.pywebview) return;
+  window.pywebview.api.get_library_status().then(libs=>{
+    const el=$('libStatus');
+    if(!el) return;
+    el.innerHTML=libs.map(lib=>`
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 10px;background:var(--parch-dk);border-radius:3px">
+        <span style="font-size:16px">${lib.loaded ? '✅' : '⬜'}</span>
+        <div style="flex:1">
+          <div style="font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--ink-mid)">${lib.name}</div>
+          <div style="font-family:'IM Fell English',serif;font-style:italic;font-size:12px;color:${lib.loaded ? 'var(--green)' : 'var(--ink-faint)'}">${lib.status}</div>
+        </div>
+        ${lib.loaded ? `<button onclick="unloadLibrary('${lib.id}')" style="font-family:'Cinzel',serif;font-size:8px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--border);background:transparent;color:var(--ink-dim);padding:3px 8px;cursor:pointer" onmouseover="this.style.borderColor='var(--crimson)';this.style.color='var(--crimson)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--ink-dim)'">Unload</button>` : ''}
+      </div>`).join('');
+  });
+}
+
+function browseIndexFile(){
+  const result=$('libLoadResult');
+  result.style.color='var(--gold)';
+  result.textContent='Opening file browser…';
+  if(!window.pywebview){
+    result.textContent='(Available in desktop app only)';
+    result.style.color='var(--ink-dim)';
+    return;
+  }
+  window.pywebview.api.browse_and_load_index().then(r=>{
+    if(r.success){
+      result.style.color='var(--green)';
+      result.textContent='✓ ' + r.message;
+      refreshLibStatus();
+      toast(r.message, 3000);
+    } else {
+      result.style.color=r.cancelled ? 'var(--ink-dim)' : 'var(--crimson-lt)';
+      result.textContent=r.cancelled ? '' : '✗ ' + r.error;
+    }
+  });
+}
+
+function unloadLibrary(libId){
+  if(!window.pywebview) return;
+  window.pywebview.api.unload_library(libId).then(r=>{
+    if(r.success){ refreshLibStatus(); toast('Library unloaded.'); }
+    else toast('Error: ' + r.error);
+  });
+}
+
 function openSettings(){
   $('settingsOverlay').classList.add('open');
+  refreshLibStatus();
   if(window.pywebview){
     window.pywebview.api.get_config().then(cfg=>{
       appConfig=cfg;

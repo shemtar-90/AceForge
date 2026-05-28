@@ -144,6 +144,195 @@ class AppAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    # ── Content Libraries ─────────────────────────────────────────────────────
+
+    def get_library_status(self) -> list:
+        """Return status of all installable content libraries."""
+        import json
+        from pathlib import Path
+
+        base = Path(__file__).parent
+        refs = base / "references"
+        web  = base / "web"
+
+        libraries = [
+            {
+                "id":     "icons",
+                "name":   "Icon Library",
+                "file":   str(web / "icons.js"),
+                "check":  web / "icons.js",
+                "hint":   "icons.js — contains all game icon DIDs",
+            },
+            {
+                "id":     "weenies",
+                "name":   "Weenie Database",
+                "file":   str(refs / "weenie_index.json"),
+                "check":  refs / "weenie_index.json",
+                "hint":   "weenie_index.json — 29,569 base-game weenie entries",
+            },
+        ]
+
+        result = []
+        for lib in libraries:
+            loaded  = lib["check"].exists()
+            count   = ""
+            if loaded:
+                try:
+                    text = lib["check"].read_text(encoding="utf-8", errors="replace")
+                    if lib["id"] == "icons":
+                        # Count entries in ICONS=[...] array
+                        import re
+                        m = re.search(r"\[([^\]]+)\]", text[:200])
+                        n = text.count("],[") + (1 if "],[" not in text and "[" in text else 0)
+                        count = f"{n:,} icons loaded"
+                    elif lib["id"] == "weenies":
+                        data = json.loads(text)
+                        count = f"{len(data):,} weenies loaded"
+                except Exception:
+                    count = "loaded"
+            result.append({
+                "id":     lib["id"],
+                "name":   lib["name"],
+                "loaded": loaded,
+                "status": count if loaded else f"Not installed — load {lib['hint']}",
+            })
+
+        return result
+
+    def browse_and_load_index(self) -> dict:
+        """
+        Open OS file browser, detect index type from selected file,
+        copy to correct location, reload the skill loader index.
+        Supports: icons.js, weenie_index.json
+        Future-extensible for any additional index types.
+        """
+        import shutil
+        from pathlib import Path
+
+        if not self._window:
+            return {"success": False, "error": "No window available"}
+
+        try:
+            import webview
+            result = self._window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                allow_multiple=False,
+                file_types=(
+                    "Index Files (*.json;*.js)",
+                    "JSON Index (*.json)",
+                    "JS Index (*.js)",
+                    "All Files (*.*)",
+                ),
+            )
+        except Exception as e:
+            return {"success": False, "error": f"File dialog error: {e}"}
+
+        if not result:
+            return {"success": False, "cancelled": True}
+
+        src_path = Path(result[0])
+        if not src_path.exists():
+            return {"success": False, "error": "Selected file not found"}
+
+        base   = Path(__file__).parent
+        fname  = src_path.name.lower()
+
+        # ── Detect file type and route to correct destination ──────────────
+        if fname == "icons.js":
+            dst = base / "web" / "icons.js"
+            # Validate: must contain ICONS= array
+            snippet = src_path.read_text(encoding="utf-8", errors="replace")[:500]
+            if "ICONS" not in snippet and "icons" not in snippet.lower():
+                return {"success": False, "error": "File doesn't look like icons.js — expected ICONS=[...] array"}
+            shutil.copy2(src_path, dst)
+            return {"success": True, "message": f"Icon library installed ({src_path.name})"}
+
+        elif fname == "weenie_index.json":
+            dst = base / "references" / "weenie_index.json"
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            # Validate: must be a JSON array with 'w', 'n', 'f' keys
+            try:
+                import json
+                data = json.loads(src_path.read_text(encoding="utf-8", errors="replace"))
+                if not isinstance(data, list) or not data or "w" not in data[0]:
+                    return {"success": False, "error": "File doesn't look like weenie_index.json — expected [{w, n, c, t, f},...] format"}
+                count = len(data)
+            except Exception as e:
+                return {"success": False, "error": f"Invalid JSON: {e}"}
+            shutil.copy2(src_path, dst)
+            # Also check if weenies/ folder sits alongside the index
+            weenies_src = src_path.parent / "weenies"
+            weenies_dst = base / "references" / "weenies"
+            extra = ""
+            if weenies_src.exists() and weenies_src.is_dir():
+                # Copy the weenies folder tree
+                if weenies_dst.exists():
+                    shutil.rmtree(weenies_dst)
+                shutil.copytree(weenies_src, weenies_dst)
+                extra = " + weenies folder"
+            # Reload the skill loader index
+            try:
+                self.skill_loader._load_weenie_index()
+            except Exception:
+                pass
+            return {"success": True, "message": f"Weenie database installed — {count:,} entries{extra}"}
+
+        else:
+            # Unknown file — try to detect from contents
+            try:
+                snippet = src_path.read_text(encoding="utf-8", errors="replace")[:1000]
+                if "ICONS" in snippet or ("[[" in snippet and "0x" in snippet):
+                    # Looks like an icons file with a non-standard name
+                    dst = base / "web" / "icons.js"
+                    shutil.copy2(src_path, dst)
+                    return {"success": True, "message": f"Icon library installed (detected from contents)"}
+                elif snippet.strip().startswith("[{") and '"w"' in snippet and '"n"' in snippet:
+                    import json
+                    data = json.loads(snippet + "..." if not snippet.endswith("]") else snippet)
+                    dst = base / "references" / "weenie_index.json"
+                    shutil.copy2(src_path, dst)
+                    return {"success": True, "message": f"Weenie index installed (detected from contents)"}
+            except Exception:
+                pass
+            return {
+                "success": False,
+                "error": f"Unrecognized index file: '{src_path.name}'. "
+                         f"Expected 'icons.js' or 'weenie_index.json'."
+            }
+
+    def unload_library(self, lib_id: str) -> dict:
+        """Remove an installed content library."""
+        import shutil
+        from pathlib import Path
+
+        base  = Path(__file__).parent
+        paths = {
+            "icons":   [base / "web" / "icons.js"],
+            "weenies": [base / "references" / "weenie_index.json",
+                        base / "references" / "weenies"],
+        }
+        targets = paths.get(lib_id, [])
+        if not targets:
+            return {"success": False, "error": f"Unknown library: {lib_id}"}
+
+        for p in targets:
+            try:
+                if p.is_dir():
+                    shutil.rmtree(p)
+                elif p.exists():
+                    p.unlink()
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        # Reload weenie index (now empty)
+        if lib_id == "weenies":
+            try:
+                self.skill_loader._weenie_index = None
+            except Exception:
+                pass
+
+        return {"success": True}
+
     def open_output_folder(self) -> dict:
         try:
             path = self.config.output_dir or str(
@@ -171,11 +360,15 @@ class AppAPI:
             base_url=self.config.base_url,
         )
 
+        # Extract keywords from prompt and find matching base-game weenies
+        weenie_context = self._build_weenie_context(prompt, content_type)
+
         system_prompt = self.skill_loader.build_system_prompt(
             content_type=content_type,
             server_name=self.config.server_name,
             wcid_ranges=self.config.get_wcid_ranges(),
             author=self.config.get("author", ""),
+            weenie_context=weenie_context,
         )
 
         threading.Thread(
@@ -184,6 +377,51 @@ class AppAPI:
             daemon=True,
         ).start()
         return {"success": True}
+
+    def _build_weenie_context(self, prompt: str, content_type: str) -> str:
+        """
+        Search the weenie index for base-game weenies relevant to the prompt.
+        Injects 2-4 matching weenie SQL files as format/value references.
+        """
+        try:
+            import re
+            # Extract likely creature/item names from the prompt
+            # Strip common adjectives and focus on noun phrases
+            words = re.findall(r"[A-Za-z][a-z]{2,}", prompt)
+            # Filter stop words
+            STOP = {"level","high","low","with","that","this","from","into","the",
+                    "and","for","has","are","can","will","give","make","create",
+                    "drop","loot","kill","quest","named","custom","new","about",
+                    "like","some","each","them","item","creature","weapon","armor"}
+            keywords = [w for w in words if w.lower() not in STOP]
+
+            # Search for each keyword, collect unique results
+            seen_wcids = set()
+            results = []
+            for kw in keywords[:8]:
+                matches = self.skill_loader.search_weenies(kw, max_results=2)
+                for m in matches:
+                    if m["w"] not in seen_wcids:
+                        seen_wcids.add(m["w"])
+                        results.append(m)
+                if len(results) >= 4:
+                    break
+
+            if not results:
+                return ""
+
+            # Read and concatenate matching SQL files
+            parts = []
+            for entry in results[:4]:
+                sql = self.skill_loader.get_weenie_sql(entry)
+                if sql:
+                    parts.append(f"/* WCID {entry['w']} — {entry['n']} ({entry['f'].split('/')[0]}) */")
+                    parts.append(sql.strip())
+                    parts.append("")
+
+            return "\n".join(parts)
+        except Exception:
+            return ""
 
     def stop_generation(self) -> dict:
         self._generating = False

@@ -15,23 +15,24 @@ from typing import Optional
 
 ALWAYS_LOAD = [
     "SKILL.md",
+    "quest_npcs.md",   # Quest emote system — ALWAYS loaded (prevents fake table errors)
     "enums.md",
     "spells.md",
     "quests.md",
-    "quest_npcs.md",   # Quest emote system — ALWAYS loaded (prevents fake table errors)
     "lore.md",
     "schema.md",
 ]
 
 CONTENT_TYPE_FILES = {
-    "monster":  ["did_values.md", "icons.md", "all_spells.txt"],
-    "boss":     ["did_values.md", "icons.md", "all_spells.txt"],
-    "npc":      ["did_values.md", "icons.md", "quest_npcs.md"],
-    "item":     ["icons.md"],
-    "weapon":   ["melee_weapons.md", "missile_weapons.md", "casters.md", "icons.md"],
-    "armor":    ["armor.md", "clothing.md", "icons.md"],
-    "quest":    ["did_values.md", "icons.md", "all_spells.txt", "quest_npcs.md"],
-    "general":  ["did_values.md", "icons.md", "all_spells.txt"],
+    "monster":  ["example_creatures.md", "did_values.md", "icons.md", "all_spells.txt"],
+    "boss":     ["example_creatures.md", "did_values.md", "icons.md", "all_spells.txt"],
+    "npc":      ["example_npcs.md", "quest_npcs.md", "did_values.md", "icons.md"],
+    "item":     ["example_items.md", "icons.md"],
+    "weapon":   ["example_gear.md", "melee_weapons.md", "missile_weapons.md", "casters.md", "icons.md"],
+    "armor":    ["example_gear.md", "armor.md", "clothing.md", "icons.md"],
+    "jewelry":  ["example_gear.md", "icons.md"],
+    "quest":    ["example_npcs.md", "quest_npcs.md", "example_killtasks.md", "did_values.md", "icons.md"],
+    "general":  ["example_creatures.md", "example_npcs.md", "did_values.md", "icons.md"],
 }
 
 
@@ -86,6 +87,48 @@ class SkillLoader:
         self._refs_dir = get_references_dir()
         self._skill_md = get_skill_md_path()
         self._cache: dict[str, str] = {}
+        self._weenie_index: list[dict] | None = None
+        self._weenies_dir: Path | None = None
+        self._load_weenie_index()
+
+    def _load_weenie_index(self):
+        """Load the weenie index JSON for fast name/type lookups."""
+        try:
+            idx_path = self._refs_dir / "weenie_index.json"
+            if idx_path.exists():
+                import json
+                self._weenie_index = json.loads(idx_path.read_text(encoding="utf-8"))
+                self._weenies_dir  = self._refs_dir / "weenies"
+        except Exception:
+            self._weenie_index = None
+
+    def search_weenies(self, query: str, max_results: int = 4) -> list[dict]:
+        """Search the weenie index by name or creature subtype, returning matching entries."""
+        if not self._weenie_index:
+            return []
+        q = query.lower().strip()
+        # Match name exactly, name partially, or subtype folder (e.g. "Drudge" matches Creature/Drudge/*)
+        exact_name  = [e for e in self._weenie_index if e["n"].lower() == q]
+        subtype_dir = [e for e in self._weenie_index
+                       if "/" + q.title().replace(" ","") + "/" in e["f"].replace(" ","")
+                       and e not in exact_name]
+        partial_name = [e for e in self._weenie_index
+                        if q in e["n"].lower()
+                        and e not in exact_name and e not in subtype_dir]
+        combined = exact_name + subtype_dir[:2] + partial_name
+        return combined[:max_results]
+
+    def get_weenie_sql(self, entry: dict) -> str:
+        """Read the SQL file for a weenie index entry."""
+        if not self._weenies_dir:
+            return ""
+        try:
+            path = self._weenies_dir / entry["f"]
+            if path.exists():
+                return path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+        return ""
 
     def _read(self, filename: str) -> str:
         if filename in self._cache:
@@ -119,6 +162,7 @@ class SkillLoader:
         server_name: str,
         wcid_ranges: dict,
         author: str = "",
+        weenie_context: str = "",
     ) -> str:
         parts = []
 
@@ -133,6 +177,15 @@ class SkillLoader:
             if fname not in ALWAYS_LOAD:
                 content = self._read(fname)
                 parts.append(f"\n\n{'='*60}\n# {fname}\n{'='*60}\n{content}")
+
+        # Inject matching base-game weenies as authoritative format references
+        if weenie_context:
+            parts.append(f"\n\n{'='*60}")
+            parts.append("# BASE GAME WEENIE REFERENCES")
+            parts.append("These are actual base-game weenies from the ACE database.")
+            parts.append("Use their property values, DID setups, and body part AAs as authoritative references.")
+            parts.append("='*60")
+            parts.append(weenie_context)
 
         return "\n".join(parts)
 

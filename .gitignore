@@ -52,3 +52,8 @@ aceforge/config.json
 # Users install these manually or via a separate release asset.
 aceforge/web/icons/
 aceforge/web/icons.js
+
+# Weenie database — 29,569 SQL files (~132MB). Keep locally, do NOT push to git.
+# Users install via the separate 3-Core weenie database release asset.
+aceforge/references/weenie_index.json
+aceforge/references/weenies/

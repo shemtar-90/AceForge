@@ -231,3 +231,118 @@ VALUES (@parent_id, 0, 10 /* Tell */, 0, 1, NULL, 'Greetings, traveler! I''m Fre
 8. AwardLevelProportionalXP uses `percent` field (0.15 = 15% of level XP)
 9. AwardLuminance uses `hero_X_P_64` field for the luminance amount
 10. NPC wtype=31 (Creature), ItemType(1)=16, set Attackable(19)=False, PlayerKillerStatus(134)=16
+
+---
+
+## CRITICAL: Item Give vs Refuse Category
+
+When a player hands an item to an NPC for a quest, use **Refuse (category=1)** with `weenie_Class_Id` set to the item WCID — NOT Give (category=6).
+
+- `Give (6)` with no `weenie_Class_Id` fires for ANY item given to the NPC
+- `Refuse (1)` with `weenie_Class_Id=ITEM_WCID` fires specifically when THAT item is handed to the NPC
+
+```sql
+-- CORRECT: Player hands Wilting Flowers (810063) to Freddie
+INSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, ...)
+VALUES (850011, 1 /* Refuse */, 1, 810063 /* Wilting Flowers */, NULL, NULL, 'FreddieFlowerQuest@1', NULL, NULL, NULL);
+SET @parent_id = LAST_INSERT_ID();
+-- Then InqOwnsItems to check if player has 5...
+```
+
+The `quest` field on the Refuse emote row acts as a filter — the emote only fires if the quest flag condition is met.
+
+---
+
+## Quest Naming Conventions (MANDATORY)
+
+Every quest MUST create these named flag entries. Do not skip any of them.
+
+### Standard Collection/Turn-In Quest (non-kill):
+```
+QuestName           — Main completion counter (StampQuest increments this)
+QuestNameStart      — Set to 1 when player accepts, checked for in-progress state  
+QuestNameTimer      — Optional daily/weekly cooldown timer (StampQuest after reward)
+```
+
+### Kill Task Quest:
+```
+KillTaskName             — Main kill counter (incremented by kill task system)
+KillTaskNameProgress     — In-progress flag, set to 1 when player accepts
+KillTaskNameComplete     — Set to 1 when kill count is met
+KillTaskNameTimer        — Cooldown timer stamped after reward
+```
+
+### Example for Freddie's Flower Quest:
+- `FreddieFlowerQuest` — completion counter (values: 0=not started, 1=in progress, 2+=complete)
+- `FreddieFlowerQuestStart` — progress tracker
+- `FreddieFlowerQuestTimer` — cooldown after reward
+
+### InqQuest logic:
+- `FreddieFlowerQuest@2` = "has this quest been completed 2+ times?" → QuestSuccess if yes
+- `FreddieFlowerQuestStart@1` = "has start flag been set 1+ times?" → QuestSuccess if yes (in progress)
+- StampQuest `'FreddieFlowerQuest, 1'` = set/increment FreddieFlowerQuest by 1
+
+---
+
+## Generator — Always Required for Creature/NPC
+
+Every creature and NPC weenie MUST have a companion generator weenie.
+WCID = creature_WCID + 1,000,000.
+
+The generator file must be output as a SEPARATE SQL file with its own FILE: header, NOT appended to the creature file.
+
+```
+/* ===== FILE: 1850011 freddie_gen.sql ===== */
+
+DELETE FROM `weenie` WHERE `class_Id` = 1850011;
+
+INSERT INTO `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)
+VALUES (1850011, 'freddie_gen', 7, '2025-01-01 00:00:00');
+
+INSERT INTO `weenie_properties_int` (`object_Id`, `type`, `value`)
+VALUES (1850011, 93, 262144) /* PhysicsState - Hidden */
+     , (1850011, 133, 4); /* ShowableOnRadar */
+
+INSERT INTO `weenie_properties_generator` (`object_Id`, `probability`, `weenie_Class_Id`, `delay`, `init_Create`, `max_Create`, `when_Create`, `where_Create`, `stack_Size`, `palette_Id`, `shade`, `obj_Cell_Id`, `origin_X`, `origin_Y`, `origin_Z`, `angles_W`, `angles_X`, `angles_Y`, `angles_Z`)
+VALUES (1850011, 1, 850011, 300, 1, 1, 2, 4, -1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+```
+
+`when_Create=2` = Always (respawn after death), `where_Create=4` = Specific landcell position.
+Coordinates are NULL here — the admin fills them in when placing via a spawn tool.
+
+---
+
+## Correct NPC/Creature Property Values
+
+### NPC Standard Properties (type=31, wType=31 Creature)
+```sql
+INSERT INTO `weenie_properties_int` (...)
+VALUES (WCID, 1, 16)    /* ItemType - Creature */
+     , (WCID, 2, 31)    /* CreatureType - Human */
+     , (WCID, 6, -1)    /* ItemsCapacity */
+     , (WCID, 7, -1)    /* ContainersCapacity */
+     , (WCID, 16, 32)   /* ItemUseable - Remote */
+     , (WCID, 25, 275)  /* Level */
+     , (WCID, 93, 6292504) /* PhysicsState */
+     , (WCID, 95, 8)    /* RadarBlipColor - Yellow */
+     , (WCID, 133, 4)   /* ShowableOnRadar - Always */
+     , (WCID, 134, 16)  /* PlayerKillerStatus - RubberGlue */
+     , (WCID, 146, 0);  /* XpOverride */
+
+INSERT INTO `weenie_properties_bool` (...)
+VALUES (WCID, 1, True)   /* Stuck */
+     , (WCID, 19, False); /* Attackable */
+
+INSERT INTO `weenie_properties_float` (...)
+VALUES (WCID, 1, 60)    /* HeartbeatInterval */
+     , (WCID, 3, 2)     /* HealthRate */
+     , (WCID, 4, 5)     /* StaminaRate */
+     , (WCID, 5, 1)     /* ManaRate */
+     , (WCID, 39, 1.0)  /* DefaultScale */
+     , (WCID, 54, 3.0); /* UseRadius */
+
+INSERT INTO `weenie_properties_d_i_d` (...)
+VALUES (WCID, 1, 0x02000003) /* Setup - Generic Human Male */
+     , (WCID, 8, 0x06001036); /* Icon */
+```
+
