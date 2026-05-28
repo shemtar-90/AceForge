@@ -741,38 +741,27 @@ function buildProps(){
     }
   }
   if(t==='item'){
-    h+=`<div class="sec"><div class="sh"><div class="st">Item Properties</div><div class="sl"></div></div>
-    ${[['Value','fValue','I-19','number'],['Encumbrance','fEncumb','I-5','number'],['Max Stack Size','fMaxStack','I-11','number'],['Default Scale','fScale','F-39','text'],['Spellcraft','fSpellcraft','I-106','number']].map(([l,id,fc,tp])=>`
-      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
-        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
-        <input type="${tp}" id="${id}" value="${tp==='number'?'0':'1.0'}" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
-      </div>`).join('')}
-    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
-      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Item Useable <span class="fc">I-16</span></div>
-      <select id="fItemUse" style="width:120px">${opt(ITEM_USE,1)}</select>
-    </div>
-    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
-      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Bonded <span class="fc">I-33</span></div>
-      <select id="fBonded" style="width:160px">${opt(BONDED,1)}</select>
-    </div>
-    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
-      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Attuned <span class="fc">I-114</span></div>
-      <select id="fAttuned" style="width:160px">${opt(ATTUNED,1)}</select>
-    </div>
-    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
-      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Palette <span class="fc">I-3</span></div>
-      <select id="fPalette" style="width:160px">${opt(PALETTES,39)}</select>
-    </div>
-    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
-      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Short Description <span class="fc">S-15</span></div>
-      <input type="text" id="fShortDesc" value="" style="flex:1;max-width:260px;border-bottom:1px solid var(--border)">
-    </div>
-    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
-      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Use Message <span class="fc">S-14</span></div>
-      <input type="text" id="fUseMsg" value="" style="flex:1;max-width:260px;border-bottom:1px solid var(--border)">
+    h+=`<div class="sec"><div class="sh"><div class="st">Item Database Lookup</div><div class="sl"></div></div>
+    <div class="fg sdrop-wrap"><div class="fl">Search by name to pre-fill values</div>
+      <input type="text" id="itemSearch" placeholder="Type item name…" autocomplete="off" onfocus="openItemSearch(this.value)" oninput="searchItemFn(this.value)">
+      <div class="sdrop-box" id="itemSearch_drop"><div class="sdrop-none">Type to search items…</div></div>
+    </div></div>
+    <div class="sec"><div class="sh"><div class="st">Item Properties</div><div class="sl"></div></div>
+    <div class="grid g3">
+      <div class="fg"><div class="fl">Value <span class="fc">I-19</span></div><input type="number" id="fValue" value="100"></div>
+      <div class="fg"><div class="fl">Encumbrance <span class="fc">I-5</span></div><input type="number" id="fEncumb" value="10"></div>
+      <div class="fg"><div class="fl">Max Stack Size <span class="fc">I-11</span></div><input type="number" id="fMaxStack" value="1"></div>
+      <div class="fg"><div class="fl">Item Useable <span class="fc">I-16</span></div><select id="fItemUse">${opt(ITEM_USE,1)}</select></div>
+      <div class="fg"><div class="fl">Bonded <span class="fc">I-33</span></div><select id="fBonded">${opt(BONDED,1)}</select></div>
+      <div class="fg"><div class="fl">Attuned <span class="fc">I-114</span></div><select id="fAttuned">${opt(ATTUNED,1)}</select></div>
+      <div class="fg"><div class="fl">Default Scale <span class="fc">F-39</span></div><input type="text" id="fScale" value="1.0"></div>
+      <div class="fg"><div class="fl">Palette <span class="fc">I-3</span></div><select id="fPalette">${opt(PALETTES,39)}</select></div>
+      <div class="fg"><div class="fl">Spellcraft <span class="fc">I-106</span></div><input type="number" id="fSpellcraft" value="0"></div>
+      <div class="fg span2"><div class="fl">Short Description <span class="fc">S-15</span></div><input type="text" id="fShortDesc" value=""></div>
+      <div class="fg span3"><div class="fl">Use Message <span class="fc">S-14</span></div><input type="text" id="fUseMsg" value=""></div>
     </div>
     <div class="sh" style="margin-top:14px"><div class="st">Gear Ratings</div><div class="sl"></div></div>
-    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`
+    ${[['Dmg Rating','fDmgRating','I-370'],['Dmg Resist','fDmgResist','I-371'],['Crit Rating','fCritRating','I-372'],['CritDmg Rating','fCritDmgRating','I-373'],['CritRes Rating','fCritResRating','I-374'],['Heal Resist','fHealResist','I-375'],['Heal Boost','fHealBoost','I-376']].map(([l,id,fc])=>`
       <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
         <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
@@ -781,7 +770,7 @@ function buildProps(){
   if(t==='weapon'){
     h+=`<div class="sec"><div class="sh"><div class="st">Weapon Database Lookup</div><div class="sl"></div></div>
     <div class="fg sdrop-wrap"><div class="fl">Search by name to pre-fill values</div>
-      <input type="text" id="wepSearch" placeholder="Type weapon name…" autocomplete="off" oninput="searchWeaponFn(this.value)">
+      <input type="text" id="wepSearch" placeholder="Type weapon name…" autocomplete="off" onfocus="openWeaponSearch(this.value)" oninput="searchWeaponFn(this.value)">
       <div class="sdrop-box" id="wepSearch_drop"><div class="sdrop-none">Type to search…</div></div>
     </div></div>
     <div class="sec"><div class="sh"><div class="st">Weapon Properties</div><div class="sl"></div></div>
@@ -805,7 +794,7 @@ function buildProps(){
       <div class="fg"><div class="fl">Palette <span class="fc">I-3</span></div><select id="fPalette">${opt(PALETTES,20)}</select></div>
     </div></div>
     <div class="sh" style="margin-top:14px"><div class="st">Gear Ratings</div><div class="sl"></div></div>
-    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`
+    ${[['Dmg Rating','fDmgRating','I-370'],['Dmg Resist','fDmgResist','I-371'],['Crit Rating','fCritRating','I-372'],['CritDmg Rating','fCritDmgRating','I-373'],['CritRes Rating','fCritResRating','I-374'],['Heal Resist','fHealResist','I-375'],['Heal Boost','fHealBoost','I-376']].map(([l,id,fc])=>`
       <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
         <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
@@ -839,7 +828,7 @@ function buildProps(){
       ${[['Slash AL','alSlash'],['Pierce AL','alPierce'],['Bludge AL','alBludge'],['Cold AL','alCold'],['Fire AL','alFire'],['Acid AL','alAcid'],['Elec AL','alElec'],['Nether AL','alNether']].map(([l,id])=>`<div class="fg"><div class="fl">${l} <span class="fc">I</span></div><input type="number" id="${id}" value="0"></div>`).join('')}
     </div>
     <div class="sh" style="margin-top:14px"><div class="st">Gear Ratings</div><div class="sl"></div></div>
-    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`
+    ${[['Dmg Rating','fDmgRating','I-370'],['Dmg Resist','fDmgResist','I-371'],['Crit Rating','fCritRating','I-372'],['CritDmg Rating','fCritDmgRating','I-373'],['CritRes Rating','fCritResRating','I-374'],['Heal Resist','fHealResist','I-375'],['Heal Boost','fHealBoost','I-376']].map(([l,id,fc])=>`
       <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
         <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
@@ -898,7 +887,12 @@ function buildJewelryProps(){
     [32768,'Necklace'],[786432,'Ring (Finger)'],[196608,'Bracelet (Wrist)'],
     [67108864,'Trinket'],[1048576,'NeckWear Alt'],[524288,'WristWear Alt'],
   ];
-  return `<div class="sec"><div class="sh"><div class="st">Jewelry Slot</div><div class="sl"></div></div>
+  return `<div class="sec"><div class="sh"><div class="st">Jewelry Database Lookup</div><div class="sl"></div></div>
+  <div class="fg sdrop-wrap"><div class="fl">Search by name to pre-fill values</div>
+    <input type="text" id="jewSearch" placeholder="Type jewelry name…" autocomplete="off" onfocus="openJewelrySearch(this.value)" oninput="searchJewelryFn(this.value)">
+    <div class="sdrop-box" id="jewSearch_drop"><div class="sdrop-none">Type to search…</div></div>
+  </div></div>
+  <div class="sec"><div class="sh"><div class="st">Jewelry Slot</div><div class="sl"></div></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
     ${SLOTS.map(([v,l])=>`<button class="pill" onclick="setQField('fValidLoc',${v})">${l}</button>`).join('')}
   </div>
@@ -929,7 +923,7 @@ function buildJewelryProps(){
     </div>
   </div>
   <div class="sh" style="margin-top:14px"><div class="st">Gear Ratings</div><div class="sl"></div></div>
-    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`
+    ${[['Dmg Rating','fDmgRating','I-370'],['Dmg Resist','fDmgResist','I-371'],['Crit Rating','fCritRating','I-372'],['CritDmg Rating','fCritDmgRating','I-373'],['CritRes Rating','fCritResRating','I-374'],['Heal Resist','fHealResist','I-375'],['Heal Boost','fHealBoost','I-376']].map(([l,id,fc])=>`
       <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
         <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
@@ -1430,9 +1424,9 @@ function syncAdvancedFromSQL(silent=false){
 // ── SEARCH FUNCTIONS ──────────────────────────────────────────────────────────
 function searchWeaponFn(q){
   const drop=$('wepSearch_drop');if(!drop)return;
-  if(!q||q.length<2){drop.classList.remove('open');return;}
+  if(!q||q.length<1){openWeaponSearch('');return;}
   const matches=WEAPONS.filter(w=>w[1].toLowerCase().includes(q.toLowerCase())).slice(0,50);
-  drop.innerHTML=matches.length?matches.map(w=>`<div class="sdrop-item" onclick="fillWeapon(${JSON.stringify(w)})">${w[1]}<small>Dmg:${w[2]} ${w[3]} Time:${w[4]}</small></div>`).join(''):'<div class="sdrop-none">No results</div>';
+  drop.innerHTML=matches.length?matches.map(w=>`<div class="sdrop-item" onmousedown="event.preventDefault();fillWeapon(${JSON.stringify(w)})">${w[1]}<small>Dmg:${w[2]} ${w[3]} Time:${w[4]}</small></div>`).join(''):'<div class="sdrop-none">No results</div>';
   drop.classList.add('open');
 }
 function fillWeapon(w){
@@ -1446,9 +1440,9 @@ function fillWeapon(w){
 }
 function searchArmorFn(q){
   const drop=$('armorSearch_drop');if(!drop)return;
-  if(!q||q.length<2){drop.classList.remove('open');return;}
+  if(!q||q.length<1){openArmorSearch('');return;}
   const matches=ARMOR.filter(a=>a[1].toLowerCase().includes(q.toLowerCase())).slice(0,50);
-  drop.innerHTML=matches.length?matches.map(a=>`<div class="sdrop-item" onclick="fillArmor(${JSON.stringify(a)})">${a[1]}<small>${a[2]} AL:${a[3]}</small></div>`).join(''):'<div class="sdrop-none">No results</div>';
+  drop.innerHTML=matches.length?matches.map(a=>`<div class="sdrop-item" onmousedown="event.preventDefault();fillArmor(${JSON.stringify(a)})">${a[1]}<small>${a[2]} AL:${a[3]}</small></div>`).join(''):'<div class="sdrop-none">No results</div>';
   drop.classList.add('open');
 }
 function fillArmor(a){
@@ -1458,6 +1452,58 @@ function fillArmor(a){
   $('armorSearch_drop')?.classList.remove('open');onArmorTypeChange();regen();
 }
 function setV(id,v){const e=$(id);if(e)e.value=v;}
+
+// ── OPEN-ON-FOCUS search helpers ──────────────────────────────────────────────
+function openDropSearch(dropId, items, mapFn, minItems=8){
+  const drop=$(dropId);if(!drop)return;
+  const first=items.slice(0,minItems);
+  drop.innerHTML=first.length
+    ?first.map(mapFn).join('')
+    :'<div class="sdrop-none">No items</div>';
+  drop.classList.add('open');
+}
+function openWeaponSearch(q){
+  if(!q) openDropSearch('wepSearch_drop',WEAPONS,
+    w=>`<div class="sdrop-item" onmousedown="event.preventDefault();fillWeapon(${JSON.stringify(w)})">${w[1]}<small>Dmg:${w[2]} ${w[3]} Time:${w[4]}</small></div>`);
+}
+function openArmorSearch(q){
+  if(!q) openDropSearch('armorSearch_drop',ARMOR,
+    a=>`<div class="sdrop-item" onmousedown="event.preventDefault();fillArmor(${JSON.stringify(a)})">${a[1]}<small>${a[2]} AL:${a[3]}</small></div>`);
+}
+function openItemSearch(q){
+  if(!q) openDropSearch('itemSearch_drop',WEAPONS.slice(0,8).concat(ARMOR.slice(0,4)),
+    x=>`<div class="sdrop-item" onmousedown="event.preventDefault();setV('fName','${x[1].replace(/'/g,"\'")}')">${x[1]}</div>`);
+}
+function openJewelrySearch(q){
+  // Jewelry DB - search from a small curated list of common jewelry names
+  const JEW_NAMES=['Ring of the Dawn','Band of the Dawn','Necklace of the Dawn','Bracelet of the Dawn','Wristband of the Dawn','Trinket of the Dawn','Blood Gem Ring','Empyrean Ring'];
+  if(!q) openDropSearch('jewSearch_drop',JEW_NAMES,
+    n=>`<div class="sdrop-item" onmousedown="event.preventDefault();setV('fName','${n.replace(/'/g,"\'")}');$('jewSearch_drop').classList.remove('open');regen()">${n}</div>`);
+}
+
+// ── Item/Jewelry search functions ──────────────────────────────────────────────
+function searchItemFn(q){
+  const drop=$('itemSearch_drop');if(!drop)return;
+  if(!q||q.length<1){openItemSearch('');return;}
+  // Search weapons and armor by name as generic items
+  const ql=q.toLowerCase();
+  const matches=[...WEAPONS,...ARMOR].filter(x=>x[1].toLowerCase().includes(ql)).slice(0,50);
+  drop.innerHTML=matches.length
+    ?matches.map(x=>`<div class="sdrop-item" onmousedown="event.preventDefault();setV('fName','${x[1].replace(/'/g,"\'")}');$('itemSearch_drop').classList.remove('open');regen()">${x[1]}</div>`).join('')
+    :'<div class="sdrop-none">No results</div>';
+  drop.classList.add('open');
+}
+function searchJewelryFn(q){
+  const drop=$('jewSearch_drop');if(!drop)return;
+  if(!q||q.length<1){openJewelrySearch('');return;}
+  const JEW_NAMES=['Ring of the Dawn','Band of the Dawn','Necklace of the Dawn','Bracelet of the Dawn','Wristband of the Dawn','Trinket of the Dawn','Blood Gem Ring','Empyrean Ring'];
+  const ql=q.toLowerCase();
+  const matches=JEW_NAMES.filter(n=>n.toLowerCase().includes(ql));
+  drop.innerHTML=matches.length
+    ?matches.map(n=>`<div class="sdrop-item" onmousedown="event.preventDefault();setV('fName','${n.replace(/'/g,"\'")}');$('jewSearch_drop').classList.remove('open');regen()">${n}</div>`).join('')
+    :'<div class="sdrop-none">No results</div>';
+  drop.classList.add('open');
+}
 
 // ── PRESETS ───────────────────────────────────────────────────────────────────
 function applyPreset(d){Object.entries(d).forEach(([id,v])=>{const e=$(id);if(e)e.value=v;});regen();}
@@ -1841,10 +1887,10 @@ function buildSQL(){
       [160, gi('fWieldDiff',290), 'WieldDifficulty'],
     );
     const eb=gi('fElemBonus',0); if(eb) IR.push([204,eb,'ElementalDamageBonus']);
-    [[307,'fDmgRating','DamageRating'],[308,'fDmgResist','DamageResistRating'],
-     [313,'fCritRating','CritRating'],[314,'fCritDmgRating','CritDamageRating'],
-     [315,'fCritResRating','CritResistRating'],[317,'fHealResist','HealingResistRating'],
-     [323,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{
+    [[370,'fDmgRating','DamageRating'],[371,'fDmgResist','DamageResistRating'],
+     [372,'fCritRating','CritRating'],[373,'fCritDmgRating','CritDamageRating'],
+     [374,'fCritResRating','CritResistRating'],[375,'fHealResist','HealingResistRating'],
+     [376,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{
       const v=gi(id,0); if(v) IR.push([tp,v,c]);
     });
     const mm=gf('fMissileDef',0), mg=gf('fMagicDef',0), cm2=gf('fCritMult',1.0);
@@ -1873,10 +1919,10 @@ function buildSQL(){
       [93, 1044, 'PhysicsState'],
     );
     if(gi('fSpellcraft',0)) IR.push([106,gi('fSpellcraft',0),'ItemSpellcraft']);
-    [[307,'fDmgRating','DamageRating'],[308,'fDmgResist','DamageResistRating'],
-     [313,'fCritRating','CritRating'],[314,'fCritDmgRating','CritDamageRating'],
-     [315,'fCritResRating','CritResistRating'],[317,'fHealResist','HealingResistRating'],
-     [323,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{
+    [[370,'fDmgRating','DamageRating'],[371,'fDmgResist','DamageResistRating'],
+     [372,'fCritRating','CritRating'],[373,'fCritDmgRating','CritDamageRating'],
+     [374,'fCritResRating','CritResistRating'],[375,'fHealResist','HealingResistRating'],
+     [376,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{
       const v=gi(id,0); if(v) IR.push([tp,v,c]);
     });
     FR.push([39, gf('fScale',1.0), 'DefaultScale']);
@@ -1917,10 +1963,10 @@ function buildSQL(){
       [114, gi('fAttuned',0), 'Attuned'],
       [151, 2, 'HookType - Wall'],
     );
-    [[307,'fDmgRating','DamageRating'],[308,'fDmgResist','DamageResistRating'],
-     [313,'fCritRating','CritRating'],[314,'fCritDmgRating','CritDamageRating'],
-     [315,'fCritResRating','CritResistRating'],[317,'fHealResist','HealingResistRating'],
-     [323,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{
+    [[370,'fDmgRating','DamageRating'],[371,'fDmgResist','DamageResistRating'],
+     [372,'fCritRating','CritRating'],[373,'fCritDmgRating','CritDamageRating'],
+     [374,'fCritResRating','CritResistRating'],[375,'fHealResist','HealingResistRating'],
+     [376,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{
       const v=gi(id,0); if(v) IR.push([tp,v,c]);
     });
     BR.push(
@@ -1973,7 +2019,6 @@ function buildSQL(){
       [22, '0x34000026', 'PhysicsEffectTable'],
     ];
   }
-  if(t==='creature'){const tr=gi('fTreasureTier',3100);if(tr)baseDR.push([35,tr,'DeathTreasureType']);}
   extraDID.forEach(r=>{if(r.type&&r.value)DR.push([parseInt(r.type),r.value,PROP_DID[r.type]||'custom_'+r.type]);});
   emitDID([...baseDR,...DR]);
 
