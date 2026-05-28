@@ -298,6 +298,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
           <option value="anthropic">Anthropic (Claude)</option>
           <option value="google">Google AI Studio (Gemini) — Free Tier Available</option>
           <option value="openai">OpenAI (GPT)</option>
+          <option value="ollama">Ollama (Local — Free, No Key Required)</option>
           <option value="compatible">OpenAI-Compatible Endpoint</option>
         </select>
         <div id="sProviderNote" style="font-family:'IM Fell English',serif;font-style:italic;font-size:13px;color:var(--green);margin-top:6px"></div>
@@ -309,7 +310,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
         </select>
         <input type="text" id="sBaseUrl" placeholder="https://api.example.com/v1" style="width:100%">
       </div>
-      <div class="sf">
+      <div class="sf" id="sApiKeyField">
         <label class="sf-label">API Key</label>
         <input type="password" id="sApiKey" placeholder="Paste your API key here" style="width:100%">
       </div>
@@ -2318,27 +2319,63 @@ const MODEL_HINTS={
   anthropic:['claude-sonnet-4-20250514','claude-opus-4-20250514','claude-haiku-4-5-20251001'],
   google:['gemini-2.5-flash','gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-pro'],
   openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo'],
-  compatible:['mistral-medium','mistral-small','llama-3-70b-instruct','mixtral-8x7b','gemma-7b-it'],
+  compatible:['mistral-medium','mistral-small','llama-3-70b-instruct','mixtral-8x7b','gemma-7b-it','deepseek-chat','deepseek-coder'],
+  ollama:['deepseek-r1:14b','deepseek-r1:7b','llama3.1:8b','llama3.1:70b','llama3.2:3b','mistral:7b','codellama:13b','phi3:medium'],
 };
 
 function onProviderChange(){
   const p=$('sProvider').value;
-  $('sBaseUrlField').style.display=p==='compatible'?'block':'none';
+  const isOllama=p==='ollama';
+  const isCompat=p==='compatible';
+  $('sBaseUrlField').style.display=(isOllama||isCompat)?'block':'none';
+  $('sApiKeyField').style.display=isOllama?'none':'block';
   const note=$('sProviderNote');
   if(p==='google')note.innerHTML='✓ Free tier — get a key at <strong>aistudio.google.com/apikey</strong> &nbsp;·&nbsp; 15 req/min, 1,500/day on flash models';
+  else if(isOllama)note.innerHTML='✓ Local &amp; free — no API key needed. <a href="https://ollama.com" style="color:var(--gold)">ollama.com</a> · Run <code>ollama pull deepseek-r1:14b</code> to get started';
   else note.innerHTML='';
   const hints=MODEL_HINTS[p]||[];
-  $('sModelHints').innerHTML=hints.map(m=>`<button onclick="setV('sModel','${m}')" style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.05em;padding:4px 12px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:10px;margin:2px" onmouseover="this.style.borderColor='var(--crimson)';this.style.color='var(--crimson)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--ink-dim)'">${m}</button>`).join('');
-  const dm={anthropic:'claude-sonnet-4-20250514',google:'gemini-2.5-flash',openai:'gpt-4o',compatible:'mistral-medium'};
+  $('sModelHints').innerHTML=hints.map(m=>`<button onclick="setV('sModel','${m}');regen&&regen()" style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.05em;padding:4px 12px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:10px;margin:2px" onmouseover="this.style.borderColor='var(--crimson)';this.style.color='var(--crimson)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--ink-dim)'">${m}</button>`).join('');
+  if(isOllama){
+    // Auto-fill Ollama endpoint and clear key
+    if(!$('sBaseUrl').value||$('sBaseUrl').value.includes('localhost:11434'))
+      setV('sBaseUrl','http://localhost:11434/v1');
+    setV('sApiKey','');
+    // Try to detect installed Ollama models
+    detectOllamaModels();
+  }
+  const dm={anthropic:'claude-sonnet-4-20250514',google:'gemini-2.5-flash',openai:'gpt-4o',compatible:'mistral-medium',ollama:'deepseek-r1:14b'};
   if(!$('sModel').value||Object.values(dm).includes($('sModel').value))setV('sModel',dm[p]||'');
-  const kh={anthropic:'sk-ant-…',google:'AIza… (from aistudio.google.com/apikey)',openai:'sk-…',compatible:'Your provider key (or any string for local models)'};
+  const kh={anthropic:'sk-ant-…',google:'AIza… (from aistudio.google.com/apikey)',openai:'sk-…',compatible:'Your provider key (or any string for local models)',ollama:'(not required)'};
   $('sApiKey').placeholder=kh[p]||'API key';
+}
+
+function detectOllamaModels(){
+  // Fetch installed models from local Ollama instance
+  fetch('http://localhost:11434/api/tags')
+    .then(r=>r.json())
+    .then(data=>{
+      const models=(data.models||[]).map(m=>m.name).filter(Boolean);
+      if(models.length){
+        const hintsEl=$('sModelHints');
+        hintsEl.innerHTML='<div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--green);margin-bottom:4px">✓ Ollama running — '+models.length+' model(s) installed:</div>'
+          +models.map(m=>`<button onclick="setV('sModel','${m}')" style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.05em;padding:4px 12px;border:1px solid var(--green);background:transparent;color:var(--green);cursor:pointer;border-radius:10px;margin:2px" onmouseover="this.style.background='var(--green)';this.style.color='#000'" onmouseout="this.style.background='transparent';this.style.color='var(--green)'">${m}</button>`).join('');
+        // Auto-select first model if none set
+        if(!$('sModel').value||$('sModel').value==='deepseek-r1:14b')
+          setV('sModel',models[0]);
+      }
+    })
+    .catch(()=>{
+      // Ollama not running — show helpful message
+      const note=$('sProviderNote');
+      note.innerHTML='⚠ Ollama not detected at localhost:11434. <a href="https://ollama.com" style="color:var(--gold)">Install Ollama</a> and run <code>ollama serve</code>, then reopen Settings.';
+      note.style.color='var(--gold)';
+    });
 }
 function onEndpointPreset(){const v=$('sBaseUrlPreset').value;if(v)setV('sBaseUrl',v);}
 function testAPIKey(){
   const result=$('sTestResult');result.textContent='Testing…';result.style.color='var(--gold)';
   const provider=$('sProvider').value,apiKey=$('sApiKey').value.trim(),model=$('sModel').value.trim(),baseUrl=($('sBaseUrl').value||'').trim();
-  if(!apiKey){result.textContent='✗ Enter an API key first.';result.style.color='var(--crimson-lt)';return;}
+  if(!apiKey&&provider!=='ollama'){result.textContent='✗ Enter an API key first.';result.style.color='var(--crimson-lt)';return;}
   if(window.pywebview){
     window.pywebview.api.validate_key_with(provider,apiKey,model,baseUrl).then(r=>{
       if(r.valid){
@@ -2356,7 +2393,9 @@ function openSettings(){
   if(window.pywebview){
     window.pywebview.api.get_config().then(cfg=>{
       appConfig=cfg;
-      setV('sProvider',cfg.provider||'anthropic');onProviderChange();
+      // If saved as compatible with ollama mode, restore the ollama UI selection
+      const effectiveProvider=(cfg.ollama_mode&&cfg.provider==='compatible')?'ollama':(cfg.provider||'anthropic');
+      setV('sProvider',effectiveProvider);onProviderChange();
       setV('sModel',cfg.model||'claude-sonnet-4-20250514');
       const autoOpen=$('sAutoOpen');
       if(autoOpen) autoOpen.checked=(cfg.auto_open_folder!==false);

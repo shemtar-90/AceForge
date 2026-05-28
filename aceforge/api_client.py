@@ -19,6 +19,9 @@ PROVIDER_ANTHROPIC  = "anthropic"
 PROVIDER_GOOGLE     = "google"
 PROVIDER_OPENAI     = "openai"
 PROVIDER_COMPATIBLE = "compatible"
+PROVIDER_OLLAMA     = "ollama"   # local Ollama — maps to compatible at localhost:11434/v1
+
+OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
 KNOWN_ENDPOINTS = {
     "OpenAI (default)":  "https://api.openai.com/v1",
@@ -36,6 +39,7 @@ DEFAULT_MODELS = {
     PROVIDER_GOOGLE:     "gemini-2.0-flash",
     PROVIDER_OPENAI:     "gpt-4o",
     PROVIDER_COMPATIBLE: "mistral-medium",
+    PROVIDER_OLLAMA:     "deepseek-r1:14b",
 }
 
 # Model suggestions shown as quick-fill buttons in Settings
@@ -63,6 +67,18 @@ MODEL_SUGGESTIONS = {
         "llama-3-70b-instruct",
         "mixtral-8x7b",
         "gemma-7b-it",
+        "deepseek-chat",
+        "deepseek-coder",
+    ],
+    PROVIDER_OLLAMA: [
+        "deepseek-r1:14b",   # best quality/speed balance — recommended
+        "deepseek-r1:7b",    # faster, slightly less capable
+        "llama3.1:8b",       # great all-rounder, runs on 8GB VRAM
+        "llama3.1:70b",      # high quality, needs 48GB+ RAM
+        "llama3.2:3b",       # ultra-fast, basic tasks only
+        "mistral:7b",
+        "codellama:13b",
+        "phi3:medium",
     ],
 }
 
@@ -75,6 +91,10 @@ class APIClient:
         provider: str = PROVIDER_ANTHROPIC,
         base_url: str = "",
     ):
+        if provider == PROVIDER_OLLAMA:
+            provider = PROVIDER_COMPATIBLE
+            base_url = base_url.strip() or OLLAMA_BASE_URL
+            api_key  = api_key or "ollama"
         self._api_key  = api_key
         self._model    = model
         self._provider = provider
@@ -88,6 +108,12 @@ class APIClient:
         provider: str = PROVIDER_ANTHROPIC,
         base_url: str = "",
     ):
+        # Ollama is OpenAI-compatible at localhost — normalise here so the
+        # rest of the class never needs to know about the ollama provider.
+        if provider == PROVIDER_OLLAMA:
+            provider = PROVIDER_COMPATIBLE
+            base_url = base_url.strip() or OLLAMA_BASE_URL
+            api_key  = api_key or "ollama"  # Ollama ignores the key; must be non-empty
         self._api_key  = api_key
         self._model    = model
         self._provider = provider
@@ -301,6 +327,17 @@ class APIClient:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def list_ollama_models(base_url: str = OLLAMA_BASE_URL) -> list[str]:
+    """Return model names installed in local Ollama instance. Empty list if not running."""
+    import urllib.request, json
+    try:
+        tags_url = base_url.replace("/v1", "").rstrip("/") + "/api/tags"
+        with urllib.request.urlopen(tags_url, timeout=2) as resp:
+            data = json.loads(resp.read())
+            return [m["name"] for m in data.get("models", []) if m.get("name")]
+    except Exception:
+        return []
 
 def _friendly_error(exc: Exception, provider: str) -> str:
     msg = str(exc)

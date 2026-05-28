@@ -45,6 +45,7 @@ class AppAPI:
             "output_dir":   self.config.output_dir,
             "wcid_ranges":  self.config.get_wcid_ranges(),
             "auto_open_folder": self.config.get("auto_open_folder", True),
+            "ollama_mode":     self.config.get("ollama_mode", False),
             # Send provider metadata to JS for building the UI
             "known_endpoints": KNOWN_ENDPOINTS,
             "default_models":  DEFAULT_MODELS,
