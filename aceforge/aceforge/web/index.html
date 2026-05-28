@@ -175,6 +175,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 .modal-field input{border:1px solid var(--border);background:var(--parch);padding:7px 10px;font-size:14px;font-weight:600;user-select:text;width:100%}
 .modal-foot{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
 </style>
+<script src="icons.js" defer></script>
 </head>
 <body>
 <div class="app">
@@ -362,6 +363,22 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
     <div class="modal-foot">
       <button class="btn-cancel" onclick="closePresetModal()">Cancel</button>
       <button class="btn-save" onclick="confirmSavePreset()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ICON PICKER MODAL -->
+<div id="iconPickerOverlay" style="display:none;position:fixed;inset:0;background:rgba(20,10,0,.65);z-index:600;align-items:flex-start;justify-content:center;padding-top:4vh">
+  <div style="background:var(--parch-lt);border:1px solid var(--border);width:92vw;max-width:1200px;height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+    <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0;background:var(--parch)">
+      <div style="font-family:'Cinzel',serif;font-size:14px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--crimson)">🎨 Icon Picker</div>
+      <input type="text" id="iconSearchInp" placeholder="Search by hex (0x6000faa) or decimal (100667306)…" oninput="filterIcons(this.value)"
+        style="flex:1;font-family:'Source Code Pro',monospace;font-size:13px;border:none;border-bottom:2px solid var(--border);padding:5px 3px;outline:none;background:transparent;color:var(--ink)">
+      <span id="iconCount" style="font-family:'Cinzel',serif;font-size:10px;font-weight:700;color:var(--ink-dim);white-space:nowrap"></span>
+      <button onclick="closeIconPicker()" style="font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--border);background:transparent;color:var(--ink-mid);padding:6px 14px;cursor:pointer">✕ Close</button>
+    </div>
+    <div id="iconGrid" style="flex:1;overflow-y:auto;padding:10px;display:flex;flex-wrap:wrap;gap:4px;align-content:flex-start">
+      <div style="color:var(--ink-dim);font-family:'IM Fell English',serif;font-style:italic;padding:20px">Loading icons…</div>
     </div>
   </div>
 </div>
@@ -2539,6 +2556,116 @@ async function init(){
 
 window.addEventListener('pywebviewready',init);
 if(!window.pywebview)init();
+
+// ── ICON PICKER ───────────────────────────────────────────────────────────────
+let _iconTargetField=null;
+let _iconCurrentList=null;
+
+function openIconPicker(fieldId){
+  _iconTargetField=fieldId;
+  const overlay=$('iconPickerOverlay');
+  overlay.style.display='flex';
+  // If ICONS not loaded yet (icons.js still loading), show message
+  if(typeof ICONS==='undefined'||!ICONS.length){
+    $('iconGrid').innerHTML='<div style="color:var(--ink-dim);font-family:\'IM Fell English\',serif;font-style:italic;padding:20px">icons.js not loaded — ensure icons.js is in the web folder alongside index.html.</div>';
+    $('iconCount').textContent='0 icons';
+    return;
+  }
+  $('iconSearchInp').value='';
+  _iconCurrentList=ICONS;
+  renderIconBatch(ICONS);
+  updateIconCount(ICONS.length);
+  $('iconSearchInp').focus();
+}
+
+function closeIconPicker(){
+  $('iconPickerOverlay').style.display='none';
+}
+
+function renderIconBatch(list){
+  _iconCurrentList=list;
+  const grid=$('iconGrid');
+  grid.innerHTML='';
+  grid._list=list;
+  grid._offset=0;
+  loadMoreIcons(grid, 300);
+  grid.onscroll=()=>{
+    if(grid.scrollTop+grid.clientHeight>=grid.scrollHeight-400)
+      loadMoreIcons(grid, 200);
+  };
+}
+
+function loadMoreIcons(grid, count){
+  const list=grid._list;
+  if(!list||grid._offset>=list.length) return;
+  const batch=list.slice(grid._offset, grid._offset+count);
+  grid._offset+=batch.length;
+  const frag=document.createDocumentFragment();
+  batch.forEach(([dec,hexVal])=>{
+    const wrap=document.createElement('div');
+    wrap.title=hexVal+'\n'+dec;
+    wrap.style.cssText='width:64px;height:80px;cursor:pointer;border:2px solid transparent;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;padding:3px;background:var(--parch);transition:border-color .1s,background .1s';
+    wrap.onmouseenter=()=>{wrap.style.borderColor='var(--crimson)';wrap.style.background='var(--parch-dk)';};
+    wrap.onmouseleave=()=>{wrap.style.borderColor='transparent';wrap.style.background='var(--parch)';};
+    wrap.onclick=()=>selectIcon(hexVal);
+
+    const img=document.createElement('img');
+    // Filename is the decimal ID
+    img.src='icons/'+dec+'.png';
+    img.width=40; img.height=40;
+    img.style.cssText='object-fit:contain;image-rendering:pixelated';
+    img.loading='lazy';
+    img.onerror=()=>{
+      img.style.display='none';
+      // Show placeholder hex text instead
+      const ph=document.createElement('div');
+      ph.style.cssText="width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:7px;color:var(--ink-faint);font-family:'Source Code Pro',monospace;text-align:center;word-break:break-all";
+      ph.textContent=hexVal;
+      wrap.insertBefore(ph, label);
+    };
+
+    const label=document.createElement('div');
+    label.style.cssText="font-family:'Source Code Pro',monospace;font-size:7px;color:var(--ink-dim);text-align:center;overflow:hidden;white-space:nowrap;max-width:60px";
+    label.textContent=hexVal;
+
+    wrap.appendChild(img);
+    wrap.appendChild(label);
+    frag.appendChild(wrap);
+  });
+  grid.appendChild(frag);
+}
+
+function filterIcons(query){
+  if(typeof ICONS==='undefined') return;
+  const q=query.trim().toLowerCase().replace(/^0x/,'');
+  const filtered=q.length<1 ? ICONS : ICONS.filter(([dec,hexVal])=>{
+    return hexVal.replace('0x','').includes(q)||String(dec).includes(q);
+  });
+  renderIconBatch(filtered);
+  updateIconCount(filtered.length);
+}
+
+function updateIconCount(n){
+  const el=$('iconCount');
+  if(el) el.textContent=n.toLocaleString()+' icons';
+}
+
+function selectIcon(hexVal){
+  if(_iconTargetField){
+    const el=document.getElementById(_iconTargetField);
+    if(el){
+      el.value=hexVal;
+      el.dispatchEvent(new Event('input'));
+    }
+  }
+  closeIconPicker();
+  toast('Icon set: '+hexVal);
+}
+
+// Close on backdrop click
+$('iconPickerOverlay')&&$('iconPickerOverlay').addEventListener('mousedown',e=>{
+  if(e.target===$('iconPickerOverlay')) closeIconPicker();
+});
 </script>
 </body>
 </html>
