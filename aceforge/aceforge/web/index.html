@@ -1,0 +1,2544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACEForge</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;800&family=IM+Fell+English:ital@0;1&family=Source+Code+Pro:wght@400;500;600&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--parch:#ede4ce;--parch-lt:#f5eedf;--parch-dk:#d6c9a8;--ink:#2a1e0a;--ink-mid:#5a4a28;--ink-dim:#7a6a48;--ink-faint:#b8a888;--crimson:#7a1515;--crimson-dk:#5a0d0d;--crimson-lt:#c04040;--sql:#14100a;--gold:#c8a040;--green:#3a8a3a;--border:#c8b898;--border-lt:#ddd0b8;}
+html,body{height:100%;overflow:hidden;font-family:'Crimson Text',serif;background:var(--parch);color:var(--ink);font-size:16px;user-select:none}
+.topbar{height:54px;background:var(--parch);border-bottom:2px solid var(--border);display:flex;align-items:center;padding:0 20px;flex-shrink:0}
+.logo{display:flex;align-items:center;gap:10px;margin-right:20px}
+.logo-x{color:var(--crimson);font-size:18px}
+.logo-name{font-family:'Cinzel',serif;font-size:18px;font-weight:800;letter-spacing:.15em}
+.logo-sub{font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:13px}
+.top-divider{width:1px;height:30px;background:var(--border);margin:0 16px}
+.top-info-label{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-dim)}
+.top-info-val{font-family:'Cinzel',serif;font-size:12px;font-weight:800;color:var(--ink)}
+.top-spacer{flex:1}
+.top-btn{font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--border);background:transparent;color:var(--ink-mid);padding:6px 14px;cursor:pointer;transition:all .15s;margin-left:6px}
+.top-btn:hover{background:var(--parch-dk);border-color:var(--ink-mid)}
+.top-btn.danger:hover{border-color:var(--crimson);color:var(--crimson)}
+.mode-tabs{display:flex;border-bottom:2px solid var(--border);background:var(--parch-lt);padding:0 20px;flex-shrink:0}
+.mode-tab{font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:13px 22px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--ink-dim);background:none;border-top:none;border-left:none;border-right:none;display:flex;align-items:center;gap:7px;transition:all .15s}
+.mode-tab:hover{color:var(--ink)}
+.mode-tab.active{color:var(--crimson);border-bottom-color:var(--crimson)}
+.app{display:flex;flex-direction:column;height:100vh}
+.workspace{flex:1;overflow:hidden;display:none;flex-direction:row}
+.workspace.active{display:flex}
+.form-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--parch-lt);min-width:0}
+.sql-panel{flex-shrink:0;background:var(--sql);display:flex;flex-direction:column;width:420px}
+.sql-resize{width:5px;background:var(--border);cursor:ew-resize;flex-shrink:0}
+.sql-resize:hover,.sql-resize.dragging{background:var(--crimson)}
+.wb-header{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;background:var(--parch);flex-shrink:0}
+.wb-title{font-family:'Cinzel',serif;font-size:14px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--crimson)}
+.wb-title span{color:var(--ink-dim);font-weight:400}
+.wb-desc{font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:13px;margin-top:2px}
+.wcid-label{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-dim);text-align:right}
+.wcid-row{display:flex;align-items:center;gap:5px;margin-top:3px}
+.wcid-inp{font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600;color:var(--ink);background:var(--parch-lt);border:1px solid var(--border);padding:3px 7px;width:82px;text-align:center;outline:none}
+.inner-tabs{display:flex;border-bottom:2px solid var(--border);background:var(--parch);padding:0 18px;flex-shrink:0;overflow-x:auto}
+.itab{font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:12px 15px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--ink-dim);background:none;border-top:none;border-left:none;border-right:none;white-space:nowrap;transition:all .15s}
+.itab:hover{color:var(--ink)}
+.itab.active{color:var(--crimson);border-bottom-color:var(--crimson)}
+.id-row{padding:12px 18px 10px;display:flex;gap:14px;align-items:end;border-bottom:1px solid var(--border-lt);flex-shrink:0;flex-wrap:wrap}
+.fg{display:flex;flex-direction:column;gap:3px;flex:1;min-width:60px}
+.fl{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-dim);display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
+.fc{font-family:'Source Code Pro',monospace;font-size:9px;color:var(--ink-faint)}
+input[type=text],input[type=number],select,textarea{font-family:'Crimson Text',serif;font-size:15px;font-weight:600;color:var(--ink);background:var(--parch);border:none;border-bottom:2px solid var(--border);padding:5px 3px;width:100%;outline:none;transition:border-color .15s;-webkit-appearance:none;appearance:none}
+input:focus,select:focus,textarea:focus{border-bottom-color:var(--crimson)}
+select{cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a7a58'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 4px center;padding-right:20px;background-color:var(--parch)}
+select option{background:#fff;color:#2a1e0a}
+.ctab-bar{display:flex;border-bottom:1px solid var(--border);background:var(--parch);padding:0 18px;flex-shrink:0;overflow-x:auto}
+.ctab{font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:10px 14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;color:var(--ink-dim);background:none;border-top:none;border-left:none;border-right:none;white-space:nowrap;transition:all .15s}
+.ctab:hover{color:var(--ink)}
+.ctab.active{color:var(--crimson);border-bottom-color:var(--crimson)}
+.presets{padding:9px 18px 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--border-lt);flex-shrink:0;min-height:40px}
+.presets-label{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim)}
+.pill{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;padding:5px 13px;border:1px solid var(--border);background:transparent;color:var(--ink-mid);cursor:pointer;border-radius:14px;transition:all .15s}
+.pill:hover{background:var(--parch-dk);border-color:var(--crimson);color:var(--crimson)}
+.pill.add-preset{border-style:dashed;color:var(--gold);border-color:var(--gold)}
+.pill.add-preset:hover{background:rgba(200,160,64,.1)}
+.form-scroll{flex:1;overflow-y:auto;padding-bottom:74px}
+.sub-panel{display:none}
+.sub-panel.active{display:block}
+.form-scroll::-webkit-scrollbar{width:5px}
+.form-scroll::-webkit-scrollbar-thumb{background:var(--border-lt)}
+.sec{padding:12px 18px}
+.sh{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.st{font-family:'Cinzel',serif;font-size:11px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--ink)}
+.sl{flex:1;height:1px;background:var(--border-lt)}
+.grid{display:grid;gap:12px 16px}
+.g2{grid-template-columns:1fr 1fr}
+.g3{grid-template-columns:1fr 1fr 1fr}
+.g4{grid-template-columns:1fr 1fr 1fr 1fr}
+.rg{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.span2{grid-column:span 2}
+.span3{grid-column:span 3}
+.warn{color:var(--crimson);font-size:13px;font-weight:700;font-style:italic;margin-bottom:8px}
+.note{color:var(--ink-dim);font-size:13px;font-style:italic;margin-bottom:8px}
+.ptbl{width:100%;border-collapse:collapse;font-size:14px}
+.ptbl th{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);text-align:left;padding:5px 6px;border-bottom:1px solid var(--border)}
+.ptbl td{padding:3px 6px;border-bottom:1px solid var(--border-lt);vertical-align:middle}
+.ptbl tr:hover td{background:rgba(200,184,152,.12)}
+.ptbl td input,.ptbl td select{font-size:13px;padding:2px;border-bottom-width:1px;font-weight:600}
+.sdrop-wrap{position:relative}
+.sdrop-box{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);box-shadow:0 6px 24px rgba(0,0,0,.18);z-index:400;display:none;flex-direction:column;max-height:240px}
+.sdrop-box.open{display:flex}
+.sdrop-inp{font-family:'Crimson Text',serif;font-size:15px;font-weight:600;padding:8px 12px;border:none;border-bottom:2px solid var(--border);outline:none;color:var(--ink);width:100%}
+.sdrop-list{overflow-y:auto;flex:1;max-height:240px}
+.sdrop-item{padding:7px 12px;cursor:pointer;font-size:14px;font-weight:600;color:var(--ink);border-bottom:1px solid var(--border-lt)}
+.sdrop-item:hover{background:var(--parch-lt)}
+.sdrop-item small{color:var(--ink-dim);font-size:11px;margin-left:8px;font-weight:400}
+.sdrop-none{padding:12px;color:var(--ink-dim);font-style:italic;font-size:13px}
+.spell-row{display:grid;grid-template-columns:100px 1fr 120px 30px;gap:8px;align-items:end;margin-bottom:8px}
+.add-btn{font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:1px dashed var(--border);background:transparent;color:var(--ink-dim);padding:7px 14px;cursor:pointer;width:100%;margin-top:4px;transition:all .15s}
+.add-btn:hover{border-color:var(--crimson);color:var(--crimson)}
+.del{font-size:16px;color:var(--crimson-lt);background:none;border:none;cursor:pointer;opacity:.6;padding:0 3px;line-height:1;font-weight:700}
+.del:hover{opacity:1}
+.emote-block{border:1px solid var(--border-lt);margin-bottom:10px;background:var(--parch)}
+.emote-hdr{padding:8px 12px;background:var(--parch-dk);display:flex;align-items:center;gap:8px;cursor:pointer}
+.emote-hdr-title{font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);flex:1}
+.emote-body{padding:10px 12px;display:none}
+.emote-body.open{display:block}
+.emote-action-row{display:grid;grid-template-columns:24px 160px 1fr 90px 90px 28px;gap:6px;align-items:end;margin-bottom:6px;padding:4px;background:rgba(200,184,152,.1);border-left:2px solid var(--border)}
+.bp-wrap{overflow-x:auto}
+table.bp{width:100%;border-collapse:collapse;font-size:13px}
+table.bp th{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim);text-align:left;padding:4px 4px;border-bottom:1px solid var(--border);white-space:nowrap}
+table.bp td{padding:2px 4px;border-bottom:1px solid var(--border-lt)}
+table.bp td input,table.bp td select{font-size:12px;padding:2px 1px;font-weight:600}
+table.bp tr:hover td{background:rgba(200,184,152,.12)}
+.sql-hdr{padding:12px 16px;border-bottom:1px solid #2a2010;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.sql-title{font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);display:flex;align-items:center;gap:6px}
+.sql-title::before{content:'◆';font-size:9px}
+.sql-btns{display:flex;gap:5px}
+.sql-btn{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:1px solid #3a3020;background:transparent;color:#8a7a58;padding:5px 10px;cursor:pointer;transition:all .15s}
+.sql-btn:hover{border-color:var(--gold);color:var(--gold)}
+.sql-out{flex:1;overflow-y:auto;overflow-x:auto;padding:14px 16px;font-family:'Source Code Pro',monospace;font-size:12px;line-height:1.8;color:#c8b898;white-space:pre}
+.sql-out::-webkit-scrollbar{width:6px;height:6px}
+.sql-out::-webkit-scrollbar-thumb{background:#3a3020;border-radius:3px}
+.sql-out::-webkit-scrollbar-track{background:#0a0800}
+.kw{color:#e8d080;font-weight:600}
+.st2{color:#e0a080}
+.nm{color:#80c0e8}
+.cm{color:#5a7a5a;font-style:italic}
+.forge-bar{position:fixed;bottom:0;left:0;right:0;background:var(--parch);border-top:1px solid var(--border);padding:10px 18px;display:flex;gap:10px;align-items:center;z-index:50}
+.forge-inp{flex:1;font-family:'IM Fell English',serif;font-style:italic;font-size:14px;color:var(--ink-faint);background:transparent;border:none;outline:none;padding:3px}
+.forge-btn{font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:.1em;padding:10px 20px;background:var(--crimson);color:#f5eedf;border:none;cursor:pointer;text-transform:uppercase;transition:all .15s}
+.forge-btn:hover{background:var(--crimson-dk)}
+.ai-workspace{flex:1;display:none;background:var(--parch-lt)}
+.ai-workspace.active{display:flex}
+.ai-left{flex:1;display:flex;flex-direction:column;padding:20px;overflow-y:auto}
+.ai-right{width:380px;background:var(--sql);display:flex;flex-direction:column;flex-shrink:0}
+.ai-ctab{font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:7px 15px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:3px;transition:all .15s}
+.ai-ctab:hover{border-color:var(--crimson);color:var(--crimson)}
+.ai-ctab.active{background:var(--crimson);border-color:var(--crimson);color:#f5eedf}
+.ai-gen-btn{font-family:'Cinzel',serif;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:11px 26px;background:var(--crimson);color:#f5eedf;border:none;cursor:pointer;transition:all .15s}
+.ai-gen-btn:hover{background:var(--crimson-dk)}
+.ai-gen-btn:disabled{background:#8a7a58;cursor:not-allowed}
+.ai-stop-btn{font-family:'Cinzel',serif;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:11px 20px;background:transparent;border:1px solid var(--border);color:var(--ink-mid);cursor:pointer;transition:all .15s}
+.ai-stop-btn:hover{border-color:var(--crimson);color:var(--crimson)}
+.ai-status{font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--ink-dim);margin-left:8px}
+.ai-status.generating{color:var(--gold);animation:pulse 1.5s ease-in-out infinite}
+.ai-status.done{color:var(--green)}
+.ai-status.error{color:var(--crimson-lt)}
+@keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
+.settings-overlay{position:fixed;inset:0;background:rgba(20,10,0,.5);z-index:200;display:none;align-items:center;justify-content:center}
+.settings-overlay.open{display:flex}
+.settings-box{background:var(--parch-lt);border:1px solid var(--border);width:640px;max-height:84vh;overflow:hidden;display:flex;flex-direction:column}
+.settings-hdr{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.settings-title{font-family:'Cinzel',serif;font-size:14px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--crimson)}
+.settings-close{font-size:20px;background:none;border:none;color:var(--ink-dim);cursor:pointer;line-height:1;font-weight:700}
+.settings-close:hover{color:var(--crimson)}
+.settings-body{padding:20px;flex:1;overflow-y:auto;user-select:text}
+.settings-body input,.settings-body select{user-select:text}
+.sec-title{font-family:'Cinzel',serif;font-size:9px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-dim);background:var(--parch-dk);padding:6px 8px;margin-bottom:12px;margin-top:16px}
+.sf-label{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:4px;display:block}
+.sf{margin-bottom:14px;user-select:text}
+.sf input,.sf select{border:1px solid var(--border);background:var(--parch);padding:7px 10px;font-size:14px;font-weight:600;user-select:text}
+.settings-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0}
+.btn-save{font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:9px 22px;background:var(--crimson);color:#f5eedf;border:none;cursor:pointer}
+.btn-cancel{font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:9px 22px;background:transparent;border:1px solid var(--border);color:var(--ink-mid);cursor:pointer}
+.wt{width:100%;border-collapse:collapse;font-size:13px;font-weight:600}
+.wt th{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);padding:5px 6px;border-bottom:1px solid var(--border);text-align:left}
+.wt td{padding:5px 6px;border-bottom:1px solid var(--border-lt)}
+.wt td input{font-size:13px;border-bottom:1px solid var(--border);font-weight:600}
+.toast{position:fixed;bottom:74px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--parch-lt);font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.1em;padding:9px 18px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:300}
+.toast.show{opacity:1}
+.modal{position:fixed;inset:0;background:rgba(20,10,0,.5);z-index:300;display:none;align-items:center;justify-content:center}
+.modal.open{display:flex}
+.modal-box{background:var(--parch-lt);border:1px solid var(--border);padding:24px;width:380px}
+.modal-title{font-family:'Cinzel',serif;font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--crimson);margin-bottom:16px}
+.modal-label{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:4px;display:block}
+.modal-field input{border:1px solid var(--border);background:var(--parch);padding:7px 10px;font-size:14px;font-weight:600;user-select:text;width:100%}
+.modal-foot{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo"><span class="logo-x">✠</span><span class="logo-name">ACEFORGE</span><span class="logo-sub">— Weenie Workbench</span></div>
+  <div class="top-divider"></div>
+  <div>
+    <div class="top-info-label">Active <span id="topType">Creature</span></div>
+    <div class="top-info-val">WCID <span id="topRange">850,000 – 859,999</span></div>
+  </div>
+  <div class="top-spacer"></div>
+  <button class="top-btn" onclick="openOutputFolder()">📂 Output</button>
+  <button class="top-btn" onclick="openSettings()">⚙ Settings</button>
+  <button class="top-btn danger" onclick="resetForm()">↺ Reset</button>
+</div>
+
+<!-- MODE TABS -->
+<div class="mode-tabs">
+  <button class="mode-tab active" onclick="switchMode('manual',this)">✏ Manual</button>
+  <button class="mode-tab" onclick="switchMode('ai',this)">✨ AI Mode</button>
+</div>
+
+<!-- MANUAL WORKSPACE -->
+<div class="workspace active" id="manualWS">
+  <div class="form-panel">
+    <div class="wb-header">
+      <div>
+        <div class="wb-title" id="wbTitle">✠ Creature <span>· Workbench</span></div>
+        <div class="wb-desc" id="wbDesc">Hostile creatures with combat, loot, and behavior.</div>
+      </div>
+      <div>
+        <div class="wcid-label">WCID Range</div>
+        <div class="wcid-row">
+          <input class="wcid-inp" id="wcidFrom" value="850000" oninput="regen()">
+          <span style="color:var(--ink-dim)">–</span>
+          <input class="wcid-inp" id="wcidTo" value="859999">
+        </div>
+      </div>
+    </div>
+    <div class="inner-tabs" id="innerTabs"></div>
+    <div class="id-row" id="idRow"></div>
+    <div class="ctab-bar" id="subTabs"></div>
+    <div class="presets" id="presetsRow"></div>
+    <div class="form-scroll" id="formContent"></div>
+  </div>
+  <div class="sql-resize" id="sqlResize"></div>
+  <div class="sql-panel" id="sqlPanel">
+    <div class="sql-hdr">
+      <div class="sql-title">Generated SQL</div>
+      <div class="sql-btns">
+        <button class="sql-btn" onclick="copySQL()">⊡ Copy</button>
+        <button class="sql-btn" onclick="saveSQL()">+ Save</button>
+      </div>
+    </div>
+    <div id="sqlDirtyBanner" style="display:none;align-items:center;gap:8px;padding:6px 14px;background:#2a1800;border-bottom:1px solid #5a3000;flex-shrink:0">
+      <span style="color:var(--gold);font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em">⚠ MANUAL EDIT MODE</span>
+      <span style="color:#a08050;font-family:'Cinzel',serif;font-size:9px;flex:1">Values changed in SQL that could not sync to form fields.</span>
+      <button onclick="discardSQLEdit()" style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:1px solid #5a3000;background:transparent;color:#a08050;padding:3px 10px;cursor:pointer" onmouseover="this.style.borderColor='var(--crimson)';this.style.color='var(--crimson-lt)'" onmouseout="this.style.borderColor='#5a3000';this.style.color='#a08050'">↺ Discard &amp; Regen</button>
+    <div style="flex:1;overflow-x:auto;overflow-y:auto">
+    <textarea class="sql-out" id="sqlOut" spellcheck="false"
+      oninput="onSQLEdit()"
+      style="font-family:'Source Code Pro',monospace;font-size:12px;line-height:1.8;color:#c8b898;background:transparent;border:none;outline:none;resize:none;min-width:max-content;width:100%;white-space:pre;overflow-wrap:normal"
+    ></textarea>
+    </div>
+</div>
+
+<!-- AI WORKSPACE -->
+<div class="workspace" id="aiWS" style="flex-direction:row">
+  <div class="ai-left">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:16px">
+      <div style="font-family:'Cinzel',serif;font-size:14px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--crimson)">✨ AI Content Generator</div>
+      <div style="font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:13px">Describe what you want — AI generates complete SQL.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px" id="aiTypeTabs"></div>
+    <div style="border:1px solid var(--border);background:var(--parch);padding:14px">
+      <div style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:8px">Describe your content</div>
+      <textarea id="aiPrompt" style="width:100%;height:120px;font-family:'IM Fell English',serif;font-style:italic;font-size:15px;color:var(--ink);background:transparent;border:none;outline:none;resize:none;line-height:1.6;user-select:text" placeholder="e.g. A level 180 ice drudge for a snowy biome. High cold resist, weak to fire. Drops T6 loot. Casts Frost Bolt and Frost Volley."></textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+      <button class="ai-gen-btn" id="aiGenBtn" onclick="startGeneration()" disabled title="Connect an API key in Settings first">▶ Generate</button>
+      <button class="ai-stop-btn" id="aiStopBtn" onclick="stopGeneration()" style="display:none">⏹ Stop</button>
+      <button class="ai-gen-btn" onclick="clearAI()" style="background:transparent;border:1px solid var(--border);color:var(--ink-mid)">🗑 Clear</button>
+      <span class="ai-status" id="aiStatus"></span>
+    </div>
+    <div style="flex:1;overflow:hidden;margin-top:12px;border:1px solid var(--border);background:var(--sql);display:flex;flex-direction:column;min-height:200px">
+      <div style="padding:8px 12px;border-bottom:1px solid #2a2010;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+        <div style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)">◆ Output</div>
+        <button class="sql-btn" id="aiSaveBtn" onclick="saveAIFiles()" disabled>💾 Save Files</button>
+      </div>
+      <div id="aiOut" style="flex:1;overflow-y:auto;padding:12px 14px;font-family:'Source Code Pro',monospace;font-size:11px;line-height:1.8;color:#c8b898;white-space:pre-wrap"></div>
+    </div>
+  </div>
+  <div class="ai-right">
+    <div class="sql-hdr"><div class="sql-title">Saved Files</div></div>
+    <div id="aiFileList" style="flex:1;overflow-y:auto;padding:14px;font-size:13px;color:#8a7a58;font-style:italic">Files appear here after saving.</div>
+  </div>
+</div>
+
+<!-- FORGE BAR -->
+<div class="forge-bar" id="forgeBar">
+  <span class="forge-inp">Switch to AI Mode tab to generate content with AI</span>
+  <button class="forge-btn" onclick="switchMode('ai',document.querySelectorAll('.mode-tab')[1])">Switch to AI Mode →</button>
+</div>
+
+<!-- SETTINGS -->
+<div class="settings-overlay" id="settingsOverlay">
+  <div class="settings-box">
+    <div class="settings-hdr">
+      <div class="settings-title">⚙ Settings</div>
+      <button class="settings-close" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="settings-body">
+      <div class="sec-title">AI Provider</div>
+      <div class="sf">
+        <label class="sf-label">Provider</label>
+        <select id="sProvider" style="width:100%" onchange="onProviderChange()">
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="google">Google AI Studio (Gemini) — Free Tier Available</option>
+          <option value="openai">OpenAI (GPT)</option>
+          <option value="compatible">OpenAI-Compatible Endpoint</option>
+        </select>
+        <div id="sProviderNote" style="font-family:'IM Fell English',serif;font-style:italic;font-size:13px;color:var(--green);margin-top:6px"></div>
+      </div>
+      <div class="sf" id="sBaseUrlField" style="display:none">
+        <label class="sf-label">Base URL</label>
+        <select id="sBaseUrlPreset" style="width:100%;margin-bottom:6px" onchange="onEndpointPreset()">
+          <option value="">— choose a known endpoint —</option>
+        </select>
+        <input type="text" id="sBaseUrl" placeholder="https://api.example.com/v1" style="width:100%">
+      </div>
+      <div class="sf">
+        <label class="sf-label">API Key</label>
+        <input type="password" id="sApiKey" placeholder="Paste your API key here" style="width:100%">
+      </div>
+      <div class="sf">
+        <label class="sf-label">Model</label>
+        <input type="text" id="sModel" placeholder="e.g. claude-sonnet-4-20250514" style="width:100%">
+        <div id="sModelHints" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+        <button class="top-btn" onclick="testAPIKey()">⚡ Test Connection</button>
+        <span id="sTestResult" style="font-family:'Cinzel',serif;font-size:10px;font-weight:700"></span>
+      </div>
+      <div class="sec-title">Save Behavior</div>
+      <div class="sf" style="display:flex;align-items:center;gap:12px">
+        <input type="checkbox" id="sAutoOpen" style="width:auto;border:none;border-bottom:none;padding:0;margin:0;cursor:pointer;accent-color:var(--crimson)" checked>
+        <label class="sf-label" style="margin:0;cursor:pointer" for="sAutoOpen">Automatically open output folder after saving a file</label>
+      </div>
+      <div class="sec-title">Server Configuration</div>
+      <div class="sf">
+        <label class="sf-label">Server Name</label>
+        <input type="text" id="sServerName" placeholder="Server Name" style="width:100%">
+      </div>
+      <div class="sf">
+        <label class="sf-label">Author / Admin Name</label>
+        <input type="text" id="sAuthor" placeholder="Your name" style="width:100%">
+      </div>
+      <div class="sf">
+        <label class="sf-label">Output Directory</label>
+        <input type="text" id="sOutputDir" placeholder="C:\Documents\ACEForge\output" style="width:100%">
+      </div>
+      <div class="sec-title">WCID Ranges</div>
+      <table class="wt">
+        <thead><tr><th>Category</th><th>Range Start</th><th>Next Available</th></tr></thead>
+        <tbody id="wcidTbody"></tbody>
+      </table>
+    </div>
+    <div class="settings-foot">
+      <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
+      <button class="btn-save" onclick="saveSettings()">Save Settings</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRESET MODAL -->
+<div class="modal" id="presetModal">
+  <div class="modal-box">
+    <div class="modal-title">✦ Save as Preset</div>
+    <div class="modal-field">
+      <label class="modal-label">Preset Name</label>
+      <input type="text" id="presetNameInp" placeholder="e.g. Frost Golem T7">
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closePresetModal()">Cancel</button>
+      <button class="btn-save" onclick="confirmSavePreset()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+<script>
+// ── DATA LOADING ─────────────────────────────────────────────────────────────
+let SPELLS=[], WEAPONS=[], ARMOR=[];
+async function loadData(){
+  try {
+    const base=document.location.href.replace(/[^/]*$/,'');
+    const [sp,wp,ar]=await Promise.all([
+      fetch(base+'spells.json').then(r=>r.json()),
+      fetch(base+'weapons.json').then(r=>r.json()),
+      fetch(base+'armor.json').then(r=>r.json()),
+    ]);
+    SPELLS=sp; WEAPONS=wp; ARMOR=ar;
+  } catch(e){console.warn('Data load:',e);}
+}
+
+// ── ENUM DATA ─────────────────────────────────────────────────────────────────
+const CREATURE_TYPES=[[0,'None'],[1,'Olthoi'],[2,'Banderling'],[3,'Drudge'],[4,'Mosswart'],[5,'Lugian'],[6,'Tumerok'],[7,'Mite'],[8,'Tusker'],[13,'Golem'],[14,'Undead'],[15,'Gromnie'],[16,'Reedshark'],[17,'Armoredillo'],[18,'Fae'],[19,'Virindi'],[20,'Wisp'],[22,'Shadow'],[23,'Mattekar'],[28,'Monouga'],[29,'Zefir'],[30,'Skeleton'],[31,'Human'],[32,'Shreth'],[38,'FireElemental'],[39,'Snowman'],[44,'Grievver'],[46,'Ursuin'],[48,'HollowMinion'],[60,'AcidElemental'],[61,'FrostElemental'],[75,'Burun'],[99,'GearKnight'],[100,'Gurog'],[101,'Anekshay']];
+const DMG_TYPES=[[0,'None'],[1,'Slash'],[2,'Pierce'],[4,'Bludgeon'],[8,'Cold'],[16,'Fire'],[32,'Acid'],[64,'Electric'],[1024,'Nether']];
+const WEP_SKILLS=[[44,'HeavyWeapons'],[45,'LightWeapons'],[46,'FinesseWeapons'],[41,'TwoHandedCombat'],[47,'MissileWeapons'],[34,'WarMagic'],[33,'LifeMagic'],[43,'VoidMagic']];
+const COMBAT_STYLES=[[2,'OneHanded'],[4,'OneHanded+Shield'],[8,'TwoHanded'],[512,'Magic'],[16,'Bow'],[32,'Crossbow'],[128,'ThrownWeapon']];
+const ATTACK_TYPES=[[0,'None'],[1,'Punch'],[2,'Thrust'],[4,'Slash'],[6,'Thrust+Slash'],[8,'Kick'],[32,'DoubleSlash'],[64,'TripleSlash']];
+const ARMOR_SLOTS=[[1,'Head'],[2,'Chest'],[4,'Abdomen'],[8,'UpperArm'],[16,'LowerArm'],[32,'Hand'],[64,'UpperLeg'],[128,'LowerLeg'],[256,'Foot'],[512,'ChestArmor'],[1024,'AbdomenArmor'],[2048,'UpperArmArmor'],[4096,'LowerArmArmor'],[8192,'UpperLegArmor'],[16384,'LowerLegArmor'],[32768,'NeckWear'],[65536,'Cloak'],[1048576,'Necklace'],[134217728,'RingL'],[268435456,'RingR']];
+const ARMOR_TYPES=[[0,'None'],[1,'Cloth'],[2,'Leather'],[3,'StuddedLeather'],[4,'Scale'],[5,'Chainmail'],[6,'DiffusingWeave'],[7,'Amuli'],[8,'Celdon'],[9,'Haebrean'],[10,'Yoroi'],[11,'Platemail'],[12,'Lorica'],[13,'Nariyid'],[14,'Alduressa'],[15,'Covenant'],[17,'Koveras'],[18,'Olthoi']];
+const ITEM_USE=[[1,'No'],[2,'Self'],[4,'Wielded'],[8,'Contained'],[16,'Viewed'],[32,'Remote']];
+const BONDED=[[-2,'Destroy on Death'],[-1,'Slippery'],[0,'Normal'],[1,'Bonded (kept)'],[2,'Sticky']];
+const ATTUNED=[[0,'Normal'],[1,'Attuned'],[2,'Sticky']];
+const PALETTES=[[0,'None'],[1,'AquaBlue'],[2,'Blue'],[4,'Brown'],[8,'Green'],[9,'Grey'],[14,'Red'],[17,'Yellow'],[19,'Copper'],[20,'Silver'],[21,'Gold'],[39,'Black'],[40,'Bronze'],[41,'SandyYellow'],[46,'Tan'],[47,'PastyYellow'],[48,'White']];
+const ALL_SKILLS=[[6,'MeleeDefense'],[7,'MissileDefense'],[14,'ArcaneLore'],[15,'MagicDefense'],[16,'ManaConversion'],[33,'LifeMagic'],[34,'WarMagic'],[41,'TwoHandedCombat'],[43,'VoidMagic'],[44,'HeavyWeapons'],[45,'LightWeapons'],[46,'FinesseWeapons'],[47,'MissileWeapons'],[48,'Shield'],[49,'DualWield'],[50,'Recklessness'],[51,'SneakAttack'],[52,'DirtyFighting']];
+const SKILL_SAC=[[1,'Untrained'],[2,'Trained'],[3,'Specialized']];
+const RADAR_COLORS=[[1,'Blue'],[2,'Gold'],[3,'White'],[4,'Purple'],[5,'Red'],[7,'Green'],[8,'Yellow (NPC)']];
+const WEENIE_TYPES=[[1,'Generic'],[2,'Clothing/Armor'],[3,'MissileLauncher'],[4,'Missile'],[6,'MeleeWeapon'],[7,'Portal'],[8,'Book'],[9,'Coin'],[10,'Creature'],[12,'Vendor'],[18,'Food'],[19,'Door'],[20,'Chest'],[21,'Container'],[22,'Key'],[24,'PressurePlate'],[25,'LifeStone'],[26,'Switch'],[28,'Healer'],[29,'LightSource'],[32,'SpellComponent'],[34,'Scroll'],[35,'Caster'],[37,'ManaStone'],[38,'Gem'],[51,'Stackable']];
+const PROP_INT={1:'ItemType',2:'CreatureType',3:'PaletteTemplate',4:'ClothingPriority',5:'EncumbranceVal',6:'ItemsCapacity',7:'ContainersCapacity',8:'Mass',9:'ValidLocations',10:'CurrentWieldedLocation',11:'MaxStackSize',12:'StackSize',13:'StackUnitEncumbrance',14:'StackUnitMass',15:'StackUnitValue',16:'ItemUseable',19:'Value',25:'Level',27:'ArmorType',28:'ArmorLevel',33:'Bonded',40:'CombatMode',44:'Damage',45:'DamageType',46:'DefaultCombatStyle',47:'AttackType',48:'WeaponSkill',49:'WeaponTime',51:'CombatUse',67:'Tolerance',68:'TargetingTactic',74:'MerchandiseItemTypes',75:'MerchandiseMinValue',76:'MerchandiseMaxValue',81:'MaxGeneratedObjects',82:'InitGeneratedObjects',86:'MinLevel',87:'MaxLevel',93:'PhysicsState',95:'RadarBlipColor',100:'GeneratorType',101:'AiAllowedCombatStyle',106:'ItemSpellcraft',107:'ItemCurMana',108:'ItemMaxMana',114:'Attuned',126:'VendorHappyMean',133:'ShowableOnRadar',134:'PlayerKillerStatus',140:'AiOptions',142:'GeneratorTimeType',146:'XpOverride',158:'WieldRequirements',159:'WieldSkilltype',160:'WieldDifficulty',204:'ElementalDamageBonus',270:'WieldRequirements2',271:'WieldSkilltype2',272:'WieldDifficulty2',292:'Cleaving',307:'DamageRating',308:'DamageResistRating',313:'CritRating',314:'CritDamageRating',315:'CritResistRating',317:'HealingResistRating',323:'HealingBoostRating',332:'LuminanceAward',353:'WeaponType',390:'Enlightenment'};
+const PROP_BOOL={1:'Stuck',6:'AiUsesMana',7:'AiUseHumanMagicAnimations',8:'AllowGive',11:'IgnoreCollisions',12:'ReportCollisions',13:'Ethereal',14:'GravityStatus',15:'LightsStatus',18:'Visibility',19:'Attackable',22:'Inscribable',23:'DestroyOnSell',29:'NoCorpse',39:'DealMagicalItems',41:'ReportCollisionsAsEnvironment',42:'AllowEdgeSlide',50:'NeverFailCasting',52:'AiImmobile',63:'UnlimitedUse',65:'IgnoreMagicResist',66:'IgnoreMagicArmor',79:'AiAcceptEverything',91:'Retained',98:'Invincible',120:'TreasureCorpse'};
+const PROP_FLOAT={1:'HeartbeatInterval',3:'HealthRate',4:'StaminaRate',5:'ManaRate',12:'Shade',13:'ArmorModVsSlash',14:'ArmorModVsPierce',15:'ArmorModVsBludgeon',16:'ArmorModVsCold',17:'ArmorModVsFire',18:'ArmorModVsAcid',19:'ArmorModVsElectric',21:'WeaponLength',22:'DamageVariance',29:'WeaponDefense',31:'VisualAwarenessRange',34:'PowerupTime',37:'BuyPrice',38:'SellPrice',39:'DefaultScale',41:'RegenerationInterval',43:'GeneratorRadius',54:'UseRadius',62:'WeaponOffense',64:'ResistSlash',65:'ResistPierce',66:'ResistBludgeon',67:'ResistFire',68:'ResistCold',69:'ResistAcid',70:'ResistElectric',71:'ResistHealthBoost',72:'ResistStaminaDrain',75:'ResistManaBoost',80:'AiUseMagicDelay',104:'ObviousRadarRange',125:'ResistHealthDrain',136:'CriticalMultiplier',144:'ManaConversionMod',149:'WeaponMissileDefense',150:'WeaponMagicDefense',152:'ElementalDamageMod',165:'ArmorModVsNether',166:'ResistNether'};
+const PROP_STRING={1:'Name',7:'Inscription',14:'Use',15:'ShortDesc',16:'LongDesc',17:'ActivationTalk',18:'UseMessage',20:'PluralName',22:'ActivationFailure',33:'Quest',34:'GeneratorEvent',38:'AppraisalPortalDestination',45:'KillQuest',49:'KillQuest2',50:'KillQuest3'};
+const PROP_DID={1:'Setup',2:'MotionTable',3:'SoundTable',4:'CombatTable',6:'PaletteBase',7:'ClothingBase',8:'Icon',9:'EyesTexture',10:'NoseTexture',11:'MouthTexture',12:'DefaultStyle',13:'DefaultSubStyle',14:'HeadObject',15:'HairTexture',16:'DefaultHairColor',17:'DefaultEyesColor',18:'DefaultSkinColor',19:'DefaultHairTexture',20:'IconHires',21:'ObjCells',22:'PhysicsEffectTable',23:'UseSound',24:'UseTargetAnimation',25:'UseTargetFailedAnimation',26:'ItemSkillLevelLimit',27:'LastPortal',28:'LinkedPortalOne',29:'WieldedTreasureType',30:'InventoryTreasureType',31:'ShopTreasureType',32:'DeathTreasureType',33:'MutateFilter',34:'UseCreateItem',35:'TsysMutationFilter',36:'IconOverlay',37:'IconOverlay2',38:'IconUnderlay',39:'AugmentationMutationData',40:'AugmentationEffect',41:'ProcSpell',42:'AugmentationCreateItem',43:'AlternateCurrency',44:'BlueSurgeSpell',45:'YellowSurgeSpell',46:'RedSurgeSpell',47:'OlthoiDeathTreasureType',48:'VendorShopTemplate',49:'LinkedLifestone',50:'LinkedPortalTwo',51:'OriginalPortal',52:'BiomeCombatTable',53:'UseItemAnimation',54:'UseItemFailAnimation',55:'CreateItemWielded',56:'EquipmentSetID',57:'WieldedTreasure2',58:'WieldedTreasure3',59:'WieldedTreasure4',60:'NpcLooksLikeObject',61:'PCAPPhysicsBurden'};
+const EMOTE_CATS=[[3,'Death'],[7,'Use'],[8,'Activation'],[9,'Generation'],[10,'PickUp'],[11,'Drop'],[14,'Taunt'],[15,'WoundedTaunt'],[16,'KillTaunt'],[17,'NewEnemy'],[18,'Scream'],[19,'Homesick'],[20,'ReceiveCritical'],[21,'ResistSpell'],[24,'HearChat'],[25,'Wield'],[26,'UnWield'],[1,'Refuse'],[2,'Vendor'],[4,'Portal'],[5,'HeartBeat'],[6,'Give'],[12,'QuestSuccess'],[13,'QuestFailure'],[22,'TestSuccess'],[23,'TestFailure'],[27,'EventSuccess'],[28,'EventFailure'],[29,'TestNoQuality'],[32,'GotoSet'],[33,'NumFellowsSuccess'],[34,'NumFellowsFailure']];
+const EMOTE_TYPES=[[1,'Act'],[2,'AwardXP'],[3,'Give'],[4,'MoveHome'],[5,'Motion'],[6,'Move'],[8,'Say'],[10,'Tell'],[11,'Turn'],[12,'TurnToTarget'],[14,'CastSpell'],[15,'Activate'],[16,'WorldBroadcast'],[17,'LocalBroadcast'],[18,'DirectBroadcast'],[19,'CastSpellInstant'],[21,'InqQuest'],[22,'StampQuest'],[23,'StartEvent'],[24,'StopEvent'],[27,'TeachSpell'],[30,'InqQuestSolves'],[31,'EraseQuest'],[32,'DecrementQuest'],[33,'IncrementQuest'],[34,'AddCharacterTitle'],[35,'InqBoolStat'],[36,'InqIntStat'],[37,'InqFloatStat'],[38,'InqStringStat'],[39,'InqAttributeStat'],[40,'InqRawAttributeStat'],[41,'InqSecondaryAttributeStat'],[42,'InqRawSecondaryAttributeStat'],[43,'InqSkillStat'],[44,'InqRawSkillStat'],[45,'InqSkillTrained'],[46,'InqSkillSpecialized'],[47,'AwardTrainingCredits'],[48,'InflictVitaePenalty'],[49,'AwardLevelProportionalXP'],[50,'AwardLevelProportionalSkillXP'],[51,'InqEvent'],[52,'ForceMotion'],[53,'SetIntStat'],[54,'IncrementIntStat'],[55,'DecrementIntStat'],[56,'CreateTreasure'],[57,'ResetHomePosition'],[58,'InqFellowQuest'],[60,'UpdateFellowQuest'],[61,'StampFellowQuest'],[62,'AwardNoShareXP'],[63,'SetSanctuaryPosition'],[64,'TellFellow'],[65,'FellowBroadcast'],[66,'LockFellow'],[67,'Goto'],[68,'PopUp'],[69,'SetBoolStat'],[70,'SetQuestCompletions'],[71,'InqNumCharacterTitles'],[73,'PetCastSpellOnOwner'],[74,'TakeItems'],[75,'InqYesNo'],[76,'InqOwnsItems'],[77,'DeleteSelf'],[79,'UpdateMyQuest'],[80,'InqMyQuest'],[81,'StampMyQuest'],[82,'InqMyQuestSolves'],[83,'EraseMyQuest'],[84,'DecrementMyQuest'],[85,'IncrementMyQuest'],[86,'SetMyQuestCompletions'],[87,'MoveToPos'],[88,'LocalSignal'],[89,'InqPackSpace'],[90,'RemoveVitaePenalty'],[91,'SetEyeTexture'],[92,'SetEyePalette'],[93,'SetNoseTexture'],[94,'SetNosePalette'],[95,'SetMouthTexture'],[96,'SetMouthPalette'],[97,'SetHeadObject'],[98,'SetHeadPalette'],[99,'TeleportTarget'],[100,'TeleportSelf'],[101,'StartBarber'],[110,'UntrainSkill'],[112,'SpendLuminance'],[113,'AwardLuminance'],[114,'InqInt64Stat'],[115,'SetInt64Stat'],[118,'SetFloatStat'],[119,'AddContract'],[120,'RemoveContract']];
+const RECIPE_SOURCE_TYPE=[[0,'Player'],[1,'Source'],[60,'Dye']];
+const MOD_TYPE=[[0,'SuccessTarget'],[1,'SuccessSource'],[2,'SuccessPlayer'],[3,'SuccessResult'],[4,'FailureTarget'],[5,'FailureSource'],[6,'FailurePlayer'],[7,'FailureResult']];
+const MOD_OP=[[0,'None'],[1,'SetValue'],[2,'Add'],[3,'CopySourceToTarget'],[4,'CopySourceToResult'],[7,'AddSpell'],[8,'SetBitsOn'],[9,'SetBitsOff']];
+const COMPARE_TYPE=[[0,'GreaterThan'],[1,'LessThanEqual'],[2,'LessThan'],[3,'GreaterThanEqual'],[4,'NotEqual'],[5,'NotEqualNotExist'],[6,'Equal'],[7,'NotExist'],[8,'Exist'],[9,'NotHasBits'],[10,'HasBits']];
+const REQUIREMENT_TYPE=[[0,'Target'],[1,'Source'],[2,'Player']];
+const BODY_PARTS_BIPED=[{k:0,n:'Head'},{k:1,n:'Chest'},{k:2,n:'Abdomen'},{k:3,n:'UpperArm'},{k:4,n:'LowerArm'},{k:5,n:'Hand'},{k:6,n:'UpperLeg'},{k:7,n:'LowerLeg'},{k:8,n:'Foot'}];
+const BODY_PARTS_QUAD=[{k:0,n:'Head'},{k:10,n:'FrontLeg'},{k:12,n:'FrontFoot'},{k:13,n:'RearLeg'},{k:15,n:'RearFoot'},{k:16,n:'Torso'},{k:17,n:'Tail'}];
+const BODY_PARTS_INSECT=[{k:0,n:'Head'},{k:16,n:'Torso'},{k:20,n:'Claw'},{k:21,n:'Wings'},{k:22,n:'Breath'},{k:17,n:'Tail'}];
+const CREATURE_BODY_MAP={1:'insect',2:'biped',3:'biped',4:'biped',5:'biped',6:'biped',7:'insect',8:'quad',13:'biped',14:'biped',15:'quad',16:'quad',17:'quad',18:'biped',19:'biped',20:'biped',22:'biped',23:'quad',28:'biped',29:'biped',30:'biped',31:'biped',32:'quad',38:'biped',39:'biped',44:'biped',46:'quad',48:'biped',60:'biped',61:'biped',75:'biped',99:'biped',100:'biped',101:'biped'};
+
+// ── TYPE CONFIG ───────────────────────────────────────────────────────────────
+const TYPE_CFG={
+  creature:{label:'Creature',icon:'✠',desc:'Hostile creatures with combat, loot, and behavior.',wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 – 859,999',wTypes:[[10,'Creature']],
+    subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes','advanced'],
+    presets:[
+      {l:'Rift Drudge (T6)',d:{fName:'Rift Drudge',fLevel:'180',fXp:'800000',fDmg:'95',fDmgType:'1',fWepSkill:'44',rSlash:'1.0',rPierce:'1.0',rBludge:'1.5',rCold:'0.5',rFire:'1.8',rAcid:'0.8',rElec:'1.0',rNether:'1.0',fHP:'3200',fStam:'3000',fMana:'500',fLum:'15000',cType:'3'}},
+      {l:'Fire Elemental',d:{fName:'Fire Elemental',fLevel:'200',fXp:'1200000',fDmg:'110',fDmgType:'16',fWepSkill:'44',rSlash:'0.6',rPierce:'0.6',rBludge:'1.2',rCold:'2.0',rFire:'0.1',rAcid:'1.0',rElec:'1.0',rNether:'0.5',fHP:'4000',fStam:'4000',fMana:'800',fLum:'20000',cType:'38'}},
+      {l:'Frost Skeleton',d:{fName:'Frost Tomb Sentinel',fLevel:'150',fXp:'400000',fDmg:'75',fDmgType:'1',fWepSkill:'44',rSlash:'0.8',rPierce:'0.7',rBludge:'1.5',rCold:'0.2',rFire:'1.5',rAcid:'1.0',rElec:'1.0',rNether:'0.3',fHP:'2200',fStam:'2000',fMana:'500',fLum:'8000',cType:'30'}},
+      {l:'Acid Olthoi',d:{fName:'Acid Olthoi',fLevel:'220',fXp:'1800000',fDmg:'130',fDmgType:'32',fWepSkill:'44',rSlash:'0.8',rPierce:'1.2',rBludge:'1.0',rCold:'1.0',rFire:'1.0',rAcid:'0.1',rElec:'1.2',rNether:'1.0',fHP:'5000',fStam:'4000',fMana:'500',fLum:'25000',cType:'1'}},
+    ]},
+  npc:{label:'NPC',icon:'◆',desc:'Quest givers, merchants, and interactive characters.',wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 – 859,999',wTypes:[[10,'Creature (NPC)'],[12,'Vendor']],
+    subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes','advanced'],
+    presets:[
+      {l:'Generic NPC',d:{fName:'New NPC',fLevel:'275',fShortDesc:'A mysterious figure.'}},
+      {l:'Quest Giver',d:{fName:'Quest Giver',fLevel:'275',fShortDesc:'A weathered figure with knowing eyes.',fUseRadius:'3.0'}},
+      {l:'Vendor',d:{fName:'Traveling Merchant',fLevel:'275',fShortDesc:'A merchant of rare goods.',fUseRadius:'5.0',fWType:'12',fBuyRate:'1.0',fSellRate:'1.1'}},
+    ]},
+  item:{label:'Item',icon:'◈',desc:'Quest tokens, gems, stackables, consumables, and containers.',wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 – 819,999',
+    wTypes:[[38,'Gem'],[51,'Stackable'],[18,'Food'],[34,'Scroll'],[22,'Key'],[20,'Chest'],[21,'Container'],[8,'Book'],[29,'LightSource'],[9,'Coin'],[28,'Healer'],[37,'ManaStone'],[32,'SpellComponent']],
+    subTabs:['properties','emotes','advanced'],
+    presets:[
+      {l:'Quest Token',d:{fName:'Quest Seal',fValue:'100',fEncumb:'5',fMaxStack:'1',fItemUse:'1',fBonded:'1',fAttuned:'1',fScale:'1.0'}},
+      {l:'Stackable Drop',d:{fName:'Crafting Fragment',fValue:'50',fEncumb:'10',fMaxStack:'25',fItemUse:'8',fBonded:'0',fAttuned:'0',fScale:'1.0'}},
+      {l:'Consumable',d:{fName:'Health Philtre',fValue:'300',fEncumb:'15',fMaxStack:'10',fItemUse:'2',fBonded:'0',fAttuned:'0',fScale:'1.0'}},
+      {l:'Container',d:{fName:'Bag of Holding',fValue:'500',fEncumb:'50',fMaxStack:'1',fItemUse:'4',fBonded:'1',fAttuned:'0',fWType:'21'}},
+    ]},
+  weapon:{label:'Weapon',icon:'⚔',desc:'Melee weapons, missile launchers, and casters.',wcidFrom:'870000',wcidTo:'879999',wcidRange:'870,000 – 879,999',wTypes:[[6,'MeleeWeapon'],[3,'MissileLauncher'],[35,'Caster'],[4,'Missile']],
+    subTabs:['properties','emotes','advanced'],
+    presets:[
+      {l:'Heavy Sword',d:{fName:'Enchanted Longsword',fDmg:'85',fDmgType:'1',fWepTime:'45',fDmgVar:'0.4',fWepSkill:'44',fWepDef:'1.02',fWepOff:'1.03',fWieldDiff:'290',fValue:'12000',fEncumb:'450',fScale:'1.0'}},
+      {l:'Light Spear',d:{fName:'Swift Spear',fDmg:'60',fDmgType:'2',fWepTime:'35',fDmgVar:'0.3',fWepSkill:'45',fWepDef:'1.04',fWepOff:'1.02',fWieldDiff:'250',fValue:'9000',fEncumb:'300',fScale:'1.0'}},
+      {l:'Finesse Dagger',d:{fName:'Venom Dagger',fDmg:'45',fDmgType:'2',fWepTime:'28',fDmgVar:'0.2',fWepSkill:'46',fWepDef:'1.06',fWepOff:'1.05',fWieldDiff:'240',fValue:'8000',fEncumb:'200',fScale:'1.0'}},
+      {l:'War Staff (Caster)',d:{fName:'Staff of War',fDmg:'0',fDmgType:'0',fWepTime:'0',fDmgVar:'0',fWepSkill:'34',fWepDef:'1.05',fWepOff:'1.0',fWieldDiff:'300',fValue:'15000',fEncumb:'250',fScale:'1.0',fWType:'35'}},
+    ]},
+  armor:{label:'Armor/Clothing',icon:'⛨',desc:'Clothing and armor for all body slots.',wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 – 819,999',wTypes:[[2,'Clothing/Armor']],
+    subTabs:['properties','emotes','advanced'],
+    presets:[
+      {l:'Plate Chest',d:{fName:'Platemail Cuirass',fArmorLevel:'200',fArmorType:'11',fValidLoc:'512',fValue:'8000',fEncumb:'600',fScale:'1.0'}},
+      {l:'Leather Cap',d:{fName:'Leather Cap',fArmorLevel:'60',fArmorType:'2',fValidLoc:'1',fValue:'800',fEncumb:'80',fScale:'1.0'}},
+      {l:'Amuli Coat',d:{fName:'Amuli Coat',fArmorLevel:'160',fArmorType:'7',fValidLoc:'2',fValue:'5000',fEncumb:'350',fScale:'1.0'}},
+      {l:'Covenant Gauntlets',d:{fName:'Covenant Gauntlets',fArmorLevel:'400',fArmorType:'15',fValidLoc:'32',fValue:'25000',fEncumb:'200',fScale:'1.0'}},
+      {l:'Cloth Robe',d:{fName:'Cloth Robe',fArmorLevel:'0',fArmorType:'1',fValidLoc:'2',fValue:'100',fEncumb:'80',fScale:'1.0'}},
+    ]},
+  jewelry:{label:'Jewelry',icon:'◎',desc:'Rings, necklaces, bracelets, and wristlets.',wcidFrom:'870000',wcidTo:'879999',wcidRange:'870,000 – 879,999',wTypes:[[1,'Generic']],
+    subTabs:['properties','spellbook','emotes','advanced'],
+    presets:[
+      {l:'Ring',d:{fName:'Ring of Vigor',fValue:'1000',fEncumb:'5',fBonded:'0',fAttuned:'0',fValidLoc:'134217728',fScale:'1.0'}},
+      {l:'Necklace',d:{fName:'Amulet of Warding',fValue:'2000',fEncumb:'8',fBonded:'0',fAttuned:'0',fValidLoc:'1048576',fScale:'1.0'}},
+    ]},
+  recipe:{label:'Recipe',icon:'⚗',desc:'Crafting recipes combining source and target items.',wcidFrom:'600000',wcidTo:'609999',wcidRange:'600,000 – 609,999',wTypes:[[38,'Gem (Recipe)']],
+    subTabs:['properties'],presets:[]},
+  quest:{label:'Quest',icon:'◇',desc:'Quest flags, kill tasks, and progression timers.',wcidFrom:'860000',wcidTo:'869999',wcidRange:'860,000 – 869,999',wTypes:[[38,'Quest Flag']],
+    subTabs:['properties'],
+    presets:[
+      {l:'Generic Quest',d:{fName:'NewQuest',fMinDelta:'0',fMaxSolves:'-1',fMsg:'NewQuest'}},
+      {l:'One-Time Completion',d:{fName:'NewQuestCompleted',fMinDelta:'0',fMaxSolves:'1',fMsg:'NewQuestCompleted'}},
+      {l:'Kill Task (KT)',d:{fName:'NewQuestKT',fMinDelta:'0',fMaxSolves:'1',fMsg:'NewQuestKT'}},
+      {l:'KT Timer (20hr)',d:{fName:'NewQuestKTTimer',fMinDelta:'72000',fMaxSolves:'-1',fMsg:'NewQuestKTTimer'}},
+      {l:'KT Completed',d:{fName:'NewQuestKTCompleted',fMinDelta:'0',fMaxSolves:'1',fMsg:'NewQuestKTCompleted'}},
+      {l:'Daily Timer (24hr)',d:{fName:'NewQuestTimer',fMinDelta:'86400',fMaxSolves:'-1',fMsg:'NewQuestTimer'}},
+      {l:'Weekly Timer (7d)',d:{fName:'NewQuestWeekly',fMinDelta:'604800',fMaxSolves:'-1',fMsg:'NewQuestWeekly'}},
+      {l:'Monthly Timer (30d)',d:{fName:'NewQuestMonthly',fMinDelta:'2592000',fMaxSolves:'-1',fMsg:'NewQuestMonthly'}},
+      {l:'Started Flag',d:{fName:'NewQuestStarted',fMinDelta:'0',fMaxSolves:'1',fMsg:'NewQuestStarted'}},
+      {l:'Arc Progress',d:{fName:'Arc1Started',fMinDelta:'0',fMaxSolves:'1',fMsg:'Arc1Started'}},
+    ]},
+};
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let curType='creature',curSub='properties',curMode='manual',curAIType='creature';
+let spells=[],emotes=[],customPresets={};
+let bodyParts=BODY_PARTS_BIPED.map(b=>({...b,dType:4,dVal:0,dVar:0,baseAL:80,sl:64,pi:56,bl:120,co:40,fi:120,ac:80,el:80,nt:24}));
+let extraInt=[],extraBool=[],extraFloat=[],extraStr=[],extraDID=[];
+let recipeReqs=[],recipeReqsBool=[],recipeReqsFloat=[],recipeReqsStr=[],recipeMods=[],cookbookEntries=[],createList=[];
+let aiFullText='',aiGenerating=false;
+let appConfig={server_name:'Server Name',wcid_ranges:{},api_key_set:false};
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+const $=id=>document.getElementById(id);
+const opt=(arr,selVal)=>arr.map(r=>`<option value="${r[0]}"${r[0]==selVal?' selected':''} >${r[0]} · ${r[1]}</option>`).join('');
+const g=(id,d='')=>{const e=$(id);return e?e.value:d;};
+const gi=(id,d=0)=>parseInt(g(id,String(d)))||d;
+const gf=(id,d=0)=>parseFloat(g(id,String(d)))||d;
+const kw=s=>`<span class="kw">${s}</span>`;
+const st=s=>`<span class="st2">'${String(s).replace(/'/g,"''")}</span>`;  
+const nm=n=>`<span class="nm">${n}</span>`;
+const cm=s=>`<span class="cm">/* ${s} */</span>`;
+const pad=(s,n)=>{const t=s.replace(/<[^>]+>/g,'');return s+' '.repeat(Math.max(0,n-t.length));};
+function toast(msg,ms=2200){const t=$(' toast');if(!t)return;t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),ms);}
+function lookupName(arr,val){const r=arr.find(a=>a[0]==val);return r?r[1]:'?';}
+function getBodyParts(ct){
+  const set=CREATURE_BODY_MAP[parseInt(ct)]||'biped';
+  const src={biped:BODY_PARTS_BIPED,quad:BODY_PARTS_QUAD,insect:BODY_PARTS_INSECT}[set]||BODY_PARTS_BIPED;
+  return src.map(b=>({...b,dType:4,dVal:0,dVar:0,baseAL:80,sl:64,pi:56,bl:120,co:40,fi:120,ac:80,el:80,nt:24}));
+}
+
+// ── SQL RESIZE ────────────────────────────────────────────────────────────────
+(function(){
+  const handle=$('sqlResize'),panel=$('sqlPanel');
+  let dragging=false,startX,startW;
+  handle.addEventListener('mousedown',e=>{dragging=true;startX=e.clientX;startW=panel.offsetWidth;handle.classList.add('dragging');e.preventDefault();});
+  document.addEventListener('mousemove',e=>{if(!dragging)return;panel.style.width=Math.max(280,Math.min(800,startW+(startX-e.clientX)))+'px';});
+  document.addEventListener('mouseup',()=>{dragging=false;handle.classList.remove('dragging');});
+})();
+
+// ── MODE SWITCH ───────────────────────────────────────────────────────────────
+function switchMode(mode,btn){
+  curMode=mode;
+  document.querySelectorAll('.mode-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  $('manualWS').classList.toggle('active',mode==='manual');
+  $('aiWS').classList.toggle('active',mode==='ai');
+  $('forgeBar').style.display=mode==='manual'?'flex':'none';
+}
+
+// ── INNER TABS ────────────────────────────────────────────────────────────────
+function buildInnerTabs(){
+  $('innerTabs').innerHTML=Object.entries(TYPE_CFG).map(([k,c])=>
+    `<button class="itab${k===curType?' active':''}" onclick="switchType('${k}',this)">${c.icon} ${c.label}</button>`
+  ).join('');
+}
+
+function switchType(type,btn){
+  curType=type;curSub=TYPE_CFG[type].subTabs[0];
+  spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
+  recipeReqs=[];recipeReqsBool=[];recipeReqsFloat=[];recipeReqsStr=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];
+  bodyParts=getBodyParts(31);
+  document.querySelectorAll('.itab').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  buildForm();
+}
+
+// ── FORM ──────────────────────────────────────────────────────────────────────
+function buildForm(){
+  const c=TYPE_CFG[curType];
+  $('wbTitle').innerHTML=`${c.icon} ${c.label} <span>· Workbench</span>`;
+  $('wbDesc').textContent=c.desc;
+  $('wcidFrom').value=c.wcidFrom;$('wcidTo').value=c.wcidTo;
+  $('topType').textContent=c.label;$('topRange').textContent=c.wcidRange;
+  // ID row
+  const isCreature=['creature','npc'].includes(curType);
+  let idHTML=`<div class="fg" style="max-width:90px"><div class="fl">WCID <span class="fc">key</span></div><input type="number" id="fWcid" value="${c.wcidFrom}" oninput="regen()"></div>`;
+  idHTML+=`<div class="fg"><div class="fl">Name <span class="fc">S-1</span></div><input type="text" id="fName" value="New ${c.label}" oninput="regen()"></div>`;
+  if(isCreature) idHTML+=`<div class="fg" style="max-width:80px"><div class="fl">Level <span class="fc">I-25</span></div><input type="number" id="fLevel" value="100" oninput="regen()"></div>`;
+  if(curType==='creature') idHTML+=`<div class="fg"><div class="fl">XP Override <span class="fc">I-146</span></div><input type="number" id="fXp" value="50000" oninput="regen()"></div>`;
+  idHTML+=`<div class="fg" style="max-width:220px"><div class="fl">Weenie Type <span class="fc">type</span></div><select id="fWType" onchange="regen()">${c.wTypes.map(t=>`<option value="${t[0]}">${t[0]} · ${t[1]}</option>`).join('')}</select></div>`;
+  $('idRow').innerHTML=idHTML;
+  // Sub tabs
+  const stabs={properties:'⚙ Form Fields',attributes:'◈ Attributes',skills:'+ Skills',spellbook:'+ Spellbook',bodyparts:'✠ Body Parts',emotes:'◇ Emotes',advanced:'≡ Properties'};
+  $('subTabs').innerHTML=c.subTabs.map((s,i)=>`<button class="ctab${s===curSub?' active':''}" onclick="switchSub('${s}',this)">${stabs[s]||s}</button>`).join('');
+  // Presets
+  const custom=customPresets[curType]||[];
+  const allPresets=[...c.presets,...custom.map(p=>({l:p.name,d:p.data,custom:true}))];
+  if(!allPresets.length&&curType==='recipe'){$('presetsRow').style.display='none';}
+  else{
+    $('presetsRow').style.display='flex';
+    $('presetsRow').innerHTML=`<span class="presets-label">Presets:</span>`+
+      allPresets.map(p=>`<button class="pill${p.custom?' custom':''}" onclick='applyPreset(${JSON.stringify(p.d)})'>${p.l}</button>`).join('')+
+      `<button class="pill add-preset" onclick="openPresetModal()">+ Save Current</button>`;
+  }
+  buildSubContent();
+}
+
+function rebuildPanel(sub){
+  // Rebuild a single sub-panel in-place without touching other panels
+  const panel=document.querySelector(`[data-sub="${sub}"]`);
+  if(!panel) return;
+  const builders={properties:buildProps,attributes:buildAttrs,skills:buildSkills,spellbook:buildSpellbook,bodyparts:buildBodyPartsTab,emotes:buildEmotesTab,advanced:buildAdvanced};
+  panel.innerHTML=(builders[sub]||buildProps)();
+  panel.querySelectorAll('input,select,textarea').forEach(e=>e.addEventListener('input',onFieldInput));
+  regen();
+}
+
+function switchSub(sub,btn){
+  curSub=sub;
+  document.querySelectorAll('.ctab').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  // Show/hide panels — never rebuild, never lose values
+  document.querySelectorAll('#formContent .sub-panel').forEach(p=>{
+    p.classList.toggle('active', p.dataset.sub===sub);
+  });
+  // Update dynamic labels that depend on values from other tabs
+  updateCrossTabLabels();
+  regen();
+  // Properties tab — just rebuild, _lastSQLProps is already current from regen()
+  if(sub==='advanced'){
+    rebuildPanel('advanced');
+  }
+}
+
+function buildSubContent(){
+  // Render ALL panels at once, show only the current one
+  const fc=$('formContent');
+  const c=TYPE_CFG[curType];
+  const builders={properties:buildProps,attributes:buildAttrs,skills:buildSkills,spellbook:buildSpellbook,bodyparts:buildBodyPartsTab,emotes:buildEmotesTab,advanced:buildAdvanced};
+  fc.innerHTML=c.subTabs.map(sub=>{
+    const active=sub===curSub?'active':'';
+    return `<div class="sub-panel ${active}" data-sub="${sub}">${(builders[sub]||buildProps)()}</div>`;
+  }).join('');
+  fc.querySelectorAll('input,select,textarea').forEach(e=>e.addEventListener('input',onFieldInput));
+  // Close dropdowns on outside click
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.sdrop-wrap'))
+      document.querySelectorAll('.sdrop-box.open').forEach(d=>d.classList.remove('open'));
+  });
+  regen();
+  // Populate DID rows after DOM exists (must be after regen populates _lastSQLProps)
+  setTimeout(()=>{
+    const didEl=$('did_rows_'+curType);
+    if(didEl) didEl.innerHTML=buildDIDRows();
+  }, 50);
+}
+
+function onFieldInput(e){
+  regen();
+  const id=e.target.id;
+  // Level change → update skill base note in Skills tab
+  if(id==='fLevel') updateSkillBaseLabels();
+  // Creature type change → update body parts layout
+  if(id==='cType') onCTypeChange();
+  // Armor type change → enable/disable elemental modifiers
+  if(id==='fArmorType') onArmorTypeChange();
+  // NPC weenie type change → refresh properties panel so vendor fields appear/disappear
+  if(id==='fWType' && (curType==='npc')) rebuildPanel('properties');
+}
+
+function updateCrossTabLabels(){
+  updateSkillBaseLabels();
+  updateVitalLinks();
+}
+
+function updateSkillBaseLabels(){
+  const level=gi('fLevel',100);
+  const base=Math.floor(level*2.2);
+  // Update the note in the skills panel
+  const note=document.querySelector('[data-sub="skills"] .note');
+  if(note) note.textContent=`Base value auto-calculated from level ${level} → ~${base}. Adjust per skill as needed.`;
+  // Do NOT reset init_level inputs — user may have edited them manually
+}
+
+function updateVitalLinks(){
+  // Keep the vitals panel in sync with HP from Properties if it hasn't been manually changed
+  const hp=g('fHP','');
+  const v1=$('vital_1');
+  // Only auto-sync if the field exists and Properties has a value
+  // We intentionally don't overwrite — the user has two separate controls
+}
+
+// ── PROPERTIES ────────────────────────────────────────────────────────────────
+function buildProps(){
+  const t=curType;
+  if(t==='quest') return buildQuestProps();
+  if(t==='recipe') return buildRecipeProps();
+  if(t==='jewelry') return buildJewelryProps();
+  const isCreature=t==='creature'||t==='npc';
+  let h='';
+  if(isCreature){
+    h+=`<div class="sec"><div class="sh"><div class="st">Identity</div><div class="sl"></div></div>
+    <div class="grid g3">
+      <div class="fg"><div class="fl">Creature Type <span class="fc">I-2</span></div><select id="cType" onchange="onCTypeChange()">${CREATURE_TYPES.map(([v,l])=>`<option value="${v}"${v===31?' selected':''}>${v} · ${l}</option>`).join('')}</select></div>
+      <div class="fg"><div class="fl">Default Scale <span class="fc">F-39</span></div><input type="text" id="fScale" value="1.0"></div>
+      <div class="fg"><div class="fl">Palette <span class="fc">I-3</span></div><select id="fPalette">${opt(PALETTES,9)}</select></div>
+    </div></div>`;
+    if(t==='creature'){
+      h+=`<div class="sec"><div class="sh"><div class="st">Combat</div><div class="sl"></div></div>
+      <div class="grid g3">
+        <div class="fg"><div class="fl">Damage <span class="fc">I-44</span></div><input type="number" id="fDmg" value="80"></div>
+        <div class="fg"><div class="fl">Damage Type <span class="fc">I-45</span></div><select id="fDmgType">${opt(DMG_TYPES,1)}</select></div>
+        <div class="fg"><div class="fl">Weapon Skill <span class="fc">I-48</span></div><select id="fWepSkill">${opt(WEP_SKILLS,44)}</select></div>
+        <div class="fg"><div class="fl">Combat Style <span class="fc">I-101</span></div><select id="fCombatStyle">${opt(COMBAT_STYLES,2)}</select></div>
+        <div class="fg"><div class="fl">Attack Type <span class="fc">I-47</span></div><select id="fAttackType">${opt(ATTACK_TYPES,4)}</select></div>
+        <div class="fg"><div class="fl">Death Treasure <span class="fc">DID-35</span></div><input type="number" id="fTreasureTier" value="3100"></div>
+      </div></div>
+      <div class="sec"><div class="sh"><div class="st">Resistances</div><div class="sl"></div></div>
+      <div class="rg">${[['Slash','rSlash'],['Pierce','rPierce'],['Bludge','rBludge'],['Cold','rCold'],['Fire','rFire'],['Acid','rAcid'],['Elec','rElec'],['Nether','rNether']].map(([l,id])=>`<div class="fg"><div class="fl">${l} <span class="fc">F</span></div><input type="text" id="${id}" value="1.0"></div>`).join('')}</div></div>
+      <div class="sec"><div class="sh"><div class="st">Vitals &amp; Rewards</div><div class="sl"></div></div>
+      <div class="grid g3">
+        <div class="fg"><div class="fl">Max Health <span class="fc">V-1</span></div><input type="number" id="fHP" value="2000"></div>
+        <div class="fg"><div class="fl">Max Stamina <span class="fc">V-3</span></div><input type="number" id="fStam" value="2000"></div>
+        <div class="fg"><div class="fl">Max Mana <span class="fc">V-5</span></div><input type="number" id="fMana" value="800"></div>
+        <div class="fg"><div class="fl">Luminance Award <span class="fc">I-332</span></div><input type="number" id="fLum" value="5000"></div>
+        <div class="fg"><div class="fl">Aggro Range <span class="fc">F-31</span></div><input type="text" id="fAggroRange" value="16.0"></div>
+        <div class="fg"><div class="fl">Casts Magic <span class="fc">B-6</span></div><select id="fUsesMana"><option value="0">No</option><option value="1">Yes</option></select></div>
+      </div></div>
+    <div class="sec"><div class="sh"><div class="st">Guaranteed Drops</div><div class="sl"></div></div>
+      <p class="note" style="margin-bottom:8px">Wire existing or custom items to drop on death. For items already in game (MMD notes, pyreals, etc.), enter the existing WCID — do NOT create a new file for them.</p>
+      <div id="createListRows">${buildCreateListRows()}</div>
+      <button class="add-btn" onclick="addCreateListRow()">+ Add Drop</button>
+    </div>
+    <div class="sec"><div class="sh" style="margin-top:14px"><div class="st">Creature Ratings</div><div class="sl"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323']].map(([l,id,fc])=>`
+      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
+        <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
+      </div>`).join('')}
+    
+    <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
+    <div id="did_rows_${t}" style="min-height:20px"></div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+      <div class="fg" style="flex:2">
+        <div class="fl">Property</div>
+        <select id="did_type_${t}" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+      </div>
+      <div class="fg" style="flex:1">
+        <div class="fl">Value (hex or decimal)</div>
+        <input type="text" id="did_val_${t}" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <button class="top-btn" style="margin-top:4px;width:100%;padding:5px 0;font-size:9px" onclick="openIconPicker('did_val_${t}')">🎨 Icon Picker</button>
+      </div>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty('${t}')">+ Add / Update</button>
+    </div>
+    </div>`;
+    }
+    if(t==='npc'){
+      const isVendor=gi('fWType',10)===12;
+      h+=`<div class="sec"><div class="sh"><div class="st">NPC Settings</div><div class="sl"></div></div>
+      <div class="grid g3">
+        <div class="fg"><div class="fl">Use Radius <span class="fc">F-54</span></div><input type="text" id="fUseRadius" value="3.0"></div>
+        <div class="fg"><div class="fl">Radar Color <span class="fc">I-95</span></div><select id="fRadarColor">${opt(RADAR_COLORS,8)}</select></div>
+        <div class="fg"><div class="fl">Max Health <span class="fc">V-1</span></div><input type="number" id="fHP" value="500"></div>
+        <div class="fg" style="grid-column:span 3"><div class="fl">Short Description <span class="fc">S-15</span></div><input type="text" id="fShortDesc" value=""></div>
+        <div class="fg" style="grid-column:span 3"><div class="fl">Long Description <span class="fc">S-16</span></div><input type="text" id="fLongDesc" value=""></div>
+      </div></div>`;
+      if(isVendor){
+        h+=`<div class="sec"><div class="sh"><div class="st">Vendor Settings</div><div class="sl"></div></div>
+        <div class="grid g3">
+          <div class="fg"><div class="fl">Buy Price Multiplier <span class="fc">F-37</span></div><input type="text" id="fBuyRate" value="1.0"></div>
+          <div class="fg"><div class="fl">Sell Price Multiplier <span class="fc">F-38</span></div><input type="text" id="fSellRate" value="1.1"></div>
+          <div class="fg"><div class="fl">Min Value Buys <span class="fc">I-75</span></div><input type="number" id="fMerchMinVal" value="0"></div>
+          <div class="fg"><div class="fl">Max Value Buys <span class="fc">I-76</span></div><input type="number" id="fMerchMaxVal" value="0"></div>
+          <div class="fg"><div class="fl">Item Types Buys <span class="fc">I-74</span></div><input type="number" id="fMerchItemTypes" value="0"></div>
+          <div class="fg"><div class="fl">Happy Mean <span class="fc">I-126</span></div><input type="number" id="fVendorHappy" value="0"></div>
+        </div></div>`;
+      }
+    }
+    h+=`<div class="sec"><div class="sh" style="margin-top:14px"><div class="st">Creature Ratings</div><div class="sl"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323']].map(([l,id,fc])=>`
+      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
+        <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
+      </div>`).join('')}
+    <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
+    <div id="did_rows_${t}" style="min-height:20px"></div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+      <div class="fg" style="flex:2">
+        <div class="fl">Property</div>
+        <select id="did_type_${t}" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+      </div>
+      <div class="fg" style="flex:1">
+        <div class="fl">Value (hex or decimal)</div>
+        <input type="text" id="did_val_${t}" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <button class="top-btn" style="margin-top:4px;width:100%;padding:5px 0;font-size:9px" onclick="openIconPicker('did_val_${t}')">🎨 Icon Picker</button>
+      </div>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty('${t}')">+ Add / Update</button>
+    </div>
+    </div>`;
+  }
+  if(t==='item'){
+    h+=`<div class="sec"><div class="sh"><div class="st">Item Properties</div><div class="sl"></div></div>
+    ${[['Value','fValue','I-19','number'],['Encumbrance','fEncumb','I-5','number'],['Max Stack Size','fMaxStack','I-11','number'],['Default Scale','fScale','F-39','text'],['Spellcraft','fSpellcraft','I-106','number']].map(([l,id,fc,tp])=>`
+      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
+        <input type="${tp}" id="${id}" value="${tp==='number'?'0':'1.0'}" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
+      </div>`).join('')}
+    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Item Useable <span class="fc">I-16</span></div>
+      <select id="fItemUse" style="width:120px">${opt(ITEM_USE,1)}</select>
+    </div>
+    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Bonded <span class="fc">I-33</span></div>
+      <select id="fBonded" style="width:160px">${opt(BONDED,1)}</select>
+    </div>
+    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Attuned <span class="fc">I-114</span></div>
+      <select id="fAttuned" style="width:160px">${opt(ATTUNED,1)}</select>
+    </div>
+    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Palette <span class="fc">I-3</span></div>
+      <select id="fPalette" style="width:160px">${opt(PALETTES,39)}</select>
+    </div>
+    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Short Description <span class="fc">S-15</span></div>
+      <input type="text" id="fShortDesc" value="" style="flex:1;max-width:260px;border-bottom:1px solid var(--border)">
+    </div>
+    <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">Use Message <span class="fc">S-14</span></div>
+      <input type="text" id="fUseMsg" value="" style="flex:1;max-width:260px;border-bottom:1px solid var(--border)">
+    </div>
+    <div class="sh" style="margin-top:14px"><div class="st">Gear Ratings</div><div class="sl"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`
+      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
+        <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
+      </div>`).join('')}
+    <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
+    <div id="did_rows_${t}" style="min-height:20px"></div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+      <div class="fg" style="flex:2">
+        <div class="fl">Property</div>
+        <select id="did_type_${t}" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+      </div>
+      <div class="fg" style="flex:1">
+        <div class="fl">Value (hex or decimal)</div>
+        <input type="text" id="did_val_${t}" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <button class="top-btn" style="margin-top:4px;width:100%;padding:5px 0;font-size:9px" onclick="openIconPicker('did_val_${t}')">🎨 Icon Picker</button>
+      </div>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty('${t}')">+ Add / Update</button>
+    </div>
+    </div>`;
+  }
+  if(t==='weapon'){
+    h+=`<div class="sec"><div class="sh"><div class="st">Weapon Database Lookup</div><div class="sl"></div></div>
+    <div class="fg sdrop-wrap"><div class="fl">Search by name to pre-fill values</div>
+      <input type="text" id="wepSearch" placeholder="Type weapon name…" autocomplete="off" oninput="searchWeaponFn(this.value)">
+      <div class="sdrop-box" id="wepSearch_drop"><div class="sdrop-none">Type to search…</div></div>
+    </div></div>
+    <div class="sec"><div class="sh"><div class="st">Weapon Properties</div><div class="sl"></div></div>
+    <div class="grid g3">
+      <div class="fg"><div class="fl">Damage <span class="fc">I-44</span></div><input type="number" id="fDmg" value="80"></div>
+      <div class="fg"><div class="fl">Damage Type <span class="fc">I-45</span></div><select id="fDmgType">${opt(DMG_TYPES,1)}</select></div>
+      <div class="fg"><div class="fl">Weapon Skill <span class="fc">I-48</span></div><select id="fWepSkill">${opt(WEP_SKILLS,44)}</select></div>
+      <div class="fg"><div class="fl">Weapon Time <span class="fc">I-49</span></div><input type="number" id="fWepTime" value="45"></div>
+      <div class="fg"><div class="fl">Damage Variance <span class="fc">F-22</span></div><input type="text" id="fDmgVar" value="0.4"></div>
+      <div class="fg"><div class="fl">Attack Type <span class="fc">I-47</span></div><select id="fAttackType">${opt(ATTACK_TYPES,4)}</select></div>
+      <div class="fg"><div class="fl">Defense Mod <span class="fc">F-29</span></div><input type="text" id="fWepDef" value="1.0"></div>
+      <div class="fg"><div class="fl">Offense Mod <span class="fc">F-62</span></div><input type="text" id="fWepOff" value="1.0"></div>
+      <div class="fg"><div class="fl">Wield Difficulty <span class="fc">I-160</span></div><input type="number" id="fWieldDiff" value="290"></div>
+      <div class="fg"><div class="fl">Value <span class="fc">I-19</span></div><input type="number" id="fValue" value="5000"></div>
+      <div class="fg"><div class="fl">Encumbrance <span class="fc">I-5</span></div><input type="number" id="fEncumb" value="400"></div>
+      <div class="fg"><div class="fl">Default Scale <span class="fc">F-39</span></div><input type="text" id="fScale" value="1.0"></div>
+      <div class="fg"><div class="fl">Missile Defense Mod <span class="fc">F-149</span></div><input type="text" id="fMissileDef" value="0"></div>
+      <div class="fg"><div class="fl">Magic Defense Mod <span class="fc">F-150</span></div><input type="text" id="fMagicDef" value="0"></div>
+      <div class="fg"><div class="fl">Elemental Dmg Bonus <span class="fc">I-204</span></div><input type="number" id="fElemBonus" value="0"></div>
+      <div class="fg"><div class="fl">Crit Multiplier <span class="fc">F-136</span></div><input type="text" id="fCritMult" value="1.0"></div>
+      <div class="fg"><div class="fl">Palette <span class="fc">I-3</span></div><select id="fPalette">${opt(PALETTES,20)}</select></div>
+    </div></div>
+    <div class="sh" style="margin-top:14px"><div class="st">Gear Ratings</div><div class="sl"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`
+      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
+        <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
+      </div>`).join('')}
+    <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
+    <div id="did_rows_${t}" style="min-height:20px"></div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+      <div class="fg" style="flex:2">
+        <div class="fl">Property</div>
+        <select id="did_type_${t}" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+      </div>
+      <div class="fg" style="flex:1">
+        <div class="fl">Value (hex or decimal)</div>
+        <input type="text" id="did_val_${t}" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <button class="top-btn" style="margin-top:4px;width:100%;padding:5px 0;font-size:9px" onclick="openIconPicker('did_val_${t}')">🎨 Icon Picker</button>
+      </div>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty('${t}')">+ Add / Update</button>
+    </div>
+    `;
+  }
+  if(t==='armor'){
+    h+=`<div class="sec"><div class="sh"><div class="st">Armor/Clothing Database Lookup</div><div class="sl"></div></div>
+    <div class="fg sdrop-wrap"><div class="fl">Search by name to pre-fill values</div>
+      <input type="text" id="armorSearch" placeholder="Type armor or clothing name…" autocomplete="off" oninput="searchArmorFn(this.value)">
+      <div class="sdrop-box" id="armorSearch_drop"><div class="sdrop-none">Type to search…</div></div>
+    </div></div>
+    <div class="sec"><div class="sh"><div class="st">Armor Properties</div><div class="sl"></div></div>
+    <div class="grid g3">
+      <div class="fg"><div class="fl">Armor Level <span class="fc">I-28</span></div><input type="number" id="fArmorLevel" value="100"></div>
+      <div class="fg"><div class="fl">Armor Type <span class="fc">I-27</span></div><select id="fArmorType" onchange="onArmorTypeChange()">${opt(ARMOR_TYPES,11)}</select></div>
+      <div class="fg"><div class="fl">Slot (Valid Location) <span class="fc">I-9</span></div><select id="fValidLoc">${opt(ARMOR_SLOTS,512)}</select></div>
+      <div class="fg"><div class="fl">Value <span class="fc">I-19</span></div><input type="number" id="fValue" value="3000"></div>
+      <div class="fg"><div class="fl">Encumbrance <span class="fc">I-5</span></div><input type="number" id="fEncumb" value="300"></div>
+      <div class="fg"><div class="fl">Default Scale <span class="fc">F-39</span></div><input type="text" id="fScale" value="1.0"></div>
+      <div class="fg"><div class="fl">Palette <span class="fc">I-3</span></div><select id="fPalette">${opt(PALETTES,9)}</select></div>
+      <div class="fg"><div class="fl">Spellcraft <span class="fc">I-106</span></div><input type="number" id="fSpellcraft" value="0"></div>
+    </div>
+    <div class="sh" style="margin-top:12px"><div class="st">Elemental Modifiers</div><div class="sl"></div>
+      <span id="clothNote" style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;color:var(--ink-dim);display:none">(Cloth — disabled)</span>
+    </div>
+    <div class="rg" id="elemMods">
+      ${[['Slash','mSlash'],['Pierce','mPierce'],['Bludge','mBludge'],['Cold','mCold'],['Fire','mFire'],['Acid','mAcid'],['Elec','mElec'],['Nether','mNether']].map(([l,id])=>`<div class="fg"><div class="fl">${l} <span class="fc">F</span></div><input type="text" id="${id}" value="1.0"></div>`).join('')}
+    </div>
+    <div class="sh" style="margin-top:12px"><div class="st">Resistances (Armor AL Overrides)</div><div class="sl"></div></div>
+    <div class="rg">
+      ${[['Slash AL','alSlash'],['Pierce AL','alPierce'],['Bludge AL','alBludge'],['Cold AL','alCold'],['Fire AL','alFire'],['Acid AL','alAcid'],['Elec AL','alElec'],['Nether AL','alNether']].map(([l,id])=>`<div class="fg"><div class="fl">${l} <span class="fc">I</span></div><input type="number" id="${id}" value="0"></div>`).join('')}
+    </div>
+    <div class="sh" style="margin-top:14px"><div class="st">Gear Ratings</div><div class="sl"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`
+      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
+        <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
+      </div>`).join('')}
+    <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
+    <div id="did_rows_${t}" style="min-height:20px"></div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+      <div class="fg" style="flex:2">
+        <div class="fl">Property</div>
+        <select id="did_type_${t}" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+      </div>
+      <div class="fg" style="flex:1">
+        <div class="fl">Value (hex or decimal)</div>
+        <input type="text" id="did_val_${t}" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <button class="top-btn" style="margin-top:4px;width:100%;padding:5px 0;font-size:9px" onclick="openIconPicker('did_val_${t}')">🎨 Icon Picker</button>
+      </div>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty('${t}')">+ Add / Update</button>
+    </div>
+    </div>`;
+  }
+  return h;
+}
+
+function buildDIDRows(){
+  // Show current DID properties from _lastSQLProps if available
+  const lp=window._lastSQLProps||{};
+  const didRows=(lp.did||[]);
+  if(!didRows.length) return '<div style="color:var(--ink-faint);font-style:italic;font-size:13px;padding:4px 0">None yet — add one below, or switch to ≡ Properties tab after generating SQL.</div>';
+  return didRows.map((r,i)=>{
+    const name=PROP_DID[r.type]||'Unknown';
+    return `<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="min-width:200px;font-family:'Cinzel',serif;font-size:10px;font-weight:700;color:var(--ink-mid)">${r.type} · ${name}</div>
+      <input type="text" value="${r.value||''}" oninput="updateDIDRow(${i},this.value)" style="flex:1;font-family:'Source Code Pro',monospace;font-size:12px;font-weight:600;border-bottom:1px solid var(--border)">
+      <button class="del" onclick="removeDIDRow(${i})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function updateDIDRow(idx,val){
+  const lp=window._lastSQLProps||{};
+  if(lp.did&&lp.did[idx]){
+    lp.did[idx].value=val;
+    // Push change into extraDID so regen() picks it up
+    const type=String(lp.did[idx].type);
+    const existing=extraDID.findIndex(r=>String(r.type)===type);
+    if(existing>=0) extraDID[existing].value=val;
+    else extraDID.push({type,value:val});
+    regen();
+  }
+}
+
+function removeDIDRow(idx){
+  const lp=window._lastSQLProps||{};
+  if(lp.did&&lp.did[idx]){
+    const type=String(lp.did[idx].type);
+    extraDID=extraDID.filter(r=>String(r.type)!==type);
+    lp.did.splice(idx,1);
+    regen();
+    // Refresh DID rows
+    const el=$('did_rows_'+curType);if(el)el.innerHTML=buildDIDRows();
+  }
+}
+
+function addDIDProperty(suffix){
+  const s=suffix||curType;
+  const typeEl=$('did_type_'+s),valEl=$('did_val_'+s);
+  if(!typeEl||!valEl) return;
+  const type=String(typeEl.value),val=valEl.value.trim()||'0x00000000';
+  // Add/update in extraDID
+  const existing=extraDID.findIndex(r=>String(r.type)===type);
+  if(existing>=0) extraDID[existing].value=val;
+  else extraDID.push({type,value:val});
+  extraDID.sort((a,b)=>parseInt(a.type)-parseInt(b.type));
+  regen();
+  // Refresh the display
+    const el=$('did_rows_'+curType);if(el)el.innerHTML=buildDIDRows();
+  toast('DID '+type+' · '+PROP_DID[type]+' = '+val);
+}
+
+function buildCreateListRows(){
+  const DEST={0:'Contain',1:'Wield',2:'CorpseDrop',3:'Treasure',4:'Contains'};
+  return createList.map((r,i)=>`
+    <div style="display:grid;grid-template-columns:120px 1fr 80px 28px;gap:8px;align-items:end;margin-bottom:8px">
+      <div class="fg"><div class="fl">Destination</div>
+        <select id="cl_dest_${i}" onchange="createList[${i}].dest=parseInt(this.value);regen()">
+          <option value="2"${r.dest===2?' selected':''}>2 · CorpseDrop</option>
+          <option value="1"${r.dest===1?' selected':''}>1 · Wield</option>
+          <option value="0"${r.dest===0?' selected':''}>0 · Contain</option>
+        </select></div>
+      <div class="fg">
+        <div class="fl">Item WCID <span style="color:var(--ink-faint);font-size:9px">(existing items: 20634=100MMD, 273=Pyreal)</span></div>
+        <input type="number" id="cl_wcid_${i}" value="${r.wcid||0}" oninput="createList[${i}].wcid=parseInt(this.value);regen()">
+      </div>
+      <div class="fg"><div class="fl">Stack Size</div>
+        <input type="number" id="cl_stack_${i}" value="${r.stack||1}" oninput="createList[${i}].stack=parseInt(this.value);regen()"></div>
+      <button class="del" onclick="createList.splice(${i},1);rebuildPanel('properties')">✕</button>
+    </div>`).join('');
+}
+
+function addCreateListRow(){
+  createList.push({dest:2,wcid:0,stack:1});
+  rebuildPanel('properties');
+}
+
+function buildQuestProps(){
+  return `<div class="sec"><div class="sh"><div class="st">Quest Flag Properties</div><div class="sl"></div></div>
+  <p class="note" style="margin-bottom:12px">Quest names must be a single word — no spaces. These insert directly into the <code style="font-family:'Source Code Pro',monospace;font-size:13px">quest</code> table. No ItemType, no Emotes.</p>
+  <div class="grid g2">
+    <div class="fg" style="grid-column:span 2"><div class="fl">Quest Name (one word, no spaces) <span class="fc">name</span></div>
+      <input type="text" id="fName" value="NewQuest" oninput="regen()" style="font-family:'Source Code Pro',monospace;font-weight:700"></div>
+    <div class="fg"><div class="fl">Min Delta (cooldown seconds) <span class="fc">min_Delta</span></div><input type="number" id="fMinDelta" value="0"></div>
+    <div class="fg"><div class="fl">Max Solves (-1 = unlimited) <span class="fc">max_Solves</span></div><input type="number" id="fMaxSolves" value="1"></div>
+    <div class="fg" style="grid-column:span 2"><div class="fl">Message <span class="fc">message</span></div><input type="text" id="fMsg" value="NewQuest"></div>
+  </div>
+  <div class="sh" style="margin-top:14px"><div class="st">Cooldown Quick-Fill</div><div class="sl"></div></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+    ${[['No cooldown','0'],['1 hour','3600'],['20 hours','72000'],['24 hours','86400'],['48 hours','172800'],['7 days','604800'],['30 days','2592000']].map(([l,v])=>`<button class="pill" onclick="setQField('fMinDelta',${v})">${l}</button>`).join('')}
+  </div>
+  <div class="sh" style="margin-top:14px"><div class="st">Quest Sequencing (AI Mode Only)</div><div class="sl"></div></div>
+  <p class="note">Full quest sequencing — NPC emotes, kill tasks, rewards, multi-step flows — is available in AI Mode only. Switch to AI Mode and select Quest to generate a complete multi-file quest sequence. The AI will request approval before generating more than 20 files.</p>
+  </div>`;
+}
+
+function buildJewelryProps(){
+  // Slot quick-fill buttons with correct ValidLocations from reference files
+  const SLOTS=[
+    [32768,'Necklace'],[786432,'Ring (Finger)'],[196608,'Bracelet (Wrist)'],
+    [67108864,'Trinket'],[1048576,'NeckWear Alt'],[524288,'WristWear Alt'],
+  ];
+  return `<div class="sec"><div class="sh"><div class="st">Jewelry Slot</div><div class="sl"></div></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+    ${SLOTS.map(([v,l])=>`<button class="pill" onclick="setQField('fValidLoc',${v})">${l}</button>`).join('')}
+  </div>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;gap:12px">
+      <div class="fg"><div class="fl">Valid Location <span class="fc">I-9</span></div><input type="number" id="fValidLoc" value="32768"></div>
+      <div class="fg"><div class="fl">Value (pyreals) <span class="fc">I-19</span></div><input type="number" id="fValue" value="50000"></div>
+      <div class="fg"><div class="fl">Encumbrance <span class="fc">I-5</span></div><input type="number" id="fEncumb" value="60"></div>
+      <div class="fg"><div class="fl">Mass <span class="fc">I-8</span></div><input type="number" id="fMass" value="90"></div>
+    </div>
+    <div style="display:flex;gap:12px">
+      <div class="fg"><div class="fl">Spellcraft <span class="fc">I-106</span></div><input type="number" id="fSpellcraft" value="350"></div>
+      <div class="fg"><div class="fl">Item Cur Mana <span class="fc">I-107</span></div><input type="number" id="fItemCurMana" value="3000"></div>
+      <div class="fg"><div class="fl">Item Max Mana <span class="fc">I-108</span></div><input type="number" id="fItemMaxMana" value="3000"></div>
+      <div class="fg"><div class="fl">Item Difficulty <span class="fc">I-109</span></div><input type="number" id="fItemDiff" value="0"></div>
+    </div>
+    <div style="display:flex;gap:12px">
+      <div class="fg"><div class="fl">Palette Template <span class="fc">I-3</span></div><select id="fPalette">${opt(PALETTES,1)}</select></div>
+      <div class="fg"><div class="fl">Default Scale <span class="fc">F-39</span></div><input type="text" id="fScale" value="0.5"></div>
+      <div class="fg"><div class="fl">Mana Rate <span class="fc">F-5</span></div><input type="text" id="fManaRate" value="-0.033"></div>
+      <div class="fg"><div class="fl">Shade <span class="fc">F-12</span></div><input type="text" id="fShade" value="0.66"></div>
+    </div>
+    <div style="display:flex;gap:12px">
+      <div class="fg"><div class="fl">Bonded <span class="fc">I-33</span></div><select id="fBonded">${opt(BONDED,0)}</select></div>
+      <div class="fg"><div class="fl">Attuned <span class="fc">I-114</span></div><select id="fAttuned">${opt(ATTUNED,0)}</select></div>
+      <div class="fg"><div class="fl">Inscribable <span class="fc">B-22</span></div><select id="fInscribable"><option value="1">True</option><option value="0">False</option></select></div>
+      <div class="fg"><div class="fl">Short Description <span class="fc">S-15</span></div><input type="text" id="fShortDesc" value=""></div>
+    </div>
+  </div>
+  <div class="sh" style="margin-top:14px"><div class="st">Gear Ratings</div><div class="sl"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323'],['Mana Conv Mod','fManaConv','F-144']].map(([l,id,fc])=>`
+      <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
+        <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
+      </div>`).join('')}
+    <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
+    <div id="did_rows_${t}" style="min-height:20px"></div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+      <div class="fg" style="flex:2">
+        <div class="fl">Property</div>
+        <select id="did_type_${t}" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+      </div>
+      <div class="fg" style="flex:1">
+        <div class="fl">Value (hex or decimal)</div>
+        <input type="text" id="did_val_${t}" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <button class="top-btn" style="margin-top:4px;width:100%;padding:5px 0;font-size:9px" onclick="openIconPicker('did_val_${t}')">🎨 Icon Picker</button>
+      </div>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty('${t}')">+ Add / Update</button>
+    </div>
+  </div>`;
+}
+
+function setQField(id,v){const e=$(id);if(e){e.value=v;regen();}}
+function onCTypeChange(){
+  bodyParts=getBodyParts(gi('cType',31));
+  // Rebuild only the body parts panel in-place
+  const bpPanel=document.querySelector('[data-sub="bodyparts"]');
+  if(bpPanel){
+    bpPanel.innerHTML=buildBodyPartsTab();
+    bpPanel.querySelectorAll('input,select').forEach(e=>e.addEventListener('input',onFieldInput));
+  }
+  regen();
+}
+function onArmorTypeChange(){
+  const isCloth=gi('fArmorType',11)===1;
+  ['mSlash','mPierce','mBludge','mCold','mFire','mAcid','mElec','mNether'].forEach(id=>{const e=$(id);if(e)e.disabled=isCloth;});
+  const note=$('clothNote');if(note)note.style.display=isCloth?'block':'none';
+}
+
+// ── RECIPE PROPS ──────────────────────────────────────────────────────────────
+function buildRecipeProps(){
+  function makeReqRows(arr,nm){
+    return arr.map((r,i)=>`
+    <div style="display:grid;grid-template-columns:110px 90px 150px 130px 1fr 28px;gap:8px;align-items:end;margin-bottom:6px">
+      <div class="fg"><div class="fl">Req Type</div><select id="${nm}_t_${i}" onchange="${nm}[${i}].type=this.value;regen()">${opt(REQUIREMENT_TYPE,r.type)}</select></div>
+      <div class="fg"><div class="fl">Stat ID</div><input type="number" id="${nm}_s_${i}" value="${r.stat}" oninput="${nm}[${i}].stat=this.value;regen()"></div>
+      <div class="fg"><div class="fl">Value</div><input type="text" id="${nm}_v_${i}" value="${r.value||''}" oninput="${nm}[${i}].value=this.value;regen()"></div>
+      <div class="fg"><div class="fl">Compare</div><select id="${nm}_c_${i}" onchange="${nm}[${i}].compare=this.value;regen()">${opt(COMPARE_TYPE,r.compare)}</select></div>
+      <div class="fg"><div class="fl">Message</div><input type="text" id="${nm}_m_${i}" value="${r.message||''}" oninput="${nm}[${i}].message=this.value;regen()"></div>
+      <button class="del" onclick="${nm}.splice(${i},1);rebuildPanel('properties')">✕</button>
+    </div>`).join('');
+  }
+  const reqRows=makeReqRows(recipeReqs,'recipeReqs');
+  const reqBoolRows=makeReqRows(recipeReqsBool,'recipeReqsBool');
+  const reqFloatRows=makeReqRows(recipeReqsFloat,'recipeReqsFloat');
+  const reqStrRows=makeReqRows(recipeReqsStr,'recipeReqsStr');
+  const modRows=recipeMods.map((m,i)=>`
+    <div style="display:grid;grid-template-columns:120px 80px 130px 130px 80px 28px;gap:8px;align-items:end;margin-bottom:6px">
+      <div class="fg"><div class="fl">Mod Type</div><select id="rmod_t_${i}" onchange="recipeMods[${i}].type=this.value;regen()">${opt(MOD_TYPE,m.type)}</select></div>
+      <div class="fg"><div class="fl">Stat ID</div><input type="number" id="rmod_s_${i}" value="${m.stat||0}" oninput="recipeMods[${i}].stat=this.value;regen()"></div>
+      <div class="fg"><div class="fl">Operation</div><select id="rmod_o_${i}" onchange="recipeMods[${i}].operation=this.value;regen()">${opt(MOD_OP,m.operation)}</select></div>
+      <div class="fg"><div class="fl">Value</div><input type="text" id="rmod_v_${i}" value="${m.value||0}" oninput="recipeMods[${i}].value=this.value;regen()"></div>
+      <div class="fg"><div class="fl">Source</div><select id="rmod_src_${i}" onchange="recipeMods[${i}].source=this.value;regen()">${opt(RECIPE_SOURCE_TYPE,m.source)}</select></div>
+      <button class="del" onclick="recipeMods.splice(${i},1);rebuildPanel('properties')">✕</button>
+    </div>`).join('');
+  const cbRows=cookbookEntries.map((e,i)=>`
+    <div style="display:grid;grid-template-columns:1fr 1fr 28px;gap:8px;align-items:end;margin-bottom:6px">
+      <div class="fg"><div class="fl">Source WCID — Name (comment)</div>
+        <div style="display:grid;grid-template-columns:80px 1fr;gap:8px">
+          <input type="number" id="cb_src_${i}" value="${e.src||0}" oninput="cookbookEntries[${i}].src=this.value;regen()">
+          <input type="text" id="cb_lbl_${i}" value="${e.srcLabel||''}" placeholder="name comment" oninput="cookbookEntries[${i}].srcLabel=this.value;regen()">
+        </div>
+      </div>
+      <div class="fg"><div class="fl">Target WCID</div><input type="number" id="cb_tgt_${i}" value="${e.tgt||0}" oninput="cookbookEntries[${i}].tgt=this.value;regen()"></div>
+      <button class="del" onclick="cookbookEntries.splice(${i},1);rebuildPanel('properties')">✕</button>
+    </div>`).join('');
+  return `<div class="sec"><div class="sh"><div class="st">Recipe Core</div><div class="sl"></div></div>
+  <div class="grid g3">
+    <div class="fg"><div class="fl">Recipe ID <span class="fc">id</span></div><input type="number" id="fWcid" value="600000" oninput="regen()"></div>
+    <div class="fg"><div class="fl">Skill <span class="fc">skill</span></div><select id="fRecipeSkill">${[...ALL_SKILLS,[[38,'Alchemy'],[39,'Cooking']].flat()].flat().reduce((acc,s,i,arr)=>{if(i%2===0)acc.push(arr.slice(i,i+2));return acc;},[]).map(([v,l])=>`<option value="${v}">${v} · ${l}</option>`).join('')}</select></div>
+    <div class="fg"><div class="fl">Difficulty <span class="fc">difficulty</span></div><input type="number" id="fRecipeDiff" value="900"></div>
+    <div class="fg"><div class="fl">Success WCID <span class="fc">success_W_C_I_D</span></div><input type="number" id="fSuccessWcid" value="0"></div>
+    <div class="fg"><div class="fl">Success Amount <span class="fc">success_Amount</span></div><input type="number" id="fSuccessAmt" value="1"></div>
+    <div class="fg"><div class="fl">Fail WCID <span class="fc">fail_W_C_I_D</span></div><input type="number" id="fFailWcid" value="0"></div>
+    <div class="fg" style="grid-column:span 3"><div class="fl">Success Message</div><input type="text" id="fSuccessMsg" value="You apply the recipe successfully."></div>
+    <div class="fg" style="grid-column:span 3"><div class="fl">Fail Message</div><input type="text" id="fFailMsg" value="You apply the recipe but destroy the target."></div>
+    <div class="fg"><div class="fl">Destroy Source (success)</div><input type="text" id="fDestroySourceSuccess" value="1"></div>
+    <div class="fg"><div class="fl">Destroy Target (fail)</div><input type="text" id="fDestroyTargetFail" value="1"></div>
+  </div>
+  <div class="sh" style="margin-top:14px"><div class="st">Requirements — Int (recipe_requirements_int)</div><div class="sl"></div></div>
+  ${reqRows}
+  <button class="add-btn" onclick="recipeReqs.push({type:0,stat:105,value:1,compare:6,message:'Requirement not met!'});rebuildPanel('properties')">+ Add Int Requirement</button>
+  <div class="sh" style="margin-top:14px"><div class="st">Requirements — Bool (recipe_requirements_bool)</div><div class="sl"></div></div>
+  ${reqBoolRows}
+  <button class="add-btn" onclick="recipeReqsBool.push({type:0,stat:1,value:'True',compare:6,message:'Requirement not met!'});rebuildPanel('properties')">+ Add Bool Requirement</button>
+  <div class="sh" style="margin-top:14px"><div class="st">Requirements — Float (recipe_requirements_float)</div><div class="sl"></div></div>
+  ${reqFloatRows}
+  <button class="add-btn" onclick="recipeReqsFloat.push({type:0,stat:3,value:'0.0',compare:6,message:'Requirement not met!'});rebuildPanel('properties')">+ Add Float Requirement</button>
+  <div class="sh" style="margin-top:14px"><div class="st">Requirements — String (recipe_requirements_string)</div><div class="sl"></div></div>
+  ${reqStrRows}
+  <button class="add-btn" onclick="recipeReqsStr.push({type:0,stat:1,value:'',compare:6,message:'Requirement not met!'});rebuildPanel('properties')">+ Add String Requirement</button>
+  <div class="sh" style="margin-top:14px"><div class="st">Modifications (recipe_mods)</div><div class="sl"></div></div>
+  <p class="note">Values with decimals go to recipe_mods_float, whole numbers to recipe_mods_int.</p>
+  ${modRows}
+  <button class="add-btn" onclick="recipeMods.push({type:0,stat:0,operation:2,value:0,source:1});rebuildPanel('properties')">+ Add Modification</button>
+  <div class="sh" style="margin-top:14px"><div class="st">Cook Book (source → target pairs)</div><div class="sl"></div></div>
+  ${cbRows}
+  <button class="add-btn" onclick="cookbookEntries.push({src:0,srcLabel:'',tgt:0});rebuildPanel('properties')">+ Add Source → Target Pair</button>
+  </div>`;
+}
+
+// ── ATTRIBUTES ────────────────────────────────────────────────────────────────
+function buildAttrs(){
+  const attrs=[[1,'Strength'],[2,'Endurance'],[3,'Quickness'],[4,'Coordination'],[5,'Focus'],[6,'Self']];
+  return `<div class="sec">
+    <div class="sh"><div class="st">Attributes</div><div class="sl"></div></div>
+    <div class="grid g3">${attrs.map(([t,n])=>`<div class="fg"><div class="fl">${n} <span class="fc">A-${t}</span></div><input type="number" id="attr_${t}" value="260"></div>`).join('')}</div>
+    <div class="sh" style="margin-top:14px"><div class="st">Vitals</div><div class="sl"></div></div>
+    <div class="grid g3">
+      <div class="fg"><div class="fl">MaxHealth <span class="fc">V-1</span></div><input type="number" id="vital_1" value="2000"></div>
+      <div class="fg"><div class="fl">MaxStamina <span class="fc">V-3</span></div><input type="number" id="vital_3" value="2000"></div>
+      <div class="fg"><div class="fl">MaxMana <span class="fc">V-5</span></div><input type="number" id="vital_5" value="800"></div>
+    </div></div>`;
+}
+
+// ── SKILLS ────────────────────────────────────────────────────────────────────
+// Core skills always shown; extras added by user
+const CORE_SKILL_IDS=[6,7,15,44]; // MeleeDefense,MissileDefense,MagicDefense,HeavyWeapons
+let extraSkills=[]; // [{id,sac,init}]
+
+function buildSkills(){
+  const level=gi('fLevel',100);
+  const base=Math.floor(level*2.2);
+  const skillSelect=ALL_SKILLS.map(([id,name])=>`<option value="${id}">${name} (SK-${id})</option>`).join('');
+  const extraRows=extraSkills.map((sk,i)=>{
+    const name=ALL_SKILLS.find(([id])=>id==sk.id)?.[1]||'Unknown';
+    return `<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-lt)">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:11px;font-weight:700;color:var(--ink-mid)">${name} <span class="fc">SK-${sk.id}</span></div>
+      <select id="sk_sac_x_${i}" style="width:150px" onchange="extraSkills[${i}].sac=parseInt(this.value);regen()">${opt(SKILL_SAC,sk.sac||2)}</select>
+      <input type="number" id="sk_init_x_${i}" value="${sk.init||base}" style="width:90px" oninput="extraSkills[${i}].init=parseInt(this.value);regen()">
+      <button class="del" onclick="extraSkills.splice(${i},1);rebuildPanel('skills')">✕</button>
+    </div>`;
+  }).join('');
+  return `<div class="sec">
+    <div class="sh"><div class="st">Skills</div><div class="sl"></div></div>
+    <p class="warn" style="margin-bottom:10px">⚠ Retired skill types 1–5 and 8–13 are never valid.</p>
+    <p class="note" style="margin-bottom:14px">Base skill auto-calculated from level ${level} → ~${base}.</p>
+    ${CORE_SKILL_IDS.map(id=>{
+      const name=ALL_SKILLS.find(([sid])=>sid===id)?.[1]||'Skill';
+      return `<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-lt)">
+        <div style="flex:1;font-family:'Cinzel',serif;font-size:11px;font-weight:700;color:var(--ink-mid)">${name} <span class="fc">SK-${id}</span></div>
+        <select id="sk_sac_${id}" style="width:150px">${opt(SKILL_SAC,2)}</select>
+        <input type="number" id="sk_init_${id}" value="${base}" style="width:90px">
+        <button class="del" onclick="removeCoreSkill(${id})" title="Remove">✕</button>
+      </div>`;
+    }).join('')}
+    ${extraRows}
+    <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
+      <div class="fg sdrop-wrap" style="flex:1">
+        <input type="text" id="skillSearchInp" placeholder="Search skills to add…" autocomplete="off" oninput="filterSkillSearch(this.value)" style="border:1px dashed var(--border);padding:6px 10px">
+        <div class="sdrop-box" id="skillSearch_drop"><div class="sdrop-none">Type to search skills…</div></div>
+      </div>
+      <button class="add-btn" style="width:auto;margin-top:0;padding:8px 16px" onclick="addSkillByName()">+ Add Skill</button>
+    </div>
+  </div>`;
+}
+
+function filterSkillSearch(q){
+  const drop=$('skillSearch_drop');if(!drop)return;
+  if(!q||q.length<1){drop.classList.remove('open');return;}
+  const ql=q.toLowerCase();
+  const matches=ALL_SKILLS.filter(([id,name])=>name.toLowerCase().includes(ql)&&!CORE_SKILL_IDS.includes(id)).slice(0,20);
+  drop.innerHTML=matches.length
+    ?matches.map(([id,name])=>`<div class="sdrop-item" onclick="addSkillById(${id})">${name}<small>SK-${id}</small></div>`).join('')
+    :'<div class="sdrop-none">No skills found</div>';
+  drop.classList.add('open');
+}
+
+function removeCoreSkill(id){
+  const idx=CORE_SKILL_IDS.indexOf(id);
+  if(idx>=0) CORE_SKILL_IDS.splice(idx,1);
+  rebuildPanel('skills');
+}
+
+function addSkillById(id){
+  const level=gi('fLevel',100);
+  const base=Math.floor(level*2.2);
+  if(!extraSkills.find(s=>s.id===id)){
+    extraSkills.push({id,sac:2,init:base});
+    rebuildPanel('skills');
+  }
+  $('skillSearch_drop')?.classList.remove('open');
+  setV('skillSearchInp','');
+}
+
+function addSkillByName(){
+  // fallback: just open the dropdown
+  $('skillSearchInp')?.focus();
+}
+
+// ── SPELL BOOK ────────────────────────────────────────────────────────────────
+function buildSpellbook(){
+  const rows=spells.map((sp,i)=>`
+    <div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-lt)">
+      <div class="fg sdrop-wrap" style="flex:2">
+        <div class="fl">Spell Name <span style="color:var(--ink-faint);font-size:9px">(type or click ▼)</span></div>
+        <div style="display:flex;gap:0">
+          <input type="text" id="sp_nm_${i}" value="${sp.name||''}" oninput="filterSpells(${i},this.value)" onfocus="openSpellDrop(${i})" autocomplete="off" placeholder="Search spells…" style="border-bottom:2px solid var(--border);flex:1">
+          <button onclick="openSpellDrop(${i})" tabindex="-1" style="border:none;border-bottom:2px solid var(--border);background:var(--parch);padding:0 8px;cursor:pointer;color:var(--ink-dim);font-size:11px">▼</button>
+        </div>
+        <div class="sdrop-box" id="sp_drop_${i}"><div class="sdrop-none">Type to search, or click ▼ to browse</div></div>
+      </div>
+      <div class="fg" style="max-width:80px">
+        <div class="fl">ID <span class="fc">spell</span></div>
+        <input type="number" id="sp_id_${i}" value="${sp.id||''}" oninput="spells[${i}].id=this.value;regen()">
+      </div>
+      <div class="fg" style="max-width:90px">
+        <div class="fl">Probability</div>
+        <input type="text" id="sp_pr_${i}" value="${sp.prob||'2.0'}" oninput="spells[${i}].prob=this.value;regen()">
+      </div>
+      <button class="del" onclick="spells.splice(${i},1);rebuildPanel('spellbook')" style="margin-top:16px">✕</button>
+    </div>`).join('');
+  return `<div class="sec">
+    <div class="sh"><div class="st">Spell Book</div><div class="sl"></div></div>
+    <p class="note" style="margin-bottom:10px">Search by name — ID fills automatically. Probability 2.0 = 100% cast chance. Value >2.0: actual% = value−2.0.</p>
+    ${rows}
+    <button class="add-btn" style="margin-top:10px" onclick="spells.push({id:'',name:'',prob:'2.0'});rebuildPanel('spellbook')">+ Add Spell</button>
+  </div>`;
+}
+
+function openSpellDrop(idx){
+  const inp=$(`sp_nm_${idx}`);
+  const query=inp?inp.value:'';
+  // Show first 60 spells or filter by current text
+  const ql=query.toLowerCase();
+  const matches=ql.length>=1
+    ? SPELLS.filter(s=>s[1].toLowerCase().includes(ql))
+    : SPELLS;
+  const drop=$(`sp_drop_${idx}`);
+  if(!drop)return;
+  if(matches.length){
+    const items=matches.map(s=>{
+      const safeName=s[1].replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+      return `<div class="sdrop-item" onmousedown="event.preventDefault();selectSpell(${idx},${s[0]},'${safeName}')">${s[1]}<small>${s[0]}</small></div>`;
+    }).join('');
+    drop.innerHTML=`<div class="sdrop-list">${items}</div>`;
+  } else {
+    drop.innerHTML='<div class="sdrop-none">No results</div>';
+  }
+  // Close all other spell drops first
+  document.querySelectorAll('.sdrop-box.open').forEach(d=>{if(d.id!==`sp_drop_${idx}`)d.classList.remove('open');});
+  drop.classList.add('open');
+}
+
+function filterSpells(idx,query){
+  if(spells[idx]) spells[idx].name=query;
+  const drop=$(`sp_drop_${idx}`);if(!drop)return;
+  const q=query.toLowerCase();
+  // Show matching results, or top 60 if empty
+  const matches=q.length>=1
+    ?SPELLS.filter(s=>s[1].toLowerCase().includes(q)).slice(0,50)
+    :SPELLS.slice(0,60);
+  const items2=matches.map(s=>{
+    const safeName=s[1].replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    return `<div class="sdrop-item" onmousedown="event.preventDefault();selectSpell(${idx},${s[0]},'${safeName}')">${s[1]}<small>${s[0]}</small></div>`;
+  }).join('');
+  drop.innerHTML=matches.length?`<div class="sdrop-list">${items2}</div>`:'<div class="sdrop-none">No results</div>';
+  if(q.length>=1||drop.classList.contains('open')) drop.classList.add('open');
+}
+function selectSpell(idx,id,name){
+  // Decode HTML entities that were escaped for the attribute
+  const decoded=name.replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&');
+  spells[idx]={...spells[idx],id,name:decoded};
+  const ie=$(`sp_id_${idx}`),ne=$(`sp_nm_${idx}`),dr=$(`sp_drop_${idx}`);
+  if(ie)ie.value=id;if(ne)ne.value=decoded;if(dr)dr.classList.remove('open');regen();
+}
+
+// ── BODY PARTS ────────────────────────────────────────────────────────────────
+function buildBodyPartsTab(){
+  const cType=gi('cType',31);
+  const setName=CREATURE_BODY_MAP[cType]||'biped';
+  const rows=bodyParts.map((bp,i)=>`<tr>
+    <td style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;color:var(--ink-mid);white-space:nowrap">${bp.n}</td>
+    <td><select id="bp_dt_${i}" style="font-size:11px">${opt(DMG_TYPES,4)}</select></td>
+    <td><input type="number" id="bp_dv_${i}" value="${bp.dVal||0}"></td>
+    <td><input type="number" id="bp_al_${i}" value="${bp.baseAL||80}"></td>
+    <td><input type="number" id="bp_sl_${i}" value="${bp.sl||64}"></td>
+    <td><input type="number" id="bp_pi_${i}" value="${bp.pi||56}"></td>
+    <td><input type="number" id="bp_bl_${i}" value="${bp.bl||120}"></td>
+    <td><input type="number" id="bp_co_${i}" value="${bp.co||40}"></td>
+    <td><input type="number" id="bp_fi_${i}" value="${bp.fi||120}"></td>
+    <td><input type="number" id="bp_ac_${i}" value="${bp.ac||80}"></td>
+    <td><input type="number" id="bp_el_${i}" value="${bp.el||80}"></td>
+    <td><input type="number" id="bp_nt_${i}" value="${bp.nt||0}"></td>
+  </tr>`).join('');
+  return `<div class="sec bp-wrap">
+    <div class="sh"><div class="st">Body Parts</div><div class="sl"></div>
+      <span style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;color:var(--ink-dim)">Layout: ${setName} (auto from Creature Type)</span>
+    </div>
+    <table class="bp"><thead><tr><th>Part</th><th>DmgType</th><th>DVal</th><th>Base AL</th><th>Slash</th><th>Pierce</th><th>Bludge</th><th>Cold</th><th>Fire</th><th>Acid</th><th>Elec</th><th>Nether</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+  </div>`;
+}
+
+// ── EMOTES ────────────────────────────────────────────────────────────────────
+function buildEmotesTab(){
+  return `<div class="sec">
+    <div class="sh"><div class="st">Emote Chains</div><div class="sl"></div></div>
+    <p class="note" style="margin-bottom:10px">Each emote has a category, optional filters, and a list of ordered actions. Click headers to expand/collapse.</p>
+    <div id="emoteBlocks">${emotes.map((em,i)=>buildEmoteBlock(em,i)).join('')}</div>
+    <button class="add-btn" onclick="addEmote()">+ Add Emote Block</button>
+  </div>`;
+}
+
+function buildEmoteBlock(em,i){
+  const catName=lookupName(EMOTE_CATS,em.category||7);
+  const actions=(em.actions||[]).map((a,j)=>`
+    <div style="border:1px solid var(--border-lt);padding:10px;margin-bottom:8px;background:rgba(200,184,152,.05)">
+      <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px">
+        <span style="font-family:'Source Code Pro',monospace;font-size:10px;font-weight:700;color:var(--ink-dim);padding-top:18px;min-width:28px">[${j}]</span>
+        <div class="fg"><div class="fl">Type</div><select id="ea_t_${i}_${j}" onchange="emotes[${i}].actions[${j}].type=this.value;regen()">${opt(EMOTE_TYPES,a.type||10)}</select></div>
+        <button class="del" onclick="emotes[${i}].actions.splice(${j},1);rebuildPanel('emotes')" style="padding-top:16px">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div class="fg"><div class="fl">Message / Quest Name</div><input type="text" id="ea_m_${i}_${j}" value="${a.message||''}" oninput="emotes[${i}].actions[${j}].message=this.value;regen()" placeholder="Text or quest name"></div>
+        <div class="fg"><div class="fl">Test String</div><input type="text" id="ea_ts_${i}_${j}" value="${a.testString||''}" oninput="emotes[${i}].actions[${j}].testString=this.value;regen()" placeholder="optional"></div>
+        <div class="fg"><div class="fl">Delay (s)</div><input type="text" id="ea_d_${i}_${j}" value="${a.delay||0}" oninput="emotes[${i}].actions[${j}].delay=this.value;regen()"></div>
+        <div class="fg"><div class="fl">Extent</div><input type="number" id="ea_ext_${i}_${j}" value="${a.extent||1}" oninput="emotes[${i}].actions[${j}].extent=this.value;regen()"></div>
+        <div class="fg"><div class="fl">Amount / WCID</div><input type="text" id="ea_a_${i}_${j}" value="${a.amount||''}" oninput="emotes[${i}].actions[${j}].amount=this.value;regen()" placeholder="NULL"></div>
+        <div class="fg"><div class="fl">Amount 64</div><input type="text" id="ea_a64_${i}_${j}" value="${a.amount64||''}" oninput="emotes[${i}].actions[${j}].amount64=this.value;regen()" placeholder="NULL"></div>
+        <div class="fg"><div class="fl">Percent / Luminance</div><input type="text" id="ea_p_${i}_${j}" value="${a.percent||''}" oninput="emotes[${i}].actions[${j}].percent=this.value;regen()" placeholder="NULL"></div>
+        <div class="fg"><div class="fl">Spell ID</div><input type="number" id="ea_sp_${i}_${j}" value="${a.spellId||''}" oninput="emotes[${i}].actions[${j}].spellId=this.value;regen()" placeholder="NULL"></div>
+        <div class="fg"><div class="fl">Stack Size</div><input type="number" id="ea_ss_${i}_${j}" value="${a.stackSize||''}" oninput="emotes[${i}].actions[${j}].stackSize=this.value;regen()" placeholder="NULL"></div>
+        <div class="fg"><div class="fl">Min</div><input type="text" id="ea_min_${i}_${j}" value="${a.min||''}" oninput="emotes[${i}].actions[${j}].min=this.value;regen()" placeholder="NULL"></div>
+        <div class="fg"><div class="fl">Max</div><input type="text" id="ea_max_${i}_${j}" value="${a.max||''}" oninput="emotes[${i}].actions[${j}].max=this.value;regen()" placeholder="NULL"></div>
+        <div class="fg"><div class="fl">Hero XP 64</div><input type="text" id="ea_hxp_${i}_${j}" value="${a.heroXP64||''}" oninput="emotes[${i}].actions[${j}].heroXP64=this.value;regen()" placeholder="NULL"></div>
+      </div>
+    </div>`).join('');
+  return `<div class="emote-block">
+    <div class="emote-hdr" onclick="toggleEmote(${i})">
+      <span style="font-size:12px;color:var(--ink-mid)" id="et_${i}">▼</span>
+      <span class="emote-hdr-title">${catName} — Prob: ${em.prob||1}${em.questFilter?' | Quest: '+em.questFilter:''}</span>
+      <button class="del" onclick="event.stopPropagation();emotes.splice(${i},1);rebuildPanel('emotes')">✕ Remove</button>
+    </div>
+    <div class="emote-body open" id="eb_${i}">
+      <div class="grid g3" style="margin-bottom:10px">
+        <div class="fg"><div class="fl">Category</div><select id="em_cat_${i}" onchange="emotes[${i}].category=this.value;rebuildPanel('emotes')">${opt(EMOTE_CATS,em.category||7)}</select></div>
+        <div class="fg"><div class="fl">Probability</div><input type="text" id="em_prob_${i}" value="${em.prob||1}" oninput="emotes[${i}].prob=this.value;regen()"></div>
+        <div class="fg"><div class="fl">WCID Filter (0=any)</div><input type="number" id="em_wcid_${i}" value="${em.wcidFilter||0}" oninput="emotes[${i}].wcidFilter=this.value;regen()"></div>
+        <div class="fg" style="grid-column:span 3"><div class="fl">Quest Filter (one word, blank=none)</div><input type="text" id="em_quest_${i}" value="${em.questFilter||''}" oninput="emotes[${i}].questFilter=this.value;regen()"></div>
+      </div>
+      <div style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:6px">Actions</div>
+      <div id="ea_rows_${i}">${actions}</div>
+      <button class="add-btn" style="margin-top:4px" onclick="emotes[${i}].actions.push({type:10,message:'',delay:0,extent:1,amount:'',percent:'',spellId:'',stackSize:'',min:'',max:'',testString:'',amount64:'',heroXP64:''});rebuildPanel('emotes')">+ Add Action</button>
+    </div>
+  </div>`;
+}
+
+function toggleEmote(i){
+  const b=$(`eb_${i}`),t=$(`et_${i}`);
+  if(b){b.classList.toggle('open');if(t)t.textContent=b.classList.contains('open')?'▼':'▶';}
+}
+function addEmote(){emotes.push({category:7,prob:1,wcidFilter:0,questFilter:'',actions:[]});rebuildPanel('emotes');}
+
+// ── PROPERTIES TAB (full property editor) ────────────────────────────────────
+// Architecture:
+//   extraInt/Bool/Float/Str/DID hold ONLY additional rows not emitted by the
+//   form fields.  syncAdvancedFromSQL reads what regen() already produced and
+//   shows ALL rows — but the properties tab editor only controls the "extra"
+//   arrays.  The form fields (Name, Level, Damage…) emit their rows
+//   automatically; editing them in the Properties tab would duplicate them.
+//
+//   To avoid confusion we now show the full SQL output in a read-only summary
+//   at the top, and the editable extras below.  The Add flow uses a dropdown
+//   to pick which property type to add first, then lets the user enter a value.
+
+function buildAdvanced(){
+  // Type IDs already emitted by the form fields — these are managed/read-only in the Properties tab
+  const SKIP_INT=new Set([1,2,3,4,5,6,7,9,10,11,12,13,16,19,25,26,27,28,33,40,44,45,47,48,49,93,95,101,106,107,108,109,110,114,126,133,134,146,151,158,159,160,169,204,307,308,313,314,315,317,323,332]);
+  const SKIP_BOOL=new Set([1,6,7,8,11,12,13,14,15,18,19,22,23,29,39,41,42,50,52,63,65,66,79,91,98,100,120]);
+  const SKIP_FLOAT=new Set([1,3,4,5,12,13,14,15,16,17,18,19,21,22,29,31,34,37,38,39,41,43,54,62,64,65,66,67,68,69,70,71,72,73,74,75,80,104,122,125,136,144,149,150,152,165,166]);
+  const SKIP_STR=new Set([1,7,14,15,16,17,18,20]);
+  const SKIP_DID=new Set([1,2,3,4,6,7,8,22,28,32,35,36,38,46,50,52,55]);
+
+  // Read-only rows for properties managed by form fields (shown grayed-out)
+  function managedRows(arr, propNames, skipSet){
+    return (arr||[]).filter(r=>skipSet.has(parseInt(r.type))).map(r=>{
+      const name=propNames[r.type]||'custom';
+      return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;opacity:0.55">
+        <div style="min-width:220px;font-family:'Cinzel',serif;font-size:10px;font-weight:700;color:var(--ink-dim)">${r.type} · ${name}</div>
+        <div style="flex:1;font-family:'Source Code Pro',monospace;font-size:12px;color:var(--ink-dim);padding:4px 3px">${r.value}</div>
+        <div style="font-family:'Cinzel',serif;font-size:8px;color:var(--ink-faint);white-space:nowrap">Form Field</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Editable rows from the extra arrays
+  function extraRows(arrRef, propNames, skipSet){
+    const arr=window[arrRef]||[];
+    return arr.map((r,i)=>{
+      const name=propNames[r.type]||'custom';
+      const isManaged=skipSet.has(parseInt(r.type));
+      const style=isManaged?'opacity:0.6':'';
+      return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border-lt);${style}">
+        <div style="min-width:220px;font-family:'Cinzel',serif;font-size:10px;font-weight:700;color:var(--ink-mid)">${r.type} · ${name}</div>
+        <input type="text" value="${String(r.value||'').replace(/"/g,'&quot;')}" oninput="window.${arrRef}[${i}].value=this.value;regen()" style="flex:1;font-family:'Source Code Pro',monospace;font-size:12px;font-weight:600;border-bottom:1px solid var(--border)">
+        <button class="del" onclick="window.${arrRef}.splice(${i},1);rebuildPanel('advanced');regen()">✕</button>
+      </div>`;
+    }).join('');
+  }
+
+  // Add-row UI: searchable select + value + Add button
+  function addRowUI(arrRef, propNames, defaultVal, sectionId){
+    const opts=Object.entries(propNames).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('');
+    return `<div style="display:flex;gap:8px;align-items:flex-end;margin-top:10px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+      <div class="fg" style="flex:2">
+        <div class="fl">Property to add</div>
+        <select id="add_type_${sectionId}" style="font-size:13px">${opts}</select>
+      </div>
+      <div class="fg" style="flex:1">
+        <div class="fl">Value</div>
+        <input type="text" id="add_val_${sectionId}" value="${defaultVal}" style="font-size:13px;font-weight:600">
+      </div>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addExtraProperty('${arrRef}','${sectionId}')">+ Add</button>
+    </div>`;
+  }
+
+  // Build display rows combining managed (read-only) + extras (editable)
+  // Managed rows come from lastSQLProps (populated by regen)
+  const lp=window._lastSQLProps||{};
+  const intManaged=managedRows(lp.int,PROP_INT,SKIP_INT);
+  const boolManaged=managedRows(lp.bool,PROP_BOOL,SKIP_BOOL);
+  const floatManaged=managedRows(lp.float,PROP_FLOAT,SKIP_FLOAT);
+  const strManaged=managedRows(lp.str,PROP_STRING,SKIP_STR);
+  const didManaged=managedRows(lp.did,PROP_DID,SKIP_DID);
+
+  const intExtra=extraRows('extraInt',PROP_INT,SKIP_INT);
+  const boolExtra=extraRows('extraBool',PROP_BOOL,SKIP_BOOL);
+  const floatExtra=extraRows('extraFloat',PROP_FLOAT,SKIP_FLOAT);
+  const strExtra=extraRows('extraStr',PROP_STRING,SKIP_STR);
+  const didExtra=extraRows('extraDID',PROP_DID,SKIP_DID);
+
+  const none='<div style="color:var(--ink-faint);font-style:italic;font-size:13px;padding:4px 0">None</div>';
+
+  return `<div class="sec">
+    <div class="sh"><div class="st">≡ Properties</div><div class="sl"></div>
+      <button class="top-btn" onclick="syncAdvancedFromSQL()" style="padding:5px 12px;font-size:9px">↺ Refresh</button>
+    </div>
+    <p class="note" style="margin-bottom:14px">Grayed rows are managed by the Form Fields tab. Editable rows are additional properties. Use the Add controls to insert new ones.</p>
+
+    <div class="sh"><div class="st">Int Properties</div><div class="sl"></div></div>
+    <div id="adv_int">${intManaged}${intExtra||(!intManaged?none:'')}</div>
+    ${addRowUI('extraInt',PROP_INT,'0','int')}
+
+    <div class="sh" style="margin-top:16px"><div class="st">Bool Properties</div><div class="sl"></div></div>
+    <div id="adv_bool">${boolManaged}${boolExtra||(!boolManaged?none:'')}</div>
+    ${addRowUI('extraBool',PROP_BOOL,'True','bool')}
+
+    <div class="sh" style="margin-top:16px"><div class="st">Float Properties</div><div class="sl"></div></div>
+    <div id="adv_float">${floatManaged}${floatExtra||(!floatManaged?none:'')}</div>
+    ${addRowUI('extraFloat',PROP_FLOAT,'0.0','float')}
+
+    <div class="sh" style="margin-top:16px"><div class="st">String Properties</div><div class="sl"></div></div>
+    <div id="adv_str">${strManaged}${strExtra||(!strManaged?none:'')}</div>
+    ${addRowUI('extraStr',PROP_STRING,'','str')}
+
+    <div class="sh" style="margin-top:16px"><div class="st">DID Properties</div><div class="sl"></div></div>
+    <div id="adv_did">${didManaged}${didExtra||(!didManaged?none:'')}</div>
+    ${addRowUI('extraDID',PROP_DID,'0x00000000','did')}
+  </div>`;
+}
+
+function addExtraProperty(arrRef, sectionId){
+  const typeEl=$('add_type_'+sectionId);
+  const valEl=$('add_val_'+sectionId);
+  if(!typeEl||!valEl)return;
+  const type=String(typeEl.value);
+  const value=valEl.value.trim()||'';
+  if(!type)return;
+  const arr=window[arrRef];
+  // Replace if already exists, otherwise add
+  const existing=arr.findIndex(r=>String(r.type)===type);
+  if(existing>=0) arr[existing].value=value;
+  else arr.push({type, value});
+  arr.sort((a,b)=>parseInt(a.type)-parseInt(b.type));
+  regen();
+  rebuildPanel('advanced');
+  toast('Added '+type+' = '+value);
+}
+
+function syncAdvancedFromSQL(silent=false){
+  // Refresh the _lastSQLProps snapshot and rebuild the panel
+  // This does NOT load anything into extraInt/Bool/etc — those stay as-is
+  // (extras are only changed by Add/Remove actions or manual value editing)
+  const sql=getPlainSQL();
+  if(!sql.trim()){ if(!silent) toast('No SQL to sync from.'); return; }
+
+  // Parse the current SQL to show the read-only "managed" rows
+  window._lastSQLProps={
+    int:   extractInsertValues(sql,'weenie_properties_int'),
+    bool:  extractInsertValues(sql,'weenie_properties_bool'),
+    float: extractInsertValues(sql,'weenie_properties_float'),
+    str:   extractInsertValues(sql,'weenie_properties_string'),
+    did:   extractInsertValues(sql,'weenie_properties_d_i_d'),
+  };
+
+  rebuildPanel('advanced');
+  if(!silent){
+    const total=Object.values(window._lastSQLProps).reduce((s,a)=>s+a.length,0);
+    toast('Showing '+total+' properties from SQL.');
+  }
+}
+
+// ── SEARCH FUNCTIONS ──────────────────────────────────────────────────────────
+function searchWeaponFn(q){
+  const drop=$('wepSearch_drop');if(!drop)return;
+  if(!q||q.length<2){drop.classList.remove('open');return;}
+  const matches=WEAPONS.filter(w=>w[1].toLowerCase().includes(q.toLowerCase())).slice(0,50);
+  drop.innerHTML=matches.length?matches.map(w=>`<div class="sdrop-item" onclick="fillWeapon(${JSON.stringify(w)})">${w[1]}<small>Dmg:${w[2]} ${w[3]} Time:${w[4]}</small></div>`).join(''):'<div class="sdrop-none">No results</div>';
+  drop.classList.add('open');
+}
+function fillWeapon(w){
+  const DT={'Slash':1,'Pierce':2,'Bludgeon':4,'Cold':8,'Fire':16,'Acid':32,'Electric':64,'Nether':1024};
+  const SK={'OneHanded':44,'TwoHanded':41,'Unarmed':44,'Bow':47,'Crossbow':47,'Sling':47,'ThrownWeapon':47,'Caster':34};
+  const si=id=>{const e=$(id);if(e)e.value=id;};
+  setV('fName',w[1]);setV('fDmg',w[2]);setV('fWepTime',w[4]);setV('fDmgVar',w[5]);setV('fWepDef',w[6]);setV('fWepOff',w[7]);
+  const dtEl=$('fDmgType');if(dtEl)dtEl.value=DT[w[3]]??0;
+  const wsEl=$('fWepSkill');if(wsEl)wsEl.value=SK[w[9]]||44;
+  $('wepSearch_drop')?.classList.remove('open');regen();
+}
+function searchArmorFn(q){
+  const drop=$('armorSearch_drop');if(!drop)return;
+  if(!q||q.length<2){drop.classList.remove('open');return;}
+  const matches=ARMOR.filter(a=>a[1].toLowerCase().includes(q.toLowerCase())).slice(0,50);
+  drop.innerHTML=matches.length?matches.map(a=>`<div class="sdrop-item" onclick="fillArmor(${JSON.stringify(a)})">${a[1]}<small>${a[2]} AL:${a[3]}</small></div>`).join(''):'<div class="sdrop-none">No results</div>';
+  drop.classList.add('open');
+}
+function fillArmor(a){
+  const TM={'Cloth':1,'Leather':2,'StuddedLeather':3,'Scale':4,'Chainmail':5,'DiffusingWeave':6,'Amuli':7,'Celdon':8,'Haebrean':9,'Yoroi':10,'Platemail':11,'Lorica':12,'Nariyid':13,'Alduressa':14,'Covenant':15,'Koveras':17,'Olthoi':18};
+  setV('fName',a[1]);setV('fArmorLevel',a[3]);setV('mSlash',a[4]);setV('mPierce',a[5]);setV('mBludge',a[6]);setV('mCold',a[7]);setV('mFire',a[8]);setV('mAcid',a[9]);setV('mElec',a[10]);
+  const atEl=$('fArmorType');if(atEl)atEl.value=TM[a[2]]??11;
+  $('armorSearch_drop')?.classList.remove('open');onArmorTypeChange();regen();
+}
+function setV(id,v){const e=$(id);if(e)e.value=v;}
+
+// ── PRESETS ───────────────────────────────────────────────────────────────────
+function applyPreset(d){Object.entries(d).forEach(([id,v])=>{const e=$(id);if(e)e.value=v;});regen();}
+function openPresetModal(){$('presetModal').classList.add('open');setV('presetNameInp',g('fName','Preset'));}
+function closePresetModal(){$('presetModal').classList.remove('open');}
+function confirmSavePreset(){
+  const name=$('presetNameInp').value.trim();if(!name){toast('Enter a preset name.');return;}
+  const data={};
+  document.querySelectorAll('#idRow input,#idRow select,#formContent input,#formContent select').forEach(e=>{
+    if(e.id&&!e.id.match(/^(sp_|bp_|em_|ea_|rreq_|rmod_|cb_|extraInt|extraBool|extraFloat|extraStr|extraDID)/)){data[e.id]=e.value;}
+  });
+  if(!customPresets[curType])customPresets[curType]=[];
+  customPresets[curType].push({name,data});
+  if(window.pywebview)window.pywebview.api.save_config({custom_presets:customPresets});
+  closePresetModal();buildForm();toast(`Preset "${name}" saved.`);
+}
+
+// ── SQL GENERATION ────────────────────────────────────────────────────────────
+// Prevent recursive regen→edit→regen loops
+// ── SQL EDIT / SYNC STATE ─────────────────────────────────────────────────────
+let _regenLock=false;
+let _userEditingSQL=false;
+let _sqlEditTimer=null;
+let _sqlDirty=false; // true when user has manually edited the SQL
+
+function regen(){
+  if(_regenLock||_userEditingSQL) return;
+  _regenLock=true;
+  try{buildSQL();}catch(e){console.error('SQL:',e);}
+  _regenLock=false;
+  // Regen from form always clears any manual SQL edits
+  if(_sqlDirty) markSQLClean();
+  // Snapshot current SQL into _lastSQLProps for the Properties tab display
+  // (done silently — no rebuild of advanced panel unless it's visible)
+  const sql=getPlainSQL();
+  if(sql.trim()){
+    window._lastSQLProps={
+      int:   extractInsertValues(sql,'weenie_properties_int'),
+      bool:  extractInsertValues(sql,'weenie_properties_bool'),
+      float: extractInsertValues(sql,'weenie_properties_float'),
+      str:   extractInsertValues(sql,'weenie_properties_string'),
+      did:   extractInsertValues(sql,'weenie_properties_d_i_d'),
+    };
+    // If Properties tab is visible, refresh it
+    const advPanel=document.querySelector('[data-sub="advanced"].active');
+    if(advPanel) rebuildPanel('advanced');
+  }
+}
+
+function markSQLClean(){
+  _sqlDirty=false;
+  _userEditingSQL=false;
+  const banner=$('sqlDirtyBanner');
+  if(banner) banner.style.display='none';
+}
+
+function discardSQLEdit(){
+  // Re-run generation from form fields, discarding manual SQL edits
+  _sqlDirty=false;
+  _userEditingSQL=false;
+  clearTimeout(_sqlEditTimer);
+  const banner=$('sqlDirtyBanner');
+  if(banner) banner.style.display='none';
+  regen();
+}
+
+function onSQLEdit(){
+  // User is typing in the SQL textarea
+  _userEditingSQL=true;
+  _sqlDirty=true;
+
+  // Show the dirty banner
+  const banner=$('sqlDirtyBanner');
+  if(banner) banner.style.display='flex';
+
+  clearTimeout(_sqlEditTimer);
+  _sqlEditTimer=setTimeout(()=>{
+    const sql=$('sqlOut')?.value||'';
+    const changed=parseSQLIntoForm(sql);
+    if(!changed){
+      // Nothing could be parsed back — banner stays, user is warned
+    }
+    _userEditingSQL=false;
+  }, 600);
+}
+
+// Parse SQL text back into form fields.
+// Returns true if at least one field was updated.
+function parseSQLIntoForm(sql){
+  if(!sql.trim()) return false;
+  let changed=false;
+
+  const intVals=extractInsertValues(sql,'weenie_properties_int');
+  const floatVals=extractInsertValues(sql,'weenie_properties_float');
+  const strVals=extractInsertValues(sql,'weenie_properties_string');
+  const boolVals=extractInsertValues(sql,'weenie_properties_bool');
+
+  // type_id → field_id mapping for fields shown in the Properties tab
+  const INT_MAP={
+    2:'cType', 3:'fPalette', 5:'fEncumb', 9:'fValidLoc', 11:'fMaxStack',
+    16:'fItemUse', 19:'fValue', 25:'fLevel', 27:'fArmorType', 28:'fArmorLevel',
+    33:'fBonded', 44:'fDmg', 45:'fDmgType', 47:'fAttackType', 48:'fWepSkill',
+    49:'fWepTime', 93:'', // PhysicsState — skip
+    95:'fRadarColor', 101:'fCombatStyle', 106:'fSpellcraft',
+    114:'fAttuned', 133:'', 134:'', // radar/PK — skip
+    146:'fXp', 160:'fWieldDiff', 204:'fElemBonus',
+    307:'fDmgRating', 308:'fDmgResist', 313:'fCritRating',
+    314:'fCritDmgRating', 315:'fCritResRating', 317:'fHealResist',
+    323:'fHealBoost', 332:'fLum',
+  };
+  const FLOAT_MAP={
+    13:'mSlash', 14:'mPierce', 15:'mBludge', 16:'mCold',
+    17:'mFire', 18:'mAcid', 19:'mElec', 165:'mNether',
+    22:'fDmgVar', 29:'fWepDef', 31:'fAggroRange', 37:'fBuyRate',
+    38:'fSellRate', 39:'fScale', 54:'fUseRadius', 62:'fWepOff',
+    64:'rSlash', 65:'rPierce', 66:'rBludge', 68:'rCold',
+    67:'rFire', 69:'rAcid', 70:'rElec', 166:'rNether',
+    136:'fCritMult', 144:'fManaConv', 149:'fMissileDef', 150:'fMagicDef',
+  };
+  const STR_MAP={1:'fName', 14:'fUseMsg', 15:'fShortDesc', 16:'fLongDesc'};
+
+  _regenLock=true;
+  const setField=(id,val)=>{
+    if(!id) return;
+    const el=$(id);
+    if(el && String(el.value)!==String(val)){
+      el.value=val;
+      changed=true;
+    }
+  };
+
+  // Parse WCID from first VALUES row: (WCID, ...
+  const wcidM=sql.match(/VALUES\s*\((\d+)\s*,/);
+  if(wcidM) setField('fWcid', wcidM[1]);
+
+  intVals.forEach(r=>setField(INT_MAP[r.type], r.value));
+  floatVals.forEach(r=>setField(FLOAT_MAP[r.type], r.value));
+  strVals.forEach(r=>setField(STR_MAP[r.type], r.value));
+
+  // Bool: AiUsesMana (type 6)
+  const mana=boolVals.find(r=>r.type===6);
+  if(mana) setField('fUsesMana', mana.value==='True'||mana.value===true?'1':'0');
+
+  _regenLock=false;
+  if(changed) markSQLClean();
+  return changed;
+}
+
+function buildSQL(){
+  const t=curType;
+
+  // ── QUEST ────────────────────────────────────────────────────────────────────
+  if(t==='quest'){
+    const name=g('fName','NewQuest').replace(/\s+/g,'');
+    const minDelta=gi('fMinDelta',0);
+    const maxSolves=gi('fMaxSolves',1);
+    const msg=g('fMsg',name);
+    const lines=[
+      `DELETE FROM \`quest\` WHERE \`name\` = '${name}';`,
+      '',
+      `INSERT INTO \`quest\` (\`name\`, \`min_Delta\`, \`max_Solves\`, \`message\`, \`last_Modified\`)`,
+      `VALUES ('${name}', ${minDelta}, ${maxSolves}, '${msg}', '2025-01-01 00:00:00');`,
+    ];
+    writeSQLOut(lines.join('\n'));
+    return;
+  }
+
+  // ── RECIPE ───────────────────────────────────────────────────────────────────
+  if(t==='recipe'){buildRecipeSQL();return;}
+
+  // ── WEENIE CONTENT ───────────────────────────────────────────────────────────
+  const wcid=gi('fWcid',850000);
+  const name=g('fName','New Weenie');
+  const wType=gi('fWType',10);
+  const className=name.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const now='2025-01-01 00:00:00';
+  const isCreature=t==='creature'||t==='npc';
+
+  const lines=[];
+
+  // DELETE + weenie row
+  lines.push(`DELETE FROM \`weenie\` WHERE \`class_Id\` = ${wcid};`,'');
+  lines.push(`INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)`);
+  lines.push(`VALUES (${wcid}, '${className}', ${wType}, '${now}');`,'');
+
+  // Helper: emit a properties INSERT block
+  // rows: [[type, value, comment], ...]
+  // Generic emit helper — semicolon on last row BEFORE the comment (matches reference format)
+  function emitBlock(tableName, colNames, rows, rowFn){
+    if(!rows.length) return;
+    lines.push(`INSERT INTO \`${tableName}\` (${colNames})`);
+    rows.forEach((r,i)=>{
+      const isLast=(i===rows.length-1);
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}${rowFn(r,isLast)}`);
+    });
+    lines.push('');
+  }
+  function emitInt(rows){
+    emitBlock('weenie_properties_int','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
+      const comment=c?` /* ${c} */`:'';
+      return `(${wcid}, ${tp}, ${v})${isLast?';':''}${comment}`;
+    });
+  }
+  function emitBool(rows){
+    emitBlock('weenie_properties_bool','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
+      const comment=c?` /* ${c} */`:'';
+      return `(${wcid}, ${tp}, ${v})${isLast?';':''}${comment}`;
+    });
+  }
+  function emitFloat(rows){
+    emitBlock('weenie_properties_float','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
+      const comment=c?` /* ${c} */`:'';
+      const vs=Number.isInteger(v)?v.toFixed(1):parseFloat(v).toString();
+      return `(${wcid}, ${tp}, ${vs})${isLast?';':''}${comment}`;
+    });
+  }
+  function emitStr(rows){
+    emitBlock('weenie_properties_string','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
+      const comment=c?` /* ${c} */`:'';
+      const escaped=String(v).replace(/'/g,"''");
+      return `(${wcid}, ${tp}, '${escaped}')${isLast?';':''}${comment}`;
+    });
+  }
+  function emitDID(rows){
+    emitBlock('weenie_properties_d_i_d','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
+      const comment=c?` /* ${c} */`:'';
+      return `(${wcid}, ${tp}, ${v})${isLast?';':''}${comment}`;
+    });
+  }
+
+  // ── Build property arrays ─────────────────────────────────────────────────
+  let IR=[],BR=[],FR=[],SR=[[1,name,'Name']],DR=[];
+
+  if(isCreature){
+    const ct=gi('cType',31);
+    IR.push(
+      [1, 16, 'ItemType - Creature'],
+      [2, ct, 'CreatureType - '+lookupName(CREATURE_TYPES,ct)],
+      [3, gi('fPalette',9), 'PaletteTemplate'],
+      [6, -1, 'ItemsCapacity'],
+      [7, -1, 'ContainersCapacity'],
+      [16, t==='npc'?32:1, 'ItemUseable'],
+      [25, gi('fLevel',100), 'Level'],
+    );
+    if(t==='creature'){
+      IR.push(
+        [40, 2, 'CombatMode - Melee'],
+        [44, gi('fDmg',80), 'Damage'],
+        [45, gi('fDmgType',1), 'DamageType - '+lookupName(DMG_TYPES,gi('fDmgType',1))],
+        [47, gi('fAttackType',4), 'AttackType'],
+        [48, gi('fWepSkill',44), 'WeaponSkill - '+lookupName(WEP_SKILLS,gi('fWepSkill',44))],
+        [93, 3080, 'PhysicsState'],
+        [101, gi('fCombatStyle',2), 'AiAllowedCombatStyle'],
+        [133, 4, 'ShowableOnRadar'],
+        [146, gi('fXp',50000), 'XpOverride'],
+        [332, gi('fLum',5000), 'LuminanceAward'],
+      );
+      BR.push(
+        [1, 'True', 'Stuck'],
+        [6, gi('fUsesMana',0)?'True':'False', 'AiUsesMana'],
+        [12, 'True', 'ReportCollisions'],
+        [13, 'False', 'Ethereal'],
+        [14, 'True', 'GravityStatus'],
+        [15, 'True', 'LightsStatus'],
+        [19, 'True', 'Attackable'],
+        [120, 'False', 'TreasureCorpse'],
+      );
+      const rs=gf('rSlash',1),rp=gf('rPierce',1),rb=gf('rBludge',1),rc=gf('rCold',1),
+            rf=gf('rFire',1),ra=gf('rAcid',1),re=gf('rElec',1),rn=gf('rNether',1);
+      const sc=gf('fScale',1.0),ar=gf('fAggroRange',16.0);
+      FR.push(
+        [1, 5, 'HeartbeatInterval'],
+        [3, 0.5, 'HealthRate'],
+        [4, 0.4, 'StaminaRate'],
+        [5, 1.5, 'ManaRate'],
+        [12, 1.0, 'Shade'],
+        [13, rs, 'ArmorModVsSlash'],
+        [14, rp, 'ArmorModVsPierce'],
+        [15, rb, 'ArmorModVsBludgeon'],
+        [16, rc, 'ArmorModVsCold'],
+        [17, rf, 'ArmorModVsFire'],
+        [18, ra, 'ArmorModVsAcid'],
+        [19, re, 'ArmorModVsElectric'],
+        [31, ar, 'VisualAwarenessRange'],
+        [39, sc, 'DefaultScale'],
+        [64, rs, 'ResistSlash'],
+        [65, rp, 'ResistPierce'],
+        [66, rb, 'ResistBludgeon'],
+        [67, rf, 'ResistFire'],
+        [68, rc, 'ResistCold'],
+        [69, ra, 'ResistAcid'],
+        [70, re, 'ResistElectric'],
+        [165, rn, 'ArmorModVsNether'],
+        [166, rn, 'ResistNether'],
+      );
+      const tr=gi('fTreasureTier',3100);
+      if(tr) DR.push([35, tr, 'DeathTreasureType']);
+    }
+    if(t==='npc'){
+      IR.push(
+        [93, 6292504, 'PhysicsState'],
+        [95, gi('fRadarColor',8), 'RadarBlipColor'],
+        [133, 4, 'ShowableOnRadar'],
+        [134, 16, 'PlayerKillerStatus - RubberGlue'],
+        [146, 0, 'XpOverride'],
+      );
+      if(wType===12) IR.push(
+        [74, gi('fMerchItemTypes',0), 'MerchandiseItemTypes'],
+        [75, gi('fMerchMinVal',0), 'MerchandiseMinValue'],
+        [76, gi('fMerchMaxVal',0), 'MerchandiseMaxValue'],
+        [126, gi('fVendorHappy',0), 'VendorHappyMean'],
+      );
+      BR.push(
+        [1, 'True', 'Stuck'],
+        [8, 'True', 'AllowGive'],
+        [12, 'True', 'ReportCollisions'],
+        [13, 'False', 'Ethereal'],
+        [14, 'True', 'GravityStatus'],
+        [19, 'False', 'Attackable'],
+        [29, 'True', 'NoCorpse'],
+        [41, 'True', 'ReportCollisionsAsEnvironment'],
+        [42, 'True', 'AllowEdgeSlide'],
+        [52, 'True', 'AiImmobile'],
+      );
+      FR.push(
+        [1, 60, 'HeartbeatInterval'],
+        [3, 0.16, 'HealthRate'],
+        [4, 5.0, 'StaminaRate'],
+        [5, 1.0, 'ManaRate'],
+        [39, gf('fScale',1.0), 'DefaultScale'],
+        [54, gf('fUseRadius',3.0), 'UseRadius'],
+      );
+      if(wType===12) FR.push(
+        [37, gf('fBuyRate',1.0), 'BuyPrice'],
+        [38, gf('fSellRate',1.1), 'SellPrice'],
+      );
+      const sd=g('fShortDesc',''); if(sd) SR.push([15,sd,'ShortDesc']);
+      const ld=g('fLongDesc','');  if(ld) SR.push([16,ld,'LongDesc']);
+    }
+  }
+  else if(t==='item'){
+    const enc=gi('fEncumb',10), ms=gi('fMaxStack',1);
+    IR.push(
+      [1, 2048, 'ItemType - Gem'],
+      [3, gi('fPalette',39), 'PaletteTemplate'],
+      [5, enc, 'EncumbranceVal'],
+      [11, ms, 'MaxStackSize'],
+      [12, 1, 'StackSize'],
+      [13, enc, 'StackUnitEncumbrance'],
+      [16, gi('fItemUse',1), 'ItemUseable'],
+      [19, gi('fValue',100), 'Value'],
+      [33, gi('fBonded',1), 'Bonded'],
+      [93, 1044, 'PhysicsState'],
+      [114, gi('fAttuned',1), 'Attuned'],
+    );
+    if(gi('fSpellcraft',0)) IR.push([106,gi('fSpellcraft',0),'ItemSpellcraft']);
+    FR.push([39, gf('fScale',1.0), 'DefaultScale']);
+    [[307,'fDmgRating','DamageRating'],[308,'fDmgResist','DamageResistRating'],
+     [313,'fCritRating','CritRating'],[314,'fCritDmgRating','CritDamageRating'],
+     [315,'fCritResRating','CritResistRating'],[317,'fHealResist','HealingResistRating'],
+     [323,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{const v=gi(id,0);if(v)IR.push([tp,v,c]);});
+    const sd=g('fShortDesc',''); if(sd) SR.push([15,sd,'ShortDesc']);
+    const um=g('fUseMsg','');    if(um) SR.push([14,um,'Use']);
+  }
+  else if(t==='weapon'){
+    const ws=gi('fWepSkill',44);
+    IR.push(
+      [1, 1, 'ItemType - MeleeWeapon'],
+      [3, gi('fPalette',20), 'PaletteTemplate'],
+      [5, gi('fEncumb',400), 'EncumbranceVal'],
+      [19, gi('fValue',5000), 'Value'],
+      [44, gi('fDmg',80), 'Damage'],
+      [45, gi('fDmgType',1), 'DamageType - '+lookupName(DMG_TYPES,gi('fDmgType',1))],
+      [47, gi('fAttackType',4), 'AttackType'],
+      [48, ws, 'WeaponSkill - '+lookupName(WEP_SKILLS,ws)],
+      [49, gi('fWepTime',45), 'WeaponTime'],
+      [93, 1044, 'PhysicsState'],
+      [158, 1, 'WieldRequirements - Skill'],
+      [159, ws, 'WieldSkilltype'],
+      [160, gi('fWieldDiff',290), 'WieldDifficulty'],
+    );
+    const eb=gi('fElemBonus',0); if(eb) IR.push([204,eb,'ElementalDamageBonus']);
+    [[307,'fDmgRating','DamageRating'],[308,'fDmgResist','DamageResistRating'],
+     [313,'fCritRating','CritRating'],[314,'fCritDmgRating','CritDamageRating'],
+     [315,'fCritResRating','CritResistRating'],[317,'fHealResist','HealingResistRating'],
+     [323,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{
+      const v=gi(id,0); if(v) IR.push([tp,v,c]);
+    });
+    const mm=gf('fMissileDef',0), mg=gf('fMagicDef',0), cm2=gf('fCritMult',1.0);
+    FR.push(
+      [22, gf('fDmgVar',0.4), 'DamageVariance'],
+      [29, gf('fWepDef',1.0), 'WeaponDefense'],
+      [39, gf('fScale',1.0), 'DefaultScale'],
+      [62, gf('fWepOff',1.0), 'WeaponOffense'],
+    );
+    if(mm) FR.push([149,mm,'WeaponMissileDefense']);
+    if(mg) FR.push([150,mg,'WeaponMagicDefense']);
+    if(cm2!==1.0) FR.push([136,cm2,'CriticalMultiplier']);
+  }
+  else if(t==='armor'){
+    const at=gi('fArmorType',11), vl=gi('fValidLoc',512), isCloth=(at===1);
+    IR.push(
+      [1, 2, 'ItemType - Armor'],
+      [3, gi('fPalette',9), 'PaletteTemplate'],
+      [4, vl, 'ClothingPriority'],
+      [5, gi('fEncumb',300), 'EncumbranceVal'],
+      [9, vl, 'ValidLocations'],
+      [10, vl, 'CurrentWieldedLocation'],
+      [19, gi('fValue',3000), 'Value'],
+      [27, at, 'ArmorType - '+lookupName(ARMOR_TYPES,at)],
+      [28, gi('fArmorLevel',100), 'ArmorLevel'],
+      [93, 1044, 'PhysicsState'],
+    );
+    if(gi('fSpellcraft',0)) IR.push([106,gi('fSpellcraft',0),'ItemSpellcraft']);
+    [[307,'fDmgRating','DamageRating'],[308,'fDmgResist','DamageResistRating'],
+     [313,'fCritRating','CritRating'],[314,'fCritDmgRating','CritDamageRating'],
+     [315,'fCritResRating','CritResistRating'],[317,'fHealResist','HealingResistRating'],
+     [323,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{
+      const v=gi(id,0); if(v) IR.push([tp,v,c]);
+    });
+    FR.push([39, gf('fScale',1.0), 'DefaultScale']);
+    if(!isCloth){
+      FR.push(
+        [13, gf('mSlash',1.0), 'ArmorModVsSlash'],
+        [14, gf('mPierce',1.0), 'ArmorModVsPierce'],
+        [15, gf('mBludge',1.0), 'ArmorModVsBludgeon'],
+        [16, gf('mCold',1.0), 'ArmorModVsCold'],
+        [17, gf('mFire',1.0), 'ArmorModVsFire'],
+        [18, gf('mAcid',1.0), 'ArmorModVsAcid'],
+        [19, gf('mElec',1.0), 'ArmorModVsElectric'],
+        [165, gf('mNether',1.0), 'ArmorModVsNether'],
+      );
+    }
+    [['alSlash',13],['alPierce',14],['alBludge',15],['alCold',16],
+     ['alFire',17],['alAcid',18],['alElec',19],['alNether',165]].forEach(([id,tp])=>{
+      const v=gi(id,0); if(v) IR.push([tp,v,'ArmorLevel_'+id.replace('al','')]);
+    });
+  }
+  else if(t==='jewelry'){
+    const vl=gi('fValidLoc',32768);
+    IR.push(
+      [1, 8, 'ItemType - Jewelry'],
+      [3, gi('fPalette',1), 'PaletteTemplate'],
+      [5, gi('fEncumb',60), 'EncumbranceVal'],
+      [8, gi('fMass',90), 'Mass'],
+      [9, vl, 'ValidLocations'],
+      [16, 1, 'ItemUseable - No'],
+      [19, gi('fValue',50000), 'Value'],
+      [26, 1, 'AccountRequirements - AsheronsCall_Subscription'],
+      [33, gi('fBonded',0), 'Bonded'],
+      [93, 1044, 'PhysicsState - Ethereal, IgnoreCollisions, Gravity'],
+      [106, gi('fSpellcraft',350), 'ItemSpellcraft'],
+      [107, gi('fItemCurMana',3000), 'ItemCurMana'],
+      [108, gi('fItemMaxMana',3000), 'ItemMaxMana'],
+      [109, gi('fItemDiff',0), 'ItemDifficulty'],
+      [114, gi('fAttuned',0), 'Attuned'],
+      [151, 2, 'HookType - Wall'],
+    );
+    [[307,'fDmgRating','DamageRating'],[308,'fDmgResist','DamageResistRating'],
+     [313,'fCritRating','CritRating'],[314,'fCritDmgRating','CritDamageRating'],
+     [315,'fCritResRating','CritResistRating'],[317,'fHealResist','HealingResistRating'],
+     [323,'fHealBoost','HealingBoostRating']].forEach(([tp,id,c])=>{
+      const v=gi(id,0); if(v) IR.push([tp,v,c]);
+    });
+    BR.push(
+      [11,'True','IgnoreCollisions'],
+      [13,'True','Ethereal'],
+      [14,'True','GravityStatus'],
+      [22,gi('fInscribable',1)?'True':'False','Inscribable'],
+    );
+    FR.push(
+      [5, gf('fManaRate',-0.033), 'ManaRate'],
+      [12, gf('fShade',0.66), 'Shade'],
+      [39, gf('fScale',0.5), 'DefaultScale'],
+    );
+    const mc=gf('fManaConv',0); if(mc) FR.push([144,mc,'ManaConversionMod']);
+    const sd=g('fShortDesc',''); if(sd) SR.push([15,sd,'ShortDesc']);
+    // Jewelry DID entries from reference
+    DR=[
+      [1, '0x020000F8', 'Setup'],
+      [3, '0x20000014', 'SoundTable'],
+      [6, '0x04000BEF', 'PaletteBase'],
+      [8, '0x06005BE3', 'Icon'],
+      [22, '0x3400002B', 'PhysicsEffectTable'],
+      [36, '0x0E000012', 'MutateFilter'],
+      [46, '0x38000032', 'TsysMutationFilter'],
+      [52, '0x06005B0C', 'IconUnderlay'],
+    ];
+  }
+
+  // Extra props from Advanced tab
+  extraInt.forEach(r=>{if(r.type) IR.push([parseInt(r.type), parseInt(r.value)||0, PROP_INT[r.type]||'custom_'+r.type]);});
+  extraBool.forEach(r=>{if(r.type) BR.push([parseInt(r.type), r.value||'False', PROP_BOOL[r.type]||'custom_'+r.type]);});
+  extraFloat.forEach(r=>{if(r.type) FR.push([parseInt(r.type), parseFloat(r.value)||0, PROP_FLOAT[r.type]||'custom_'+r.type]);});
+  extraStr.forEach(r=>{if(r.type&&r.value) SR.push([parseInt(r.type), r.value, PROP_STRING[r.type]||'custom_'+r.type]);});
+  extraDID.forEach(r=>{if(r.type&&r.value) DR.push([parseInt(r.type), r.value, PROP_DID[r.type]||'custom_'+r.type]);});
+
+  // Emit standard tables
+  emitInt(IR);
+  emitBool(BR);
+  emitFloat(FR);
+  emitStr(SR);
+
+  // DID — jewelry sets its own DID above; others use defaults
+  let baseDR=[];
+  if(t!=='jewelry'){
+    baseDR=[
+      [1, '0x02000178', 'Setup'],
+      [2, '0x09000008', 'MotionTable'],
+      [3, '0x20000008', 'SoundTable'],
+      [8, '0x06001036', 'Icon'],
+      [22, '0x34000026', 'PhysicsEffectTable'],
+    ];
+  }
+  if(t==='creature'){const tr=gi('fTreasureTier',3100);if(tr)baseDR.push([35,tr,'DeathTreasureType']);}
+  extraDID.forEach(r=>{if(r.type&&r.value)DR.push([parseInt(r.type),r.value,PROP_DID[r.type]||'custom_'+r.type]);});
+  emitDID([...baseDR,...DR]);
+
+  // ── Attributes ────────────────────────────────────────────────────────────
+  if(isCreature && $('attr_1')){
+    const attrs=[[1,'Strength'],[2,'Endurance'],[3,'Quickness'],[4,'Coordination'],[5,'Focus'],[6,'Self']];
+    lines.push(`INSERT INTO \`weenie_properties_attribute\` (\`object_Id\`, \`type\`, \`init_Level\`, \`level_From_C_P\`, \`c_P_Spent\`)`);
+    attrs.forEach(([tp,n],i)=>{
+      const v=gi('attr_'+tp,260);
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(${wcid}, ${tp}, ${v}, 0, 0)${i===attrs.length-1?';':''} /* ${n} */`);
+    });
+    lines.push('');
+    const vits=[[1,'MaxHealth',gi('vital_1',2000)],[3,'MaxStamina',gi('vital_3',2000)],[5,'MaxMana',gi('vital_5',800)]];
+    lines.push(`INSERT INTO \`weenie_properties_attribute_2nd\` (\`object_Id\`, \`type\`, \`init_Level\`, \`level_From_C_P\`, \`c_P_Spent\`, \`current_Level\`)`);
+    vits.forEach(([tp,n,v],i)=>{
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(${wcid}, ${tp}, ${v}, 0, 0, ${v})${i===vits.length-1?';':''} /* ${n} */`);
+    });
+    lines.push('');
+  }
+
+  // ── Skills ────────────────────────────────────────────────────────────────
+  if(isCreature && $('sk_sac_6')){
+    // Gather core skills
+    const coreSkillRows=CORE_SKILL_IDS.map(id=>({id,sac:gi('sk_sac_'+id,2),init:gi('sk_init_'+id,0)}))
+      .filter(s=>s.sac>1&&s.init>0);
+    // Gather extra skills from state
+    const extraSkillRows=extraSkills.map((sk,i)=>({
+      id:sk.id,
+      sac:gi('sk_sac_x_'+i,sk.sac||2),
+      init:gi('sk_init_x_'+i,sk.init||0)
+    })).filter(s=>s.init>0);
+    const allSkills=[...coreSkillRows,...extraSkillRows];
+    if(allSkills.length){
+      lines.push(`INSERT INTO \`weenie_properties_skill\` (\`object_Id\`, \`type\`, \`level_From_P_P\`, \`s_a_c\`, \`p_p\`, \`init_Level\`, \`resistance_At_Last_Check\`, \`last_Used_Time\`)`);
+      allSkills.forEach((sk,i)=>{
+        const name=ALL_SKILLS.find(([sid])=>sid===sk.id)?.[1]||'Skill';
+        const prefix=i===0?'VALUES ':'     , ';
+        lines.push(`${prefix}(${wcid}, ${sk.id}, 0, ${sk.sac}, 0, ${sk.init}, 0, 0)${i===allSkills.length-1?';':''} /* ${name} — ${lookupName(SKILL_SAC,sk.sac)} */`);
+      });
+      lines.push('');
+    }
+  }
+
+  // ── Spell book ───────────────────────────────────────────────────────────
+  const validSpells=spells.filter(sp=>sp.id);
+  if(validSpells.length){
+    lines.push(`INSERT INTO \`weenie_properties_spell_book\` (\`object_Id\`, \`spell\`, \`probability\`)`);
+    validSpells.forEach((sp,i)=>{
+      const prefix=i===0?'VALUES ':'     , ';
+      const name=sp.name?` /* ${sp.name} */`:'';
+      lines.push(`${prefix}(${wcid}, ${sp.id}, ${sp.prob||2.0})${i===validSpells.length-1?';':''}${name}`);
+    });
+    lines.push('');
+  }
+
+  // ── Body parts ───────────────────────────────────────────────────────────
+  if(isCreature && $('bp_dt_0')){
+    lines.push(`INSERT INTO \`weenie_properties_body_part\` (\`object_Id\`, \`key\`, \`d_Type\`, \`d_Val\`, \`d_Var\`, \`base_Armor\`, \`armor_Vs_Slash\`, \`armor_Vs_Pierce\`, \`armor_Vs_Bludgeon\`, \`armor_Vs_Cold\`, \`armor_Vs_Fire\`, \`armor_Vs_Acid\`, \`armor_Vs_Electric\`, \`armor_Vs_Nether\`, \`b_h\`, \`h_l_f\`, \`m_l_f\`, \`l_l_f\`, \`h_r_f\`, \`m_r_f\`, \`l_r_f\`, \`h_l_b\`, \`m_l_b\`, \`l_l_b\`, \`h_r_b\`, \`m_r_b\`, \`l_r_b\`)`);
+    bodyParts.forEach((bp,i)=>{
+      const dt=gi('bp_dt_'+i,4), dv=gi('bp_dv_'+i,0), al=gi('bp_al_'+i,80);
+      const sl=gi('bp_sl_'+i,64), pi=gi('bp_pi_'+i,56), bl=gi('bp_bl_'+i,120);
+      const co=gi('bp_co_'+i,40), fi=gi('bp_fi_'+i,120), ac=gi('bp_ac_'+i,80);
+      const el=gi('bp_el_'+i,80), nt=gi('bp_nt_'+i,0);
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(${wcid}, ${bp.k}, ${dt}, ${dv}, 0, ${al}, ${sl}, ${pi}, ${bl}, ${co}, ${fi}, ${ac}, ${el}, ${nt}, 1, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0)${i===bodyParts.length-1?';':''} /* ${bp.n} */`);
+    });
+    lines.push('');
+  }
+
+  // ── Create List (guaranteed drops) ───────────────────────────────────────
+  if(createList.length){
+    lines.push(`INSERT INTO \`weenie_properties_create_list\` (\`object_Id\`, \`destination\`, \`weenie_Class_Id\`, \`stack_Size\`, \`palette\`, \`shade\`, \`try_To_Bond\`)`);
+    createList.forEach((r,i)=>{
+      const isLast=(i===createList.length-1);
+      const destNames={0:'Contain',1:'Wield',2:'CorpseDrop',3:'Treasure',4:'Contains'};
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(${wcid}, ${r.dest}, ${r.wcid||0}, ${r.stack||1}, 0, 0, False)${isLast?';':''} /* ${destNames[r.dest]||'Drop'}: ${r.stack}x WCID ${r.wcid} */`);
+    });
+    lines.push('');
+  }
+
+  // ── Emotes ───────────────────────────────────────────────────────────────
+  if(emotes.length){
+    emotes.forEach(em=>{
+      const catName=lookupName(EMOTE_CATS,em.category||7);
+      const wf=(em.wcidFilter&&em.wcidFilter!=='0'&&em.wcidFilter!==0)?em.wcidFilter:'NULL';
+      const qf=em.questFilter?`'${em.questFilter}'`:'NULL';
+      lines.push('');
+      lines.push(`INSERT INTO \`weenie_properties_emote\` (\`object_Id\`, \`category\`, \`probability\`, \`weenie_Class_Id\`, \`style\`, \`substyle\`, \`quest\`, \`vendor_Type\`, \`min_Health\`, \`max_Health\`)`);
+      lines.push(`VALUES (${wcid}, ${em.category||7} /* ${catName} */, ${em.prob||1}, ${wf}, NULL, NULL, ${qf}, NULL, NULL, NULL);`);
+      lines.push('');
+      lines.push(`SET @parent_id = LAST_INSERT_ID();`);
+      if(em.actions&&em.actions.length){
+        lines.push('');
+        lines.push(`INSERT INTO \`weenie_properties_emote_action\` (\`emote_Id\`, \`order\`, \`type\`, \`delay\`, \`extent\`, \`motion\`, \`message\`, \`test_String\`, \`min\`, \`max\`, \`min_64\`, \`max_64\`, \`min_Dbl\`, \`max_Dbl\`, \`stat\`, \`display\`, \`amount\`, \`amount_64\`, \`hero_X_P_64\`, \`percent\`, \`spell_Id\`, \`wealth_Rating\`, \`treasure_Class\`, \`treasure_Type\`, \`p_Script\`, \`sound\`, \`destination_Type\`, \`weenie_Class_Id\`, \`stack_Size\`, \`palette\`, \`shade\`, \`try_To_Bond\`, \`obj_Cell_Id\`, \`origin_X\`, \`origin_Y\`, \`origin_Z\`, \`angles_W\`, \`angles_X\`, \`angles_Y\`, \`angles_Z\`)`);
+        em.actions.forEach((a,ai)=>{
+          const typeName=lookupName(EMOTE_TYPES,a.type||10);
+          const _n=v=>(v!==undefined&&v!==''&&v!==null)?v:'NULL';
+          const _q=v=>v?`'${String(v).replace(/'/g,"''")}'`:'NULL';
+          const prefix=ai===0?'VALUES ':'     , ';
+          lines.push(`${prefix}(@parent_id, ${ai}, ${a.type||10} /* ${typeName} */, ${_n(a.delay)||0}, ${_n(a.extent)||1}, NULL, ${_q(a.message)}, ${_q(a.testString)}, ${_n(a.min)}, ${_n(a.max)}, NULL, NULL, NULL, NULL, NULL, NULL, ${_n(a.amount)}, ${_n(a.amount64)}, ${_n(a.heroXP64)}, ${_n(a.percent)}, ${_n(a.spellId)}, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ${_n(a.stackSize)}, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)`);
+        });
+        lines.push(';');
+      }
+    });
+    lines.push('');
+  }
+
+  writeSQLOut(lines.join('\n'));
+}
+
+function buildRecipeSQL(){
+  const rid=gi('fWcid',600000), skill=gi('fRecipeSkill',38), diff=gi('fRecipeDiff',900);
+  const successWcid=gi('fSuccessWcid',0), successAmt=gi('fSuccessAmt',1), failWcid=gi('fFailWcid',0);
+  const successMsg=g('fSuccessMsg','You apply the recipe successfully.');
+  const failMsg=g('fFailMsg','You apply the recipe but destroy the target.');
+  const dst=gf('fDestroySourceSuccess',1), dtf=gf('fDestroyTargetFail',1);
+  const now='2025-01-01 00:00:00';
+  const lines=[];
+
+  lines.push(`DELETE FROM \`recipe\` WHERE \`id\` = ${rid};`,'');
+  lines.push(`INSERT INTO \`recipe\` (\`id\`, \`unknown_1\`, \`skill\`, \`difficulty\`, \`salvage_Type\`, \`success_W_C_I_D\`, \`success_Amount\`, \`success_Message\`, \`fail_W_C_I_D\`, \`fail_Amount\`, \`fail_Message\`, \`success_Destroy_Source_Chance\`, \`success_Destroy_Source_Amount\`, \`success_Destroy_Source_Message\`, \`success_Destroy_Target_Chance\`, \`success_Destroy_Target_Amount\`, \`success_Destroy_Target_Message\`, \`fail_Destroy_Source_Chance\`, \`fail_Destroy_Source_Amount\`, \`fail_Destroy_Source_Message\`, \`fail_Destroy_Target_Chance\`, \`fail_Destroy_Target_Amount\`, \`fail_Destroy_Target_Message\`, \`data_Id\`, \`last_Modified\`)`);
+  const sm=successMsg.replace(/'/g,"''"), fm=failMsg.replace(/'/g,"''");
+  lines.push(`VALUES (${rid}, 0, ${skill}, ${diff}, 0, ${successWcid}, ${successAmt}, '${sm}', ${failWcid}, 0, '${fm}', ${dst}, 1, NULL, 0, 0, NULL, 1, 1, NULL, ${dtf}, 1, NULL, 0, '${now}');`,'');
+
+  // Helper to emit a recipe_requirements table
+  function emitRecipeReqs(arr, tableName, propNames){
+    if(!arr||!arr.length) return;
+    lines.push(`INSERT INTO \`${tableName}\` (\`recipe_Id\`, \`index\`, \`stat\`, \`value\`, \`enum\`, \`message\`)`);
+    arr.forEach((r,i)=>{
+      const msg=(r.message||'Requirement not met!').replace(/'/g,"''");
+      const cmp=lookupName(COMPARE_TYPE,r.compare), req=lookupName(REQUIREMENT_TYPE,r.type);
+      const prefix=i===0?'VALUES ':'     , ';
+      const val=tableName.includes('string')?`'${String(r.value||'').replace(/'/g,"''")}'`:r.value||0;
+      lines.push(`${prefix}(${rid}, ${i}, ${r.stat||0}, ${val}, ${r.compare}, '${msg}')${i===arr.length-1?';':''} /* ${req}.${propNames[r.stat]||r.stat} ${cmp} ${r.value} */`);
+    });
+    lines.push('');
+  }
+  emitRecipeReqs(recipeReqs,'recipe_requirements_int',PROP_INT);
+  emitRecipeReqs(recipeReqsBool,'recipe_requirements_bool',PROP_BOOL);
+  emitRecipeReqs(recipeReqsFloat,'recipe_requirements_float',PROP_FLOAT);
+  emitRecipeReqs(recipeReqsStr,'recipe_requirements_string',PROP_STRING);
+
+  lines.push(`INSERT INTO \`recipe_mod\` (\`recipe_Id\`, \`executes_On_Success\`, \`health\`, \`stamina\`, \`mana\`, \`unknown_7\`, \`data_Id\`, \`unknown_9\`, \`instance_Id\`)`);
+  lines.push(`VALUES (${rid}, True, 0, 0, 0, False, 0, 0, 0);`,'');
+  lines.push(`SET @parent_id = LAST_INSERT_ID();`,'');
+
+  const intMods=recipeMods.filter(m=>!String(m.value||0).includes('.'));
+  const floatMods=recipeMods.filter(m=>String(m.value||0).includes('.'));
+
+  if(intMods.length){
+    lines.push(`INSERT INTO \`recipe_mods_int\` (\`recipe_Mod_Id\`, \`index\`, \`stat\`, \`value\`, \`enum\`, \`source\`)`);
+    intMods.forEach((m,i)=>{
+      const c=`On ${lookupName(RECIPE_SOURCE_TYPE,m.source)}.${lookupName(MOD_TYPE,m.type)} ${lookupName(MOD_OP,m.operation)} ${PROP_INT[m.stat]||m.stat}`;
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(@parent_id, ${i}, ${m.stat||0}, ${parseInt(m.value)||0}, ${m.operation}, ${m.source}) /* ${c} */`);
+    });
+    lines.push(';','');
+  }
+  if(floatMods.length){
+    lines.push(`INSERT INTO \`recipe_mods_float\` (\`recipe_Mod_Id\`, \`index\`, \`stat\`, \`value\`, \`enum\`, \`source\`)`);
+    floatMods.forEach((m,i)=>{
+      const c=`On ${lookupName(RECIPE_SOURCE_TYPE,m.source)}.${lookupName(MOD_TYPE,m.type)} ${lookupName(MOD_OP,m.operation)} ${PROP_FLOAT[m.stat]||m.stat}`;
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(@parent_id, ${i}, ${m.stat||0}, ${parseFloat(m.value)||0}, ${m.operation}, ${m.source}) /* ${c} */`);
+    });
+    lines.push(';','');
+  }
+
+  if(cookbookEntries.length){
+    lines.push('');
+    lines.push(`DELETE FROM \`cook_book\` WHERE \`recipe_Id\` = ${rid};`,'');
+    lines.push(`INSERT INTO \`cook_book\` (\`recipe_Id\`, \`source_W_C_I_D\`, \`target_W_C_I_D\`, \`last_Modified\`)`);
+    cookbookEntries.forEach((e,i)=>{
+      const lbl=e.srcLabel?` /* ${e.srcLabel} */`:'';
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(${rid}, ${e.src||0}${lbl}, ${e.tgt||0}, '${now}')`);
+    });
+    lines.push(';');
+  }
+
+  writeSQLOut(lines.join('\n'));
+}
+
+function writeSQLOut(text){
+  const el=$('sqlOut');
+  if(el&&!_userEditingSQL){
+    const pos=el.selectionStart;
+    el.value=text;
+    try{el.selectionStart=pos;el.selectionEnd=pos;}catch(e){}
+  }
+}
+
+function getPlainSQL(){const el=$('sqlOut');return el?el.value:'';}  // textarea.value
+function copySQL(){navigator.clipboard.writeText(getPlainSQL()).then(()=>toast('Copied to clipboard'));}
+function saveSQL(){
+  const sql=getPlainSQL(),wcid=gi('fWcid',850000),name=g('fName','weenie');
+  if(!sql.trim()){toast('Nothing to save.');return;}
+  if(window.pywebview){
+    window.pywebview.api.save_sql(sql,wcid,name).then(r=>{
+      if(r.success){
+        toast('✓ Saved: '+r.filename,3000);
+        if(appConfig.auto_open_folder!==false)
+          window.pywebview.api.open_output_folder();
+      } else {
+        toast('✗ Error: '+r.error,4000);
+      }
+    });
+  } else {
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([sql],{type:'text/plain'}));
+    a.download=wcid+' '+name+'.sql';a.click();
+  }
+}
+function resetForm(){
+  const c=TYPE_CFG[curType];
+  setV('fName','New '+c.label);setV('fWcid',c.wcidFrom);
+  spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
+  recipeReqs=[];recipeReqsBool=[];recipeReqsFloat=[];recipeReqsStr=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];bodyParts=getBodyParts(31);
+  buildSubContent();
+}
+function openOutputFolder(){if(window.pywebview)window.pywebview.api.open_output_folder();}
+
+// ── AI MODE ───────────────────────────────────────────────────────────────────
+const AI_PROMPTS={
+  creature:'e.g. A level 180 ice drudge for a snowy biome. High cold resist, weak to fire. Drops T6 loot. Casts Frost Bolt and Frost Volley.',
+  npc:'e.g. A grim Aluvian historian who gives a Dericost vault quest. Waves at players.',
+  item:'e.g. A bonded attuned quest token that a player turns in to complete the Vault quest.',
+  weapon:'e.g. A level 290 wield HeavyWeapons fire sword. High offense mod. Named Flamebrand.',
+  armor:'e.g. A full set of Dericost tomb plate. High AL, cold resist bonus, dark palette.',
+  jewelry:'e.g. A ring that grants +20 damage rating and +10 critical damage rating.',
+  recipe:'e.g. A recipe that applies a fire damage bonus to a melee weapon using Alchemy skill, difficulty 900.',
+  quest:'e.g. A 3-step undead quest at level 250. Kill 25 sentinels, collect 5 ossuary fragments, defeat a boss. Reward: 25% XP, 40000 luminance, 5 trade notes. NOTE: Quest sequencing may generate many files. AI will request approval before generating more than 20.',
+  general:'e.g. A kill contract gem for slaying Frost Skeletons with a 20-hour daily cooldown.',
+};
+
+function buildAITabs(){
+  const types=[...Object.keys(TYPE_CFG),'general'];
+  $('aiTypeTabs').innerHTML=types.map(t=>{
+    const c=TYPE_CFG[t];
+    return `<button class="ai-ctab${t===curAIType?' active':''}" onclick="switchAIType('${t}',this)">${c?.icon||'✦'} ${c?.label||'General'}</button>`;
+  }).join('');
+  $('aiPrompt').placeholder=AI_PROMPTS[curAIType]||'Describe what you want…';
+}
+
+function switchAIType(type,btn){
+  curAIType=type;
+  document.querySelectorAll('.ai-ctab').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  $('aiPrompt').placeholder=AI_PROMPTS[type]||'Describe what you want…';
+}
+
+function updateAIButtonState(){
+  const btn=$('aiGenBtn');if(!btn)return;
+  const hasKey=appConfig.api_key_set||appConfig._testPassed;
+  btn.disabled=!hasKey;
+  btn.title=hasKey?'Generate SQL with AI':'Connect an API key in Settings first';
+}
+
+function startGeneration(){
+  const prompt=$('aiPrompt').value.trim();
+  if(!prompt){toast('Enter a prompt first.');return;}
+  if(aiGenerating)return;
+  if(!appConfig.api_key_set){toast('No API key — open Settings first.');openSettings();return;}
+  aiGenerating=true;aiFullText='';
+  $('aiOut').textContent='';
+  $('aiGenBtn').disabled=true;$('aiStopBtn').style.display='inline-block';
+  $('aiSaveBtn').disabled=true;
+  $('aiStatus').textContent='● Generating…';$('aiStatus').className='ai-status generating';
+  if(window.pywebview){
+    window.pywebview.api.start_generation(prompt,curAIType).then(r=>{if(!r.success)setAIError(r.error);});
+  } else {setAIError('Run as desktop app to use AI Mode.');}
+}
+function stopGeneration(){
+  aiGenerating=false;if(window.pywebview)window.pywebview.api.stop_generation();
+  $('aiGenBtn').disabled=false;$('aiStopBtn').style.display='none';
+  $('aiStatus').textContent='⏹ Stopped';$('aiStatus').className='ai-status';
+  if(aiFullText)$('aiSaveBtn').disabled=false;
+}
+function setAIError(msg){
+  aiGenerating=false;$('aiGenBtn').disabled=false;$('aiStopBtn').style.display='none';
+  $('aiStatus').textContent='✗ '+msg;$('aiStatus').className='ai-status error';
+}
+window.addEventListener('ai_chunk',e=>{if(!aiGenerating)return;aiFullText+=e.detail;$('aiOut').textContent=aiFullText;$('aiOut').scrollTop=$('aiOut').scrollHeight;});
+window.addEventListener('ai_done',e=>{aiFullText=e.detail;aiGenerating=false;$('aiGenBtn').disabled=false;$('aiStopBtn').style.display='none';$('aiSaveBtn').disabled=false;const c=(aiFullText.match(/FILE:/g)||[]).length;$('aiStatus').textContent=`✓ Done — ${c} file${c!==1?'s':''} ready`;$('aiStatus').className='ai-status done';$('aiOut').scrollTop=0;});
+window.addEventListener('ai_error',e=>setAIError(e.detail));
+function saveAIFiles(){
+  if(!aiFullText)return;
+  if(window.pywebview){window.pywebview.api.save_ai_files(aiFullText,curAIType).then(r=>{if(r.success){toast(`Saved ${r.count} file(s)`);$('aiFileList').innerHTML=`<div style="color:var(--gold);font-family:'Cinzel',serif;font-size:9px;font-weight:700;margin-bottom:8px;word-break:break-all">${r.folder}</div>`+r.files.map(f=>`<div style="color:#c8b898;margin-bottom:5px;font-size:12px;font-weight:600">📄 ${f}</div>`).join('');}else toast('Error: '+r.error);});}
+}
+function clearAI(){aiFullText='';aiGenerating=false;$('aiOut').textContent='';$('aiStatus').textContent='';$('aiStatus').className='ai-status';$('aiSaveBtn').disabled=true;$('aiGenBtn').disabled=false;$('aiStopBtn').style.display='none';$('aiFileList').innerHTML='<div style="color:#8a7a58;font-style:italic">Files appear here after saving.</div>';}
+
+// ── SETTINGS ──────────────────────────────────────────────────────────────────
+const MODEL_HINTS={
+  anthropic:['claude-sonnet-4-20250514','claude-opus-4-20250514','claude-haiku-4-5-20251001'],
+  google:['gemini-2.5-flash','gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-pro'],
+  openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo'],
+  compatible:['mistral-medium','mistral-small','llama-3-70b-instruct','mixtral-8x7b','gemma-7b-it'],
+};
+
+function onProviderChange(){
+  const p=$('sProvider').value;
+  $('sBaseUrlField').style.display=p==='compatible'?'block':'none';
+  const note=$('sProviderNote');
+  if(p==='google')note.innerHTML='✓ Free tier — get a key at <strong>aistudio.google.com/apikey</strong> &nbsp;·&nbsp; 15 req/min, 1,500/day on flash models';
+  else note.innerHTML='';
+  const hints=MODEL_HINTS[p]||[];
+  $('sModelHints').innerHTML=hints.map(m=>`<button onclick="setV('sModel','${m}')" style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.05em;padding:4px 12px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:10px;margin:2px" onmouseover="this.style.borderColor='var(--crimson)';this.style.color='var(--crimson)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--ink-dim)'">${m}</button>`).join('');
+  const dm={anthropic:'claude-sonnet-4-20250514',google:'gemini-2.5-flash',openai:'gpt-4o',compatible:'mistral-medium'};
+  if(!$('sModel').value||Object.values(dm).includes($('sModel').value))setV('sModel',dm[p]||'');
+  const kh={anthropic:'sk-ant-…',google:'AIza… (from aistudio.google.com/apikey)',openai:'sk-…',compatible:'Your provider key (or any string for local models)'};
+  $('sApiKey').placeholder=kh[p]||'API key';
+}
+function onEndpointPreset(){const v=$('sBaseUrlPreset').value;if(v)setV('sBaseUrl',v);}
+function testAPIKey(){
+  const result=$('sTestResult');result.textContent='Testing…';result.style.color='var(--gold)';
+  const provider=$('sProvider').value,apiKey=$('sApiKey').value.trim(),model=$('sModel').value.trim(),baseUrl=($('sBaseUrl').value||'').trim();
+  if(!apiKey){result.textContent='✗ Enter an API key first.';result.style.color='var(--crimson-lt)';return;}
+  if(window.pywebview){
+    window.pywebview.api.validate_key_with(provider,apiKey,model,baseUrl).then(r=>{
+      if(r.valid){
+        result.textContent='✓ Connected';result.style.color='var(--green)';
+        // Mark key as provisionally valid so AI Mode becomes usable after save
+        appConfig._testPassed=true;
+      }
+      else{result.textContent='✗ '+r.error;result.style.color='var(--crimson-lt)';}
+    });
+  } else {result.textContent='(browser only)';result.style.color='var(--ink-dim)';}
+}
+
+function openSettings(){
+  $('settingsOverlay').classList.add('open');
+  if(window.pywebview){
+    window.pywebview.api.get_config().then(cfg=>{
+      appConfig=cfg;
+      setV('sProvider',cfg.provider||'anthropic');onProviderChange();
+      setV('sModel',cfg.model||'claude-sonnet-4-20250514');
+      const autoOpen=$('sAutoOpen');
+      if(autoOpen) autoOpen.checked=(cfg.auto_open_folder!==false);
+      setV('sBaseUrl',cfg.base_url||'');
+      $('sApiKey').placeholder=cfg.api_key_set?'(already set — paste to change)':$('sApiKey').placeholder;
+      setV('sServerName',cfg.server_name||'Server Name');
+      setV('sAuthor',cfg.author||'');
+      setV('sOutputDir',cfg.output_dir||'');
+      const preset=$('sBaseUrlPreset');
+      preset.innerHTML='<option value="">— choose a known endpoint —</option>';
+      Object.entries(cfg.known_endpoints||{}).forEach(([name,url])=>{
+        const o=document.createElement('option');o.value=url;o.textContent=name;preset.appendChild(o);
+      });
+      const tbody=$('wcidTbody');tbody.innerHTML='';
+      Object.entries(cfg.wcid_ranges||{}).forEach(([key,info])=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML=`<td style="font-family:'Cinzel',serif;font-size:11px;font-weight:700">${info.label||key}</td>
+          <td><input type="number" id="wcid_start_${key}" value="${info.start||0}" style="width:100px"></td>
+          <td><input type="number" id="wcid_next_${key}" value="${info.next||0}" style="width:100px"></td>`;
+        tr.dataset.key=key;tbody.appendChild(tr);
+      });
+    });
+  }
+}
+function closeSettings(){$('settingsOverlay').classList.remove('open');}
+// Settings overlay: close only on mousedown directly on backdrop (not on text-select drag)
+(function(){
+  let downOnOverlay=false;
+  $('settingsOverlay').addEventListener('mousedown',e=>{
+    downOnOverlay=(e.target===$('settingsOverlay'));
+  });
+  $('settingsOverlay').addEventListener('mouseup',e=>{
+    if(downOnOverlay&&e.target===$('settingsOverlay'))closeSettings();
+    downOnOverlay=false;
+  });
+})();
+function saveSettings(){
+  const data={provider:$('sProvider').value,model:$('sModel').value.trim(),base_url:($('sBaseUrl').value||'').trim(),server_name:$('sServerName').value.trim()||'Server Name',author:$('sAuthor').value.trim(),output_dir:$('sOutputDir').value.trim()};
+  const apiKey=$('sApiKey').value.trim();if(apiKey)data.api_key=apiKey;
+  const ranges={};
+  document.querySelectorAll('#wcidTbody tr').forEach(tr=>{
+    const key=tr.dataset.key;if(!key)return;
+    const start=parseInt(document.getElementById(`wcid_start_${key}`)?.value)||0;
+    const next=parseInt(document.getElementById(`wcid_next_${key}`)?.value)||0;
+    ranges[key]={...(appConfig.wcid_ranges?.[key]||{}),start,next};
+  });
+  if(Object.keys(ranges).length)data.wcid_ranges=ranges;
+  if(window.pywebview){
+    window.pywebview.api.save_config(data).then(r=>{
+      if(r.success){
+        toast('Settings saved.');closeSettings();
+        appConfig.api_key_set=appConfig.api_key_set||!!data.api_key;
+        appConfig.server_name=data.server_name;
+        updateAIButtonState();
+      }
+      else toast('Error: '+r.error);
+    });
+  } else {closeSettings();toast('Settings saved (browser mode).');}
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+async function init(){
+  await loadData();
+  buildInnerTabs();
+  buildAITabs();
+  buildForm();
+  if(window.pywebview){
+    window.pywebview.api.get_config().then(cfg=>{
+      appConfig=cfg;
+      if(cfg.custom_presets)customPresets=cfg.custom_presets;
+      if(cfg.auto_open_folder!==undefined)appConfig.auto_open_folder=cfg.auto_open_folder;
+      updateAIButtonState();
+    });
+  } else {
+    updateAIButtonState();
+  }
+}
+
+window.addEventListener('pywebviewready',init);
+if(!window.pywebview)init();
+</script>
+</body>
+</html>
