@@ -235,13 +235,14 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
       <span style="color:var(--gold);font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em">⚠ MANUAL EDIT MODE</span>
       <span style="color:#a08050;font-family:'Cinzel',serif;font-size:9px;flex:1">Values changed in SQL that could not sync to form fields.</span>
       <button onclick="discardSQLEdit()" style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:1px solid #5a3000;background:transparent;color:#a08050;padding:3px 10px;cursor:pointer" onmouseover="this.style.borderColor='var(--crimson)';this.style.color='var(--crimson-lt)'" onmouseout="this.style.borderColor='#5a3000';this.style.color='#a08050'">↺ Discard &amp; Regen</button>
+    </div>
     <div style="flex:1;overflow-x:auto;overflow-y:auto">
     <textarea class="sql-out" id="sqlOut" spellcheck="false"
       oninput="onSQLEdit()"
       style="font-family:'Source Code Pro',monospace;font-size:12px;line-height:1.8;color:#c8b898;background:transparent;border:none;outline:none;resize:none;min-width:max-content;width:100%;white-space:pre;overflow-wrap:normal"
     ></textarea>
     </div>
-</div>
+  </div>
 
 <!-- AI WORKSPACE -->
 <div class="workspace" id="aiWS" style="flex-direction:row">

@@ -1,1 +1,0 @@
-"""ACEForge manual editor package."""
