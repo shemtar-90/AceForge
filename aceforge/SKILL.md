@@ -1,7 +1,228 @@
 # ACEForge Content Generation Skill
 
+---
+## FATAL ERROR PREVENTION: Forbidden SQL Tables
+
+The following tables **DO NOT EXIST** in ACE-World-16PY. Generating INSERT statements
+for any of these will crash the server. If you ever feel the urge to use them, STOP.
+Use the emote system instead (see quest_npcs.md).
+
+```
+❌ quest_dialog                 → Use weenie_properties_emote_action type=10 (Tell) instead
+❌ quest_requirements_quest     → Use weenie_properties_emote_action type=21 (InqQuest) instead
+❌ quest_requirements_item      → Use weenie_properties_emote_action type=76 (InqOwnsItems) instead
+❌ quest_actions_quest          → Use weenie_properties_emote_action type=22 (StampQuest) instead
+❌ quest_rewards_xp             → Use weenie_properties_emote_action type=49 (AwardLevelProportionalXP) instead
+❌ quest_rewards_luminance      → Use weenie_properties_emote_action type=113 (AwardLuminance) instead
+❌ quest_rewards_item           → Use weenie_properties_emote_action type=56 (CreateTreasure) instead
+```
+
+ALL quest logic is implemented through `weenie_properties_emote` and
+`weenie_properties_emote_action` on the NPC weenie. See quest_npcs.md for the
+complete pattern with a working example.
+
+---
+
 You are an expert ACEmulator (ACE) server content generator for the game Asheron's Call.
 You generate complete, valid MySQL SQL files for the ACE-World-16PY schema.
+
+
+---
+## CRITICAL: Item Cross-Reference — Use Existing WCIDs
+
+When a creature or quest calls for dropping or rewarding a NAMED item that already exists
+in the base game, you MUST use its existing WCID. NEVER create a new weenie for an item
+that already exists. Check this list first:
+
+### Common Loot / Currency
+- 273   — Pyreals (currency — NEVER create a new pyreals weenie)
+- 20634 — Mana Charge (MMD notes)
+- 34     — Healing Kit
+- 690   — Lockpick
+- 5889  — Gem of Treasure Finding
+- 1969  — Archmage's Salvage Kit
+
+### Common Weapons (partial — always prefer using existing WCIDs for standard weapons)
+  8714 — A Society Staff
+  12757 — Academy Staff
+  3806 — Acid Jo
+  3838 — Acid Nabut
+  3846 — Acid Quarter Staff
+  25627 — Acidic Weeping Staff
+  8715 — An Explorer Staff
+  11948 — Assault Staff
+  30880 — Banished Staff
+  27749 — Barbed Crop
+  30606 — Bastone
+  27847 — Bound Singularity Staff
+  6777 — Broken Haft
+  15878 — Bronze Quarter Staff
+  28996 — Burun Slaying Quarterstaff
+  10993 — Crop
+  21362 — Deadly Hollow Staff
+  25628 — Electric Weeping Staff
+  21433 — Falauloi
+  6142 — Fine Atlan Staff
+  7465 — Fine Atlan Staff of Black Fire
+  6375 — Fine Shadow Atlan Staff
+  6138 — Fine Shivering Atlan Staff
+  6139 — Fine Smoldering Atlan Staff
+  6140 — Fine Sparking Atlan Staff
+  6141 — Fine Stinging Atlan Staff
+  3808 — Flaming Jo
+  3840 — Flaming Nabut
+  3936 — Flaming Quarter Staff
+  25629 — Flaming Weeping Staff
+  3809 — Frost Jo
+  3841 — Frost Nabut
+  3848 — Frost Quarter Staff
+  25630 — Frozen Weeping Staff
+  3718 — Golem Jo
+  19943 — Good Chilling Isparian Staff
+  19947 — Good Coruscating Isparian Staff
+  19949 — Good Dissolving Isparian Staff
+  19945 — Good Flaming Isparian Staff
+  19942 — Good Isparian Staff
+  20947 — Good Shimmering Isparian Staff
+  11467 — Hoeroa
+  11256 — Hoeroa of Palenqual
+  7571 — Hollow Staff
+  322 — Jo
+  3807 — Lightning Jo
+  3839 — Lightning Nabut
+  3847 — Lightning Quarter Staff
+  29912 — Littoral Siraluun Hoeroa
+  333 — Nabut
+  28497 — Noble Quarterstaff
+  1954 — Oak Staff
+  6132 — Peerless Atlan Staff
+  7463 — Peerless Atlan Staff of Black Fire
+  6373 — Peerless Shadow Atlan Staff
+  6128 — Peerless Shivering Atlan Staff
+  6129 — Peerless Smoldering Atlan Staff
+  6130 — Peerless Sparking Atlan Staff
+  6131 — Peerless Stinging Atlan Staff
+  19953 — Perfect Chilling Isparian Staff
+  19957 — Perfect Coruscating Isparian Staff
+  19959 — Perfect Dissolving Isparian Staff
+  19955 — Perfect Flaming Isparian Staff
+  19952 — Perfect Isparian Staff
+  20948 — Perfect Shimmering Isparian Staff
+  21357 — Phantom Staff
+  19961 — Quality Chilling Isparian Staff
+  19965 — Quality Coruscating Isparian Staff
+  19967 — Quality Dissolving Isparian Staff
+  19963 — Quality Flaming Isparian Staff
+  19951 — Quality Isparian Staff
+  20949 — Quality Shimmering Isparian Staff
+  338 — Quarter Staff
+  1481 — Quarter Staff of Fire
+  7572 — Ravenous Staff
+  6778 — Repaired Haft
+  29047 — Repugnant Staff
+  10883 — Singularity Staff
+  12029 — Soul Staff
+  30327 — Spirit Shifting Staff
+
+### Common Armor (partial)
+  25524 — Armoredillo Hide Cuirass
+  2017 — Green Mire Yoroi Cuirass
+  4226 — Gromnie Hide Cuirass
+  50 — Leather Cuirass
+  3706 — Olthoi Cuirass
+  51 — Platemail Cuirass
+  28630 — Platemail Diforsa Cuirass
+  52 — Scalemail Cuirass
+  53 — Studded Leather Cuirass
+  28631 — Tenass Cuirass
+  54 — Yoroi Cuirass
+  8700 — A Pair Of Explorer Leather Leggings
+  8699 — A Pair Of Society Leather Leggings
+  23949 — Auroric Exarch Leggings
+  23809 — Brilliant Celdon Leggings
+  6045 — Celdon Leggings
+  7716 — Celdon Leggings of Acid
+  7717 — Celdon Leggings of Flame
+  7718 — Celdon Leggings of Frost
+  7719 — Celdon Leggings of Lightning
+  6608 — Celdon Shadow Leggings
+  80 — Chainmail Leggings
+  23810 — Charged Celdon Leggings
+  28621 — Diforsa Leggings
+  9038 — Exarch Plate Leggings
+  23811 — Frosty Celdon Leggings
+  7706 — Greater Celdon Leggings of Acid
+  7707 — Greater Celdon Leggings of Flame
+  7708 — Greater Celdon Leggings of Frost
+  7709 — Greater Celdon Leggings of Lightning
+  6609 — Greater Celdon Shadow Leggings
+  23812 — Hardened Celdon Leggings
+  81 — Leather Leggings
+  7711 — Lesser Celdon Leggings of Acid
+  7712 — Lesser Celdon Leggings of Flame
+  7713 — Lesser Celdon Leggings of Frost
+  7714 — Lesser Celdon Leggings of Lightning
+  6610 — Lesser Celdon Shadow Leggings
+  23952 — Luminescent Thaumaturgic Leggings
+  27231 — Nariyid Leggings
+  6802 — Nexus Celdon Leggings
+  2038 — Plate Leggings
+  23813 — Plated Celdon Leggings
+  82 — Platemail Leggings
+  4229 — Reedshark Hide Leggings
+  27454 — Renegade Leggings
+  83 — Scalemail Leggings
+  23814 — Scored Celdon Leggings
+  23815 — Searing Celdon Leggings
+  23816 — Solid Celdon Leggings
+  84 — Studded Leather Leggings
+  29050 — Template for leggings.  Covers upper and lower legs.
+  28622 — Tenassa Leggings
+  9088 — Thaumaturgic Plate Leggings
+  2437 — Yoroi Leggings
+  26501 — Ancient Armored Vestment
+  28620 — Alduressa Leggings
+  6047 — Amuli Leggings
+  7700 — Amuli Leggings of Acid
+  7701 — Amuli Leggings of Flame
+  7702 — Amuli Leggings of Frost
+  7703 — Amuli Leggings of Lightning
+  6605 — Amuli Shadow Leggings
+  28337 — Ancient Armored Leggings
+  23785 — Brilliant Amuli Leggings
+  23833 — Brilliant Koujia Leggings
+  23786 — Charged Amuli Leggings
+  23834 — Charged Koujia Leggings
+  27218 — Chiran Leggings
+  28597 — Extreme Balance Testing Leggings
+  23787 — Frosty Amuli Leggings
+  23835 — Frosty Koujia Leggings
+  25527 — Gauloth Leggings
+  7690 — Greater Amuli Leggings of Acid
+  7691 — Greater Amuli Leggings of Flame
+  7692 — Greater Amuli Leggings of Frost
+  7693 — Greater Amuli Leggings of Lightning
+  6606 — Greater Amuli Shadow Leggings
+  7721 — Greater Koujia Leggings of Acid
+  7722 — Greater Koujia Leggings of Flame
+
+### Rule
+If the requested item NAME matches anything in the above lists, use `weenie_properties_create_list`
+with the existing WCID and `destination=2` (CorpseDrop). Do NOT generate a new weenie SQL file for it.
+Only create a NEW weenie file when the item is custom/unique to the server.
+
+---
+## Generator Files
+
+Every Creature or NPC weenie you create will have a companion Generator block automatically
+appended by ACEForge. You do NOT need to generate generator SQL manually — it is produced
+automatically at WCID = creature_WCID + 1,000,000.
+
+However, if you are generating a BOSS with specific spawn rules (unique location, longer
+respawn, multiple variants), you MAY include a custom generator block with those specifics.
+Use type=7 (Generator) weenie and `weenie_properties_generator` rows.
+
+---
 
 ---
 

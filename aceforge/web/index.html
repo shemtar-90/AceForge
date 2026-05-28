@@ -422,7 +422,7 @@ const CREATURE_BODY_MAP={1:'insect',2:'biped',3:'biped',4:'biped',5:'biped',6:'b
 // ── TYPE CONFIG ───────────────────────────────────────────────────────────────
 const TYPE_CFG={
   creature:{label:'Creature',icon:'✠',desc:'Hostile creatures with combat, loot, and behavior.',wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 – 859,999',wTypes:[[10,'Creature']],
-    subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes','advanced'],
+    subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes'],
     presets:[
       {l:'Rift Drudge (T6)',d:{fName:'Rift Drudge',fLevel:'180',fXp:'800000',fDmg:'95',fDmgType:'1',fWepSkill:'44',rSlash:'1.0',rPierce:'1.0',rBludge:'1.5',rCold:'0.5',rFire:'1.8',rAcid:'0.8',rElec:'1.0',rNether:'1.0',fHP:'3200',fStam:'3000',fMana:'500',fLum:'15000',cType:'3'}},
       {l:'Fire Elemental',d:{fName:'Fire Elemental',fLevel:'200',fXp:'1200000',fDmg:'110',fDmgType:'16',fWepSkill:'44',rSlash:'0.6',rPierce:'0.6',rBludge:'1.2',rCold:'2.0',rFire:'0.1',rAcid:'1.0',rElec:'1.0',rNether:'0.5',fHP:'4000',fStam:'4000',fMana:'800',fLum:'20000',cType:'38'}},
@@ -430,7 +430,7 @@ const TYPE_CFG={
       {l:'Acid Olthoi',d:{fName:'Acid Olthoi',fLevel:'220',fXp:'1800000',fDmg:'130',fDmgType:'32',fWepSkill:'44',rSlash:'0.8',rPierce:'1.2',rBludge:'1.0',rCold:'1.0',rFire:'1.0',rAcid:'0.1',rElec:'1.2',rNether:'1.0',fHP:'5000',fStam:'4000',fMana:'500',fLum:'25000',cType:'1'}},
     ]},
   npc:{label:'NPC',icon:'◆',desc:'Quest givers, merchants, and interactive characters.',wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 – 859,999',wTypes:[[10,'Creature (NPC)'],[12,'Vendor']],
-    subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes','advanced'],
+    subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes'],
     presets:[
       {l:'Generic NPC',d:{fName:'New NPC',fLevel:'275',fShortDesc:'A mysterious figure.'}},
       {l:'Quest Giver',d:{fName:'Quest Giver',fLevel:'275',fShortDesc:'A weathered figure with knowing eyes.',fUseRadius:'3.0'}},
@@ -438,7 +438,7 @@ const TYPE_CFG={
     ]},
   item:{label:'Item',icon:'◈',desc:'Quest tokens, gems, stackables, consumables, and containers.',wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 – 819,999',
     wTypes:[[38,'Gem'],[51,'Stackable'],[18,'Food'],[34,'Scroll'],[22,'Key'],[20,'Chest'],[21,'Container'],[8,'Book'],[29,'LightSource'],[9,'Coin'],[28,'Healer'],[37,'ManaStone'],[32,'SpellComponent']],
-    subTabs:['properties','emotes','advanced'],
+    subTabs:['properties','emotes'],
     presets:[
       {l:'Quest Token',d:{fName:'Quest Seal',fValue:'100',fEncumb:'5',fMaxStack:'1',fItemUse:'1',fBonded:'1',fAttuned:'1',fScale:'1.0'}},
       {l:'Stackable Drop',d:{fName:'Crafting Fragment',fValue:'50',fEncumb:'10',fMaxStack:'25',fItemUse:'8',fBonded:'0',fAttuned:'0',fScale:'1.0'}},
@@ -446,7 +446,7 @@ const TYPE_CFG={
       {l:'Container',d:{fName:'Bag of Holding',fValue:'500',fEncumb:'50',fMaxStack:'1',fItemUse:'4',fBonded:'1',fAttuned:'0',fWType:'21'}},
     ]},
   weapon:{label:'Weapon',icon:'⚔',desc:'Melee weapons, missile launchers, and casters.',wcidFrom:'870000',wcidTo:'879999',wcidRange:'870,000 – 879,999',wTypes:[[6,'MeleeWeapon'],[3,'MissileLauncher'],[35,'Caster'],[4,'Missile']],
-    subTabs:['properties','emotes','advanced'],
+    subTabs:['properties','emotes'],
     presets:[
       {l:'Heavy Sword',d:{fName:'Enchanted Longsword',fDmg:'85',fDmgType:'1',fWepTime:'45',fDmgVar:'0.4',fWepSkill:'44',fWepDef:'1.02',fWepOff:'1.03',fWieldDiff:'290',fValue:'12000',fEncumb:'450',fScale:'1.0'}},
       {l:'Light Spear',d:{fName:'Swift Spear',fDmg:'60',fDmgType:'2',fWepTime:'35',fDmgVar:'0.3',fWepSkill:'45',fWepDef:'1.04',fWepOff:'1.02',fWieldDiff:'250',fValue:'9000',fEncumb:'300',fScale:'1.0'}},
@@ -454,7 +454,7 @@ const TYPE_CFG={
       {l:'War Staff (Caster)',d:{fName:'Staff of War',fDmg:'0',fDmgType:'0',fWepTime:'0',fDmgVar:'0',fWepSkill:'34',fWepDef:'1.05',fWepOff:'1.0',fWieldDiff:'300',fValue:'15000',fEncumb:'250',fScale:'1.0',fWType:'35'}},
     ]},
   armor:{label:'Armor/Clothing',icon:'⛨',desc:'Clothing and armor for all body slots.',wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 – 819,999',wTypes:[[2,'Clothing/Armor']],
-    subTabs:['properties','emotes','advanced'],
+    subTabs:['properties','emotes'],
     presets:[
       {l:'Plate Chest',d:{fName:'Platemail Cuirass',fArmorLevel:'200',fArmorType:'11',fValidLoc:'512',fValue:'8000',fEncumb:'600',fScale:'1.0'}},
       {l:'Leather Cap',d:{fName:'Leather Cap',fArmorLevel:'60',fArmorType:'2',fValidLoc:'1',fValue:'800',fEncumb:'80',fScale:'1.0'}},
@@ -463,7 +463,7 @@ const TYPE_CFG={
       {l:'Cloth Robe',d:{fName:'Cloth Robe',fArmorLevel:'0',fArmorType:'1',fValidLoc:'2',fValue:'100',fEncumb:'80',fScale:'1.0'}},
     ]},
   jewelry:{label:'Jewelry',icon:'◎',desc:'Rings, necklaces, bracelets, and wristlets.',wcidFrom:'870000',wcidTo:'879999',wcidRange:'870,000 – 879,999',wTypes:[[1,'Generic']],
-    subTabs:['properties','spellbook','emotes','advanced'],
+    subTabs:['properties','spellbook','emotes'],
     presets:[
       {l:'Ring',d:{fName:'Ring of Vigor',fValue:'1000',fEncumb:'5',fBonded:'0',fAttuned:'0',fValidLoc:'134217728',fScale:'1.0'}},
       {l:'Necklace',d:{fName:'Amulet of Warding',fValue:'2000',fEncumb:'8',fBonded:'0',fAttuned:'0',fValidLoc:'1048576',fScale:'1.0'}},
@@ -566,7 +566,7 @@ function buildForm(){
   idHTML+=`<div class="fg" style="max-width:220px"><div class="fl">Weenie Type <span class="fc">type</span></div><select id="fWType" onchange="regen()">${c.wTypes.map(t=>`<option value="${t[0]}">${t[0]} · ${t[1]}</option>`).join('')}</select></div>`;
   $('idRow').innerHTML=idHTML;
   // Sub tabs
-  const stabs={properties:'⚙ Form Fields',attributes:'◈ Attributes',skills:'+ Skills',spellbook:'+ Spellbook',bodyparts:'✠ Body Parts',emotes:'◇ Emotes',advanced:'≡ Properties'};
+  const stabs={properties:'⚙ Properties',attributes:'◈ Attributes',skills:'+ Skills',spellbook:'+ Spellbook',bodyparts:'✠ Body Parts',emotes:'◇ Emotes'};
   $('subTabs').innerHTML=c.subTabs.map((s,i)=>`<button class="ctab${s===curSub?' active':''}" onclick="switchSub('${s}',this)">${stabs[s]||s}</button>`).join('');
   // Presets
   const custom=customPresets[curType]||[];
@@ -602,10 +602,7 @@ function switchSub(sub,btn){
   // Update dynamic labels that depend on values from other tabs
   updateCrossTabLabels();
   regen();
-  // Properties tab — just rebuild, _lastSQLProps is already current from regen()
-  if(sub==='advanced'){
-    rebuildPanel('advanced');
-  }
+
 }
 
 function buildSubContent(){
@@ -698,10 +695,10 @@ function buildProps(){
         <div class="fg"><div class="fl">Aggro Range <span class="fc">F-31</span></div><input type="text" id="fAggroRange" value="16.0"></div>
         <div class="fg"><div class="fl">Casts Magic <span class="fc">B-6</span></div><select id="fUsesMana"><option value="0">No</option><option value="1">Yes</option></select></div>
       </div></div>
-    <div class="sec"><div class="sh"><div class="st">Guaranteed Drops</div><div class="sl"></div></div>
-      <p class="note" style="margin-bottom:8px">Wire existing or custom items to drop on death. For items already in game (MMD notes, pyreals, etc.), enter the existing WCID — do NOT create a new file for them.</p>
+    <div class="sec"><div class="sh"><div class="st">Contains Treasure</div><div class="sl"></div></div>
+      <p class="note" style="margin-bottom:8px">Items that drop on death (CorpseDrop) or are contained/wielded. Use existing WCIDs for in-game items (Pyreals=273, MMD=20634) — do NOT create new weenies for them.</p>
       <div id="createListRows">${buildCreateListRows()}</div>
-      <button class="add-btn" onclick="addCreateListRow()">+ Add Drop</button>
+      <button class="add-btn" onclick="addCreateListRow()">+ Add Item</button>
     </div>
     <div class="sec"><div class="sh" style="margin-top:14px"><div class="st">Creature Ratings</div><div class="sl"></div></div>
     ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323']].map(([l,id,fc])=>`
@@ -732,7 +729,12 @@ function buildProps(){
           <div class="fg"><div class="fl">Happy Mean <span class="fc">I-126</span></div><input type="number" id="fVendorHappy" value="0"></div>
         </div></div>`;
       }
-    h+=`<div class="sec"><div class="sh" style="margin-top:14px"><div class="st">Creature Ratings</div><div class="sl"></div></div>
+    h+=`<div class="sec"><div class="sh"><div class="st">Contains Treasure</div><div class="sl"></div></div>
+      <p class="note" style="margin-bottom:8px">Items the NPC contains, wields, or sells. Use existing WCIDs (273=Pyreals, 20634=MMD). Destination: Contain=0, Wield=1, Shop=5.</p>
+      <div id="createListRows">${buildCreateListRows()}</div>
+      <button class="add-btn" onclick="addCreateListRow()">+ Add Item</button>
+    </div>
+    <div class="sec"><div class="sh" style="margin-top:14px"><div class="st">Creature Ratings</div><div class="sl"></div></div>
     ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323']].map(([l,id,fc])=>`
       <div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)">
         <div style="flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)">${l} <span class="fc">${fc}</span></div>
@@ -839,27 +841,29 @@ function buildProps(){
 }
 
 function buildCreateListRows(){
-  const DEST={0:'Contain',1:'Wield',2:'CorpseDrop',3:'Treasure',4:'Contains'};
   return createList.map((r,i)=>`
-    <div style="display:grid;grid-template-columns:120px 1fr 80px 28px;gap:8px;align-items:end;margin-bottom:8px">
+    <div style="display:grid;grid-template-columns:130px 1fr 80px 70px 28px;gap:8px;align-items:end;margin-bottom:8px">
       <div class="fg"><div class="fl">Destination</div>
         <select id="cl_dest_${i}" onchange="createList[${i}].dest=parseInt(this.value);regen()">
           <option value="2"${r.dest===2?' selected':''}>2 · CorpseDrop</option>
           <option value="1"${r.dest===1?' selected':''}>1 · Wield</option>
           <option value="0"${r.dest===0?' selected':''}>0 · Contain</option>
+          <option value="5"${r.dest===5?' selected':''}>5 · Shop</option>
         </select></div>
       <div class="fg">
-        <div class="fl">Item WCID <span style="color:var(--ink-faint);font-size:9px">(existing items: 20634=100MMD, 273=Pyreal)</span></div>
+        <div class="fl">Item WCID <span style="color:var(--ink-faint);font-size:9px">(273=Pyreal, 20634=MMD)</span></div>
         <input type="number" id="cl_wcid_${i}" value="${r.wcid||0}" oninput="createList[${i}].wcid=parseInt(this.value);regen()">
       </div>
-      <div class="fg"><div class="fl">Stack Size</div>
+      <div class="fg"><div class="fl">Stack</div>
         <input type="number" id="cl_stack_${i}" value="${r.stack||1}" oninput="createList[${i}].stack=parseInt(this.value);regen()"></div>
+      <div class="fg"><div class="fl">Probability</div>
+        <input type="text" id="cl_prob_${i}" value="${r.prob!==undefined?r.prob:1}" oninput="createList[${i}].prob=parseFloat(this.value)||1;regen()" placeholder="1.0"></div>
       <button class="del" onclick="createList.splice(${i},1);rebuildPanel('properties')">✕</button>
     </div>`).join('');
 }
 
 function addCreateListRow(){
-  createList.push({dest:2,wcid:0,stack:1});
+  createList.push({dest:2,wcid:0,stack:1,prob:1});
   rebuildPanel('properties');
 }
 
@@ -1287,7 +1291,7 @@ function addEmote(){emotes.push({category:7,prob:1,wcidFilter:0,questFilter:'',a
 
 function buildAdvanced(){
   // Type IDs already emitted by the form fields — these are managed/read-only in the Properties tab
-  const SKIP_INT=new Set([1,2,3,4,5,6,7,9,10,11,12,13,16,19,25,26,27,28,33,40,44,45,47,48,49,93,95,101,106,107,108,109,110,114,126,133,134,146,151,158,159,160,169,204,307,308,313,314,315,317,323,332]);
+  const SKIP_INT=new Set([1,2,3,4,5,6,7,9,10,11,12,13,16,19,25,26,27,28,33,40,44,45,47,48,49,93,95,101,106,107,108,109,110,114,126,133,134,146,151,158,159,160,169,204,307,308,313,314,315,317,323,332,370,371,372,373,374,375,376]);
   const SKIP_BOOL=new Set([1,6,7,8,11,12,13,14,15,18,19,22,23,29,39,41,42,50,52,63,65,66,79,91,98,100,120]);
   const SKIP_FLOAT=new Set([1,3,4,5,12,13,14,15,16,17,18,19,21,22,29,31,34,37,38,39,41,43,54,62,64,65,66,67,68,69,70,71,72,73,74,75,80,104,122,125,136,144,149,150,152,165,166]);
   const SKIP_STR=new Set([1,7,14,15,16,17,18,20]);
@@ -1427,7 +1431,8 @@ function searchWeaponFn(q){
   const drop=$('wepSearch_drop');if(!drop)return;
   if(!q||q.length<1){openWeaponSearch('');return;}
   const matches=WEAPONS.filter(w=>w[1].toLowerCase().includes(q.toLowerCase())).slice(0,50);
-  drop.innerHTML=matches.length?matches.map(w=>`<div class="sdrop-item" onmousedown="event.preventDefault();fillWeapon(${JSON.stringify(w)})">${w[1]}<small>Dmg:${w[2]} ${w[3]} Time:${w[4]}</small></div>`).join(''):'<div class="sdrop-none">No results</div>';
+  const wepItems=matches.map(w=>`<div class="sdrop-item" onmousedown="event.preventDefault();fillWeapon(${JSON.stringify(w)})">${w[1]}<small>Dmg:${w[2]} ${w[3]} Time:${w[4]}</small></div>`).join('');
+  drop.innerHTML=matches.length?`<div class="sdrop-list">${wepItems}</div>`:'<div class="sdrop-none">No results</div>';
   drop.classList.add('open');
 }
 function fillWeapon(w){
@@ -1443,7 +1448,8 @@ function searchArmorFn(q){
   const drop=$('armorSearch_drop');if(!drop)return;
   if(!q||q.length<1){openArmorSearch('');return;}
   const matches=ARMOR.filter(a=>a[1].toLowerCase().includes(q.toLowerCase())).slice(0,50);
-  drop.innerHTML=matches.length?matches.map(a=>`<div class="sdrop-item" onmousedown="event.preventDefault();fillArmor(${JSON.stringify(a)})">${a[1]}<small>${a[2]} AL:${a[3]}</small></div>`).join(''):'<div class="sdrop-none">No results</div>';
+  const armItems=matches.map(a=>`<div class="sdrop-item" onmousedown="event.preventDefault();fillArmor(${JSON.stringify(a)})">${a[1]}<small>${a[2]} AL:${a[3]}</small></div>`).join('');
+  drop.innerHTML=matches.length?`<div class="sdrop-list">${armItems}</div>`:'<div class="sdrop-none">No results</div>';
   drop.classList.add('open');
 }
 function fillArmor(a){
@@ -1459,7 +1465,7 @@ function openDropSearch(dropId, items, mapFn, minItems=8){
   const drop=$(dropId);if(!drop)return;
   const first=items.slice(0,minItems);
   drop.innerHTML=first.length
-    ?first.map(mapFn).join('')
+    ?`<div class="sdrop-list">${first.map(mapFn).join('')}</div>`
     :'<div class="sdrop-none">No items</div>';
   drop.classList.add('open');
 }
@@ -1472,9 +1478,9 @@ function openArmorSearch(q){
     a=>`<div class="sdrop-item" onmousedown="event.preventDefault();fillArmor(${JSON.stringify(a)})">${a[1]}<small>${a[2]} AL:${a[3]}</small></div>`);
 }
 function openItemSearch(q){
-  if(!q) openDropSearch('itemSearch_drop',WEAPONS.slice(0,8).concat(ARMOR.slice(0,4)),
-    x=>`<div class="sdrop-item" onmousedown="event.preventDefault();setV('fName','${x[1].replace(/'/g,"\'")}')">${x[1]}</div>`);
-}
+  const src=typeof ITEMS!=='undefined'?ITEMS.slice(0,8):[...WEAPONS.slice(0,4),...ARMOR.slice(0,4)];
+  if(!q) openDropSearch('itemSearch_drop',src,
+    x=>`<div class="sdrop-item" onmousedown="event.preventDefault();setV('fName','${x[1].replace(/'/g,\"'\")}');$('itemSearch_drop').classList.remove('open');regen()">${x[1]}<small>${x[2]||''}</small></div>`);
 function openJewelrySearch(q){
   // Jewelry DB - search from a small curated list of common jewelry names
   const JEW_NAMES=['Ring of the Dawn','Band of the Dawn','Necklace of the Dawn','Bracelet of the Dawn','Wristband of the Dawn','Trinket of the Dawn','Blood Gem Ring','Empyrean Ring'];
@@ -1486,12 +1492,11 @@ function openJewelrySearch(q){
 function searchItemFn(q){
   const drop=$('itemSearch_drop');if(!drop)return;
   if(!q||q.length<1){openItemSearch('');return;}
-  // Search weapons and armor by name as generic items
   const ql=q.toLowerCase();
-  const matches=[...WEAPONS,...ARMOR].filter(x=>x[1].toLowerCase().includes(ql)).slice(0,50);
-  drop.innerHTML=matches.length
-    ?matches.map(x=>`<div class="sdrop-item" onmousedown="event.preventDefault();setV('fName','${x[1].replace(/'/g,"\'")}');$('itemSearch_drop').classList.remove('open');regen()">${x[1]}</div>`).join('')
-    :'<div class="sdrop-none">No results</div>';
+  const src=typeof ITEMS!=='undefined'?ITEMS:[...WEAPONS,...ARMOR];
+  const matches=src.filter(x=>x[1].toLowerCase().includes(ql)).slice(0,100);
+  const html2=matches.map(x=>`<div class="sdrop-item" onmousedown="event.preventDefault();setV('fName','${x[1].replace(/'/g,"\'")}');$('itemSearch_drop').classList.remove('open');regen()">${x[1]}<small>${x[2]||''}</small></div>`).join('');
+  drop.innerHTML=matches.length?`<div class="sdrop-list">${html2}</div>`:'<div class="sdrop-none">No results</div>';
   drop.classList.add('open');
 }
 function searchJewelryFn(q){
@@ -1997,9 +2002,13 @@ function buildSQL(){
   }
 
   // Extra props from Advanced tab
-  extraInt.forEach(r=>{if(r.type) IR.push([parseInt(r.type), parseInt(r.value)||0, PROP_INT[r.type]||'custom_'+r.type]);});
-  extraBool.forEach(r=>{if(r.type) BR.push([parseInt(r.type), r.value||'False', PROP_BOOL[r.type]||'custom_'+r.type]);});
-  extraFloat.forEach(r=>{if(r.type) FR.push([parseInt(r.type), parseFloat(r.value)||0, PROP_FLOAT[r.type]||'custom_'+r.type]);});
+  // Emit extras — skip any type already emitted by form fields to prevent duplicates
+  const _emittedInt=new Set(IR.map(r=>r[0]));
+  extraInt.forEach(r=>{if(r.type&&!_emittedInt.has(parseInt(r.type))) IR.push([parseInt(r.type), parseInt(r.value)||0, PROP_INT[r.type]||'custom_'+r.type]);});
+  const _emittedBool=new Set(BR.map(r=>r[0]));
+  extraBool.forEach(r=>{if(r.type&&!_emittedBool.has(parseInt(r.type))) BR.push([parseInt(r.type), r.value||'False', PROP_BOOL[r.type]||'custom_'+r.type]);});
+  const _emittedFloat=new Set(FR.map(r=>r[0]));
+  extraFloat.forEach(r=>{if(r.type&&!_emittedFloat.has(parseInt(r.type))) FR.push([parseInt(r.type), parseFloat(r.value)||0, PROP_FLOAT[r.type]||'custom_'+r.type]);});
   extraStr.forEach(r=>{if(r.type&&r.value) SR.push([parseInt(r.type), r.value, PROP_STRING[r.type]||'custom_'+r.type]);});
   extraDID.forEach(r=>{if(r.type&&r.value) DR.push([parseInt(r.type), r.value, PROP_DID[r.type]||'custom_'+r.type]);});
 
@@ -2043,9 +2052,11 @@ function buildSQL(){
   }
 
   // ── Skills ────────────────────────────────────────────────────────────────
-  if(isCreature && $('sk_sac_6')){
+  if(isCreature && (CORE_SKILL_IDS.length>0||extraSkills.length>0)){
     // Gather core skills
-    const coreSkillRows=CORE_SKILL_IDS.map(id=>({id,sac:gi('sk_sac_'+id,2),init:gi('sk_init_'+id,0)}))
+    const coreSkillRows=CORE_SKILL_IDS
+      .filter(id=>$('sk_sac_'+id)!==null)  // only skills still in DOM
+      .map(id=>({id,sac:gi('sk_sac_'+id,2),init:gi('sk_init_'+id,0)}))
       .filter(s=>s.sac>1&&s.init>0);
     // Gather extra skills from state
     const extraSkillRows=extraSkills.map((sk,i)=>({
@@ -2091,14 +2102,16 @@ function buildSQL(){
     lines.push('');
   }
 
-  // ── Create List (guaranteed drops) ───────────────────────────────────────
-  if(createList.length){
-    lines.push(`INSERT INTO \`weenie_properties_create_list\` (\`object_Id\`, \`destination\`, \`weenie_Class_Id\`, \`stack_Size\`, \`palette\`, \`shade\`, \`try_To_Bond\`)`);
-    createList.forEach((r,i)=>{
-      const isLast=(i===createList.length-1);
-      const destNames={0:'Contain',1:'Wield',2:'CorpseDrop',3:'Treasure',4:'Contains'};
+  // ── Create List (contains treasure) ──────────────────────────────────────
+  const validDrops=createList.filter(r=>r.wcid);
+  if(validDrops.length){
+    lines.push(`INSERT INTO \`weenie_properties_create_list\` (\`object_Id\`, \`destination\`, \`weenie_Class_Id\`, \`stack_Size\`, \`palette\`, \`shade\`, \`try_To_Bond\`, \`probability\`)`);
+    validDrops.forEach((r,i)=>{
+      const isLast=(i===validDrops.length-1);
+      const destNames={0:'Contain',1:'Wield',2:'CorpseDrop',3:'Treasure',4:'Contains',5:'Shop'};
       const prefix=i===0?'VALUES ':'     , ';
-      lines.push(`${prefix}(${wcid}, ${r.dest}, ${r.wcid||0}, ${r.stack||1}, 0, 0, False)${isLast?';':''} /* ${destNames[r.dest]||'Drop'}: ${r.stack}x WCID ${r.wcid} */`);
+      const prob=r.prob!==undefined?r.prob:1;
+      lines.push(`${prefix}(${wcid}, ${r.dest}, ${r.wcid}, ${r.stack||1}, 0, 0, False, ${prob})${isLast?';':''} /* ${destNames[r.dest]||'Drop'}: ${r.stack}x WCID ${r.wcid} prob:${prob} */`);
     });
     lines.push('');
   }
@@ -2128,6 +2141,34 @@ function buildSQL(){
       }
     });
     lines.push('');
+  }
+
+  // ── Auto-Generator for Creature/NPC ─────────────────────────────────────────
+  if(isCreature){
+    const genWcid=wcid+1000000; // Generator WCID: creature WCID + 1,000,000 offset
+    const creatureName=g('fName','creature');
+    const respawnSec=300; // 5 min default respawn
+    const genLines=[
+      '',
+      `/* ═══════════════════════════════════════════════════════════════════════`,
+      ` * GENERATOR — ${creatureName}`,
+      ` * Place this in your landblock SQL or use with a spawn tool.`,
+      ` * Spawns ${creatureName} (WCID ${wcid}) with ${respawnSec}s respawn timer.`,
+      ` ═══════════════════════════════════════════════════════════════════════ */`,
+      '',
+      `DELETE FROM \`weenie\` WHERE \`class_Id\` = ${genWcid};`,
+      '',
+      `INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)`,
+      `VALUES (${genWcid}, '${creatureName.toLowerCase().replace(/\s+/g,'_')}_gen', 7, '2025-01-01 00:00:00');`,
+      '',
+      `INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)`,
+      `VALUES (${genWcid}, 93, 262144) /* PhysicsState - Hidden */`,
+      `     , (${genWcid}, 133, 4); /* ShowableOnRadar */`,
+      '',
+      `INSERT INTO \`weenie_properties_generator\` (\`object_Id\`, \`probability\`, \`weenie_Class_Id\`, \`delay\`, \`init_Create\`, \`max_Create\`, \`when_Create\`, \`where_Create\`, \`stack_Size\`, \`palette_Id\`, \`shade\`, \`obj_Cell_Id\`, \`origin_X\`, \`origin_Y\`, \`origin_Z\`, \`angles_W\`, \`angles_X\`, \`angles_Y\`, \`angles_Z\`)`,
+      `VALUES (${genWcid}, 1, ${wcid}, ${respawnSec}, 1, 1, 2, 4, -1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);`,
+    ];
+    lines.push(...genLines);
   }
 
   writeSQLOut(lines.join('\n'));

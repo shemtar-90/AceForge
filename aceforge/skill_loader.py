@@ -18,6 +18,7 @@ ALWAYS_LOAD = [
     "enums.md",
     "spells.md",
     "quests.md",
+    "quest_npcs.md",   # Quest emote system — ALWAYS loaded (prevents fake table errors)
     "lore.md",
     "schema.md",
 ]
@@ -25,11 +26,11 @@ ALWAYS_LOAD = [
 CONTENT_TYPE_FILES = {
     "monster":  ["did_values.md", "icons.md", "all_spells.txt"],
     "boss":     ["did_values.md", "icons.md", "all_spells.txt"],
-    "npc":      ["did_values.md", "icons.md"],
+    "npc":      ["did_values.md", "icons.md", "quest_npcs.md"],
     "item":     ["icons.md"],
     "weapon":   ["melee_weapons.md", "missile_weapons.md", "casters.md", "icons.md"],
     "armor":    ["armor.md", "clothing.md", "icons.md"],
-    "quest":    ["did_values.md", "icons.md", "all_spells.txt"],
+    "quest":    ["did_values.md", "icons.md", "all_spells.txt", "quest_npcs.md"],
     "general":  ["did_values.md", "icons.md", "all_spells.txt"],
 }
 
@@ -144,7 +145,9 @@ class SkillLoader:
         ]
         if author:
             lines.append(f"Author/Admin: {author}")
-        lines.append("\n## Current WCID Ranges:")
+
+        # ── WCID Ranges ──────────────────────────────────────────────────────
+        lines.append("\n## Current WCID Ranges (use Next Available for new content):")
         lines.append("| Category | Range Start | Next Available |")
         lines.append("|----------|-------------|----------------|")
         for key, info in wcid_ranges.items():
@@ -152,7 +155,58 @@ class SkillLoader:
             start = info.get("start", "?")
             nxt   = info.get("next", "?")
             lines.append(f"| {label} | {start} | {nxt} |")
-        lines.append("\nAlways use 'Next Available' as the starting WCID for new content.")
+
+        # ── Item Cross-Reference ─────────────────────────────────────────────
+        lines.append("\n## CRITICAL: Known In-Game Items — Use Existing WCIDs")
+        lines.append(
+            "If the user requests an item that matches a name below, use the existing WCID "
+            "in weenie_properties_create_list (destination=2). Do NOT create a new weenie file for it."
+        )
+        lines.append("\n### Currency / Consumables")
+        lines.append("| WCID | Item Name |")
+        lines.append("|------|-----------|")
+        KNOWN_ITEMS = [
+            (273,   "Pyreals"),
+            (20634, "Mana Charge (MMD Note)"),
+            (34,    "Healing Kit"),
+            (690,   "Lockpick"),
+            (5889,  "Gem of Treasure Finding"),
+            (1969,  "Archmage's Salvage Kit"),
+            (9061,  "Blank Augmentation Gem"),
+            (801,   "Trade Note (100,000)"),
+            (12891, "Legendary Key"),
+            (21279, "Salvage Bag"),
+        ]
+        for wcid, name in KNOWN_ITEMS:
+            lines.append(f"| {wcid} | {name} |")
+
+        # Inject top weapon/armor names from reference JSONs if available
+        try:
+            import json, sys
+            from pathlib import Path
+            base = Path(sys._MEIPASS) if hasattr(sys, "_MEIPASS") else Path(__file__).parent.parent
+            web_dir = base / "aceforge" / "web"
+            for fname, category in [("items.json", "General Items"), ("weapons.json", "Weapons (partial)"), ("armor.json", "Armor (partial)")]:
+                fpath = web_dir / fname
+                if fpath.exists():
+                    data = json.loads(fpath.read_text(encoding="utf-8"))[:60]
+                    lines.append(f"\n### {category}")
+                    lines.append("| WCID | Item Name |")
+                    lines.append("|------|-----------|")
+                    for row in data:
+                        lines.append(f"| {row[0]} | {row[1]} |")
+        except Exception:
+            pass
+
+        # ── Generator note ───────────────────────────────────────────────────
+        lines.append("\n## Generator Files")
+        lines.append(
+            "ACEForge automatically appends a Generator weenie block (type=7) to every "
+            "Creature/NPC SQL output at WCID = creature_WCID + 1,000,000. You do NOT need "
+            "to generate generator SQL yourself unless the boss/creature needs special spawn "
+            "rules (unique location, custom respawn timer, multiple spawn slots)."
+        )
+
         return "\n".join(lines)
 
     def list_references(self) -> list[str]:
