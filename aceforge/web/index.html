@@ -175,6 +175,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 .modal-field input{border:1px solid var(--border);background:var(--parch);padding:7px 10px;font-size:14px;font-weight:600;user-select:text;width:100%}
 .modal-foot{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
 </style>
+<script src="icons.js"></script>
 </head>
 <body>
 <div class="app">
@@ -363,6 +364,20 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
       <button class="btn-cancel" onclick="closePresetModal()">Cancel</button>
       <button class="btn-save" onclick="confirmSavePreset()">Save</button>
     </div>
+  </div>
+</div>
+
+<!-- ICON PICKER MODAL -->
+<div id="iconPickerOverlay" style="display:none;position:fixed;inset:0;background:rgba(20,10,0,.6);z-index:500;align-items:center;justify-content:center">
+  <div style="background:var(--parch-lt);border:1px solid var(--border);width:90vw;max-width:1100px;height:82vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0">
+      <div style="font-family:'Cinzel',serif;font-size:14px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--crimson)">🎨 Icon Picker</div>
+      <input type="text" id="iconSearch" placeholder="Search by DID hex or decimal…" oninput="filterIcons(this.value)"
+        style="flex:1;font-family:'Source Code Pro',monospace;font-size:13px;border-bottom:2px solid var(--border);padding:5px 3px;outline:none;background:transparent">
+      <span id="iconCount" style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;color:var(--ink-dim)"></span>
+      <button onclick="closeIconPicker()" style="font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:.1em;border:1px solid var(--border);background:transparent;color:var(--ink-mid);padding:6px 14px;cursor:pointer">✕ Close</button>
+    </div>
+    <div id="iconGrid" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start"></div>
   </div>
 </div>
 
@@ -615,12 +630,16 @@ function buildSubContent(){
     return `<div class="sub-panel ${active}" data-sub="${sub}">${(builders[sub]||buildProps)()}</div>`;
   }).join('');
   fc.querySelectorAll('input,select,textarea').forEach(e=>e.addEventListener('input',onFieldInput));
-  // Close dropdowns on outside click
   document.addEventListener('click',e=>{
     if(!e.target.closest('.sdrop-wrap'))
       document.querySelectorAll('.sdrop-box.open').forEach(d=>d.classList.remove('open'));
   });
   regen();
+  // Populate DID rows now that DOM exists
+  setTimeout(()=>{
+    const didEl=$('did_rows_'+curType);
+    if(didEl) didEl.innerHTML=buildDIDRows(curType);
+  },0);
 }
 
 function onFieldInput(e){
@@ -707,17 +726,18 @@ function buildProps(){
       </div>`).join('')}
     
     <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
-    <div id="did_rows_form">${buildDIDRows()}</div>
+    <div id="did_rows_${t}"></div>
     <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
       <div class="fg" style="flex:2">
         <div class="fl">Property</div>
-        <select id="did_add_type" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+        <select id="did_type_${t}" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
       </div>
       <div class="fg" style="flex:1">
         <div class="fl">Value (hex or decimal)</div>
-        <input type="text" id="did_add_val" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <input type="text" id="did_val_${t}" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <button class="top-btn" style="margin-top:4px;width:100%;padding:5px 0;font-size:9px" onclick="openIconPicker('did_val_${t}')">🎨 Icon Picker</button>
       </div>
-      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty()">+ Add / Update</button>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty('${t}')">+ Add / Update</button>
     </div>
     </div>`;
     }
@@ -750,17 +770,18 @@ function buildProps(){
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
       </div>`).join('')}
     <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
-    <div id="did_rows_form">${buildDIDRows()}</div>
+    <div id="did_rows_${t}"></div>
     <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
       <div class="fg" style="flex:2">
         <div class="fl">Property</div>
-        <select id="did_add_type" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+        <select id="did_type_${t}" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
       </div>
       <div class="fg" style="flex:1">
         <div class="fl">Value (hex or decimal)</div>
-        <input type="text" id="did_add_val" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <input type="text" id="did_val_${t}" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <button class="top-btn" style="margin-top:4px;width:100%;padding:5px 0;font-size:9px" onclick="openIconPicker('did_val_${t}')">🎨 Icon Picker</button>
       </div>
-      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty()">+ Add / Update</button>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty('${t}')">+ Add / Update</button>
     </div>
     </div>`;
   }
@@ -802,17 +823,18 @@ function buildProps(){
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
       </div>`).join('')}
     <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
-    <div id="did_rows_form">${buildDIDRows()}</div>
+    <div id="did_rows_${t}"></div>
     <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
       <div class="fg" style="flex:2">
         <div class="fl">Property</div>
-        <select id="did_add_type" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+        <select id="did_type_${t}" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
       </div>
       <div class="fg" style="flex:1">
         <div class="fl">Value (hex or decimal)</div>
-        <input type="text" id="did_add_val" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <input type="text" id="did_val_${t}" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <button class="top-btn" style="margin-top:4px;width:100%;padding:5px 0;font-size:9px" onclick="openIconPicker('did_val_${t}')">🎨 Icon Picker</button>
       </div>
-      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty()">+ Add / Update</button>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty('${t}')">+ Add / Update</button>
     </div>
     </div>`;
   }
@@ -849,17 +871,18 @@ function buildProps(){
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
       </div>`).join('')}
     <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
-    <div id="did_rows_form">${buildDIDRows()}</div>
+    <div id="did_rows_${t}"></div>
     <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
       <div class="fg" style="flex:2">
         <div class="fl">Property</div>
-        <select id="did_add_type" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+        <select id="did_type_${t}" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
       </div>
       <div class="fg" style="flex:1">
         <div class="fl">Value (hex or decimal)</div>
-        <input type="text" id="did_add_val" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <input type="text" id="did_val_${t}" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <button class="top-btn" style="margin-top:4px;width:100%;padding:5px 0;font-size:9px" onclick="openIconPicker('did_val_${t}')">🎨 Icon Picker</button>
       </div>
-      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty()">+ Add / Update</button>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty('${t}')">+ Add / Update</button>
     </div>
     `;
   }
@@ -897,24 +920,25 @@ function buildProps(){
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
       </div>`).join('')}
     <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
-    <div id="did_rows_form">${buildDIDRows()}</div>
+    <div id="did_rows_${t}"></div>
     <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
       <div class="fg" style="flex:2">
         <div class="fl">Property</div>
-        <select id="did_add_type" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+        <select id="did_type_${t}" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
       </div>
       <div class="fg" style="flex:1">
         <div class="fl">Value (hex or decimal)</div>
-        <input type="text" id="did_add_val" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <input type="text" id="did_val_${t}" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <button class="top-btn" style="margin-top:4px;width:100%;padding:5px 0;font-size:9px" onclick="openIconPicker('did_val_${t}')">🎨 Icon Picker</button>
       </div>
-      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty()">+ Add / Update</button>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty('${t}')">+ Add / Update</button>
     </div>
     </div>`;
   }
   return h;
 }
 
-function buildDIDRows(){
+function buildDIDRows(suffix){
   // Show current DID properties from _lastSQLProps if available
   const lp=window._lastSQLProps||{};
   const didRows=(lp.did||[]);
@@ -949,24 +973,23 @@ function removeDIDRow(idx){
     extraDID=extraDID.filter(r=>String(r.type)!==type);
     lp.did.splice(idx,1);
     regen();
-    // Refresh the did_rows_form div in place
-    const el=$('did_rows_form');if(el)el.innerHTML=buildDIDRows();
+    // Refresh the DID rows div in place
+    const el=$('did_rows_'+curType);if(el)el.innerHTML=buildDIDRows(curType);
   }
 }
 
-function addDIDProperty(){
-  const typeEl=$('did_add_type'),valEl=$('did_add_val');
-  if(!typeEl||!valEl) return;
+function addDIDProperty(suffix){
+  const s=suffix||curType;
+  const typeEl=$('did_type_'+s),valEl=$('did_val_'+s);
+  if(!typeEl||!valEl){toast('DID controls not found for '+s);return;}
   const type=String(typeEl.value),val=valEl.value.trim()||'0x00000000';
-  // Add/update in extraDID
   const existing=extraDID.findIndex(r=>String(r.type)===type);
   if(existing>=0) extraDID[existing].value=val;
   else extraDID.push({type,value:val});
   extraDID.sort((a,b)=>parseInt(a.type)-parseInt(b.type));
   regen();
-  // Refresh the display
-  const el=$('did_rows_form');if(el)el.innerHTML=buildDIDRows();
-  toast('DID '+type+' · '+PROP_DID[type]+' = '+val);
+  const el=$('did_rows_'+curType);if(el)el.innerHTML=buildDIDRows(curType);
+  toast('DID '+type+' · '+(PROP_DID[type]||'custom')+' = '+val);
 }
 
 function buildCreateListRows(){
@@ -987,6 +1010,14 @@ function buildCreateListRows(){
         <input type="number" id="cl_stack_${i}" value="${r.stack||1}" oninput="createList[${i}].stack=parseInt(this.value);regen()"></div>
       <button class="del" onclick="createList.splice(${i},1);rebuildPanel('properties')">✕</button>
     </div>`).join('');
+}
+
+function quickAddCookbook(){
+  const src=gi('fCBSrcWcid',0), lbl=g('fCBSrcLabel',''), tgt=gi('fCBTgtWcid',0);
+  if(!src&&!tgt){toast('Enter a Source or Target WCID first.');return;}
+  cookbookEntries.push({src,srcLabel:lbl,tgt});
+  rebuildPanel('properties');
+  toast('Cook Book entry added.');
 }
 
 function addCreateListRow(){
@@ -1056,18 +1087,19 @@ function buildJewelryProps(){
         <input type="number" id="${id}" value="0" style="width:100px;text-align:right;border-bottom:1px solid var(--border)">
       </div>`).join('')}
   <div class="sh" style="margin-top:14px"><div class="st">Visual &amp; Audio (DID Properties)</div><div class="sl"></div></div>
-  <div id="did_rows_form">${buildDIDRows()}</div>
-  <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
-    <div class="fg" style="flex:2">
-      <div class="fl">Property</div>
-      <select id="did_add_type" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+    <div id="did_rows_${t}"></div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding:8px;background:rgba(200,184,152,.08);border:1px dashed var(--border-lt)">
+      <div class="fg" style="flex:2">
+        <div class="fl">Property</div>
+        <select id="did_type_${t}" style="font-size:13px">${Object.entries(PROP_DID).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select>
+      </div>
+      <div class="fg" style="flex:1">
+        <div class="fl">Value (hex or decimal)</div>
+        <input type="text" id="did_val_${t}" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
+        <button class="top-btn" style="margin-top:4px;width:100%;padding:5px 0;font-size:9px" onclick="openIconPicker('did_val_${t}')">🎨 Icon Picker</button>
+      </div>
+      <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty('${t}')">+ Add / Update</button>
     </div>
-    <div class="fg" style="flex:1">
-      <div class="fl">Value (hex or decimal)</div>
-      <input type="text" id="did_add_val" value="0x00000000" style="font-family:'Source Code Pro',monospace;font-size:13px;font-weight:600">
-    </div>
-    <button class="top-btn" style="padding:7px 16px;white-space:nowrap;flex-shrink:0" onclick="addDIDProperty()">+ Add / Update</button>
-  </div>
   </div>`;
 }
 
@@ -1133,8 +1165,12 @@ function buildRecipeProps(){
     <div class="fg"><div class="fl">Success WCID <span class="fc">success_W_C_I_D</span></div><input type="number" id="fSuccessWcid" value="0"></div>
     <div class="fg"><div class="fl">Success Amount <span class="fc">success_Amount</span></div><input type="number" id="fSuccessAmt" value="1"></div>
     <div class="fg"><div class="fl">Fail WCID <span class="fc">fail_W_C_I_D</span></div><input type="number" id="fFailWcid" value="0"></div>
+    <div class="fg"><div class="fl">Source WCID (Cook Book) <span class="fc">source_W_C_I_D</span></div><input type="number" id="fCBSrcWcid" value="0"></div>
+    <div class="fg"><div class="fl">Source Name <span class="fc">comment</span></div><input type="text" id="fCBSrcLabel" value="" placeholder="e.g. Rift Weapon"></div>
+    <div class="fg"><div class="fl">Target WCID (Cook Book) <span class="fc">target_W_C_I_D</span></div><input type="number" id="fCBTgtWcid" value="0"></div>
     <div class="fg" style="grid-column:span 3"><div class="fl">Success Message</div><input type="text" id="fSuccessMsg" value="You apply the recipe successfully."></div>
     <div class="fg" style="grid-column:span 3"><div class="fl">Fail Message</div><input type="text" id="fFailMsg" value="You apply the recipe but destroy the target."></div>
+    <div class="fg" style="grid-column:span 3"><button class="add-btn" style="margin-top:4px" onclick="quickAddCookbook()">+ Add Source/Target pair to Cook Book below</button></div>
     <div class="fg"><div class="fl">Destroy Source (success)</div><input type="text" id="fDestroySourceSuccess" value="1"></div>
     <div class="fg"><div class="fl">Destroy Target (fail)</div><input type="text" id="fDestroyTargetFail" value="1"></div>
   </div>
@@ -1639,6 +1675,12 @@ function regen(){
     // If Properties tab is visible, refresh it
     const advPanel=document.querySelector('[data-sub="advanced"].active');
     if(advPanel) rebuildPanel('advanced');
+    // Populate DID rows in the Form Fields tab (if visible)
+    const propPanel=document.querySelector('[data-sub="properties"].active');
+    if(propPanel){
+      const didEl=$('did_rows_'+curType);
+      if(didEl) didEl.innerHTML=buildDIDRows(curType);
+    }
   }
 }
 
@@ -2527,6 +2569,94 @@ async function init(){
 
 window.addEventListener('pywebviewready',init);
 if(!window.pywebview)init();
+
+// ── ICON PICKER ───────────────────────────────────────────────────────────────
+let _iconTargetField=null;
+let _iconsRendered=false;
+
+function openIconPicker(fieldId){
+  _iconTargetField=fieldId;
+  $('iconPickerOverlay').style.display='flex';
+  $('iconSearch').value='';
+  if(!_iconsRendered){
+    renderIconPage(ICONS);
+    _iconsRendered=true;
+  }
+  updateIconCount(ICONS.length);
+}
+
+function closeIconPicker(){
+  $('iconPickerOverlay').style.display='none';
+}
+
+function renderIconPage(list){
+  const grid=$('iconGrid');
+  // Render in batches to avoid freezing — show first 500, then load more on scroll
+  grid.innerHTML='';
+  const batch=list.slice(0,500);
+  grid._fullList=list;
+  grid._rendered=500;
+  appendIcons(grid,batch);
+  // Lazy load more on scroll
+  grid.onscroll=()=>{
+    if(grid.scrollTop+grid.clientHeight>grid.scrollHeight-200&&grid._rendered<grid._fullList.length){
+      const next=grid._fullList.slice(grid._rendered,grid._rendered+200);
+      appendIcons(grid,next);
+      grid._rendered+=next.length;
+    }
+  };
+}
+
+function appendIcons(grid,list){
+  const frag=document.createDocumentFragment();
+  list.forEach(([dec,hexVal])=>{
+    const el=document.createElement('div');
+    el.title=hexVal+' ('+dec+')';
+    el.style.cssText='width:60px;height:60px;cursor:pointer;border:2px solid transparent;border-radius:3px;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:3px;transition:border-color .1s;background:var(--parch)';
+    el.onmouseover=()=>el.style.borderColor='var(--crimson)';
+    el.onmouseout=()=>el.style.borderColor='transparent';
+    el.onclick=()=>selectIcon(hexVal);
+    const img=document.createElement('img');
+    img.src='icons/'+dec+'.png';
+    img.style.cssText='width:40px;height:40px;image-rendering:pixelated;object-fit:contain';
+    img.loading='lazy';
+    img.onerror=()=>{el.style.display='none';};
+    const label=document.createElement('div');
+    label.style.cssText="font-family:'Source Code Pro',monospace;font-size:7px;color:var(--ink-dim);text-align:center;overflow:hidden;white-space:nowrap;width:100%";
+    label.textContent=hexVal;
+    el.appendChild(img);
+    el.appendChild(label);
+    frag.appendChild(el);
+  });
+  grid.appendChild(frag);
+}
+
+function filterIcons(query){
+  const q=query.trim().toLowerCase();
+  const filtered=q.length<1?ICONS:ICONS.filter(([dec,hexVal])=>{
+    return hexVal.includes(q)||String(dec).includes(q);
+  });
+  _iconsRendered=false;
+  renderIconPage(filtered);
+  updateIconCount(filtered.length);
+}
+
+function updateIconCount(n){
+  const el=$('iconCount');
+  if(el) el.textContent=n.toLocaleString()+' icons';
+}
+
+function selectIcon(hexVal){
+  if(_iconTargetField){
+    const el=$(typeof _iconTargetField==='string'?_iconTargetField:null)||document.getElementById(_iconTargetField);
+    if(el){
+      el.value=hexVal;
+      el.dispatchEvent(new Event('input'));
+    }
+  }
+  closeIconPicker();
+  toast('Icon set: '+hexVal);
+}
 </script>
 </body>
 </html>
