@@ -1481,6 +1481,7 @@ function openItemSearch(q){
   const src=typeof ITEMS!=='undefined'?ITEMS.slice(0,8):[...WEAPONS.slice(0,4),...ARMOR.slice(0,4)];
   if(!q) openDropSearch('itemSearch_drop',src,
     x=>`<div class="sdrop-item" onmousedown="event.preventDefault();setV('fName','${x[1].replace(/'/g,\"'\")}');$('itemSearch_drop').classList.remove('open');regen()">${x[1]}<small>${x[2]||''}</small></div>`);
+}
 function openJewelrySearch(q){
   // Jewelry DB - search from a small curated list of common jewelry names
   const JEW_NAMES=['Ring of the Dawn','Band of the Dawn','Necklace of the Dawn','Bracelet of the Dawn','Wristband of the Dawn','Trinket of the Dawn','Blood Gem Ring','Empyrean Ring'];
