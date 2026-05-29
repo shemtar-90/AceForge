@@ -258,6 +258,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
       <textarea id="aiPrompt" style="width:100%;height:120px;font-family:'IM Fell English',serif;font-style:italic;font-size:15px;color:var(--ink);background:transparent;border:none;outline:none;resize:none;line-height:1.6;user-select:text" placeholder="e.g. A level 180 ice drudge for a snowy biome. High cold resist, weak to fire. Drops T6 loot. Casts Frost Bolt and Frost Volley."></textarea>
     </div>
     <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+      <button onclick="openOllamaSetup()" style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:2px" title="Set up local AI — no API key required">⟳ LOCAL AI</button>
       <button class="ai-gen-btn" id="aiGenBtn" onclick="startGeneration()" disabled title="Connect an API key in Settings first">▶ Generate</button>
       <button class="ai-stop-btn" id="aiStopBtn" onclick="stopGeneration()" style="display:none">⏹ Stop</button>
       <button class="ai-gen-btn" onclick="clearAI()" style="background:transparent;border:1px solid var(--border);color:var(--ink-mid)">🗑 Clear</button>
@@ -291,6 +292,15 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
       <button class="settings-close" onclick="closeSettings()">✕</button>
     </div>
     <div class="settings-body">
+      <div class="sec-title">Local AI Setup</div>
+      <p style="font-family:'IM Fell English',serif;font-style:italic;font-size:13px;color:var(--ink-dim);margin-bottom:12px;line-height:1.6">
+        Run AI locally — no API key, no token limits, no cost. Recommended for quest chains and multi-file generation.
+      </p>
+      <div id="settingsOllamaStatus" style="margin-bottom:10px;font-family:'Cinzel',serif;font-size:10px;color:var(--ink-dim)">Checking Ollama…</div>
+      <button class="top-btn" onclick="closeSettings();openOllamaSetup()" style="padding:7px 16px;font-size:10px;display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span>⟳</span> <span>Open Local AI Setup</span>
+      </button>
+
       <div class="sec-title">AI Provider</div>
       <div class="sf">
         <label class="sf-label">Provider</label>
@@ -2769,6 +2779,23 @@ function unloadLibrary(libId){
 function openSettings(){
   $('settingsOverlay').classList.add('open');
   refreshLibStatus();
+  // Update Ollama status in Settings panel
+  if(window.pywebview){
+    window.pywebview.api.check_ollama().then(s=>{
+      const el=$('settingsOllamaStatus');
+      if(!el) return;
+      if(s.running && s.models && s.models.length>0){
+        el.style.color='var(--green)';
+        el.textContent=`✅ Ollama running — ${s.models[0]} active`;
+      } else if(s.installed){
+        el.style.color='var(--gold)';
+        el.textContent='⟳ Ollama installed but not running — open setup to launch';
+      } else {
+        el.style.color='var(--ink-dim)';
+        el.textContent='⬜ Ollama not installed — click below to set up';
+      }
+    });
+  }
   if(window.pywebview){
     window.pywebview.api.get_config().then(cfg=>{
       appConfig=cfg;

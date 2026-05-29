@@ -24,6 +24,12 @@ if web_dir.exists():
         if f.is_file():
             web_datas.append((str(f), 'aceforge/web'))
 
+# ── App icon ──────────────────────────────────────────────────────────────────
+icon_datas = []
+icon_file = Path('AF_Icon.ico')
+if icon_file.exists():
+    icon_datas.append((str(icon_file), '.'))
+
 print(f"[spec] Bundling {len(web_datas)} web file(s): {[d[0] for d in web_datas]}")
 print(f"[spec] Bundling {len(ref_datas)} reference file(s)")
 
@@ -31,7 +37,7 @@ a = Analysis(
     ['aceforge/main.py'],
     pathex=['.'],
     binaries=[],
-    datas=ref_datas + web_datas,
+    datas=ref_datas + web_datas + icon_datas,
     hiddenimports=[
         'anthropic',
         'openai',
@@ -75,5 +81,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon='AF_Icon.ico' if Path('AF_Icon.ico').exists() else None,
 )

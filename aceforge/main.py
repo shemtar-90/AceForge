@@ -8,6 +8,27 @@ import os
 from pathlib import Path
 
 
+def get_icon() -> str:
+    """Find AF_Icon.ico in all the places PyInstaller might put it."""
+    candidates = []
+    if hasattr(sys, "_MEIPASS"):
+        base = Path(sys._MEIPASS)
+        candidates += [
+            base / "AF_Icon.ico",
+            base / "aceforge" / "AF_Icon.ico",
+        ]
+    here = Path(__file__).parent
+    candidates += [
+        here.parent / "AF_Icon.ico",
+        here / "AF_Icon.ico",
+        Path.cwd() / "AF_Icon.ico",
+    ]
+    for p in candidates:
+        if p.exists():
+            return str(p)
+    return ""
+
+
 def get_index_html() -> Path:
     """
     Find index.html in all the places PyInstaller might put it.
@@ -86,6 +107,8 @@ def main():
     config = Config()
     api = AppAPI(config)
 
+    icon_path = get_icon()
+
     window = webview.create_window(
         title="ACEForge — Weenie Workbench",
         url=html_path.as_uri(),
@@ -98,7 +121,7 @@ def main():
     )
 
     api.set_window(window)
-    webview.start(debug=False, private_mode=False)
+    webview.start(debug=False, private_mode=False, icon=icon_path if icon_path else None)
 
 
 def _show_error_window(message: str):
