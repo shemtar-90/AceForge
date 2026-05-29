@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# PyInstaller
+*.spec.bak
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ACEForge build artifacts
+ACEForge_*_Windows.zip
+ACEForge_*_Setup.exe
+installer_patched.nsi
+
+# Reference files (large — add to git LFS or keep local)
+# Uncomment these lines if you want to exclude them from git:
+# aceforge/references/all_spells.txt
+# aceforge/references/armor.md
+# aceforge/references/melee_weapons.md
+# aceforge/references/did_values.md
+# aceforge/references/icons.md
+
+# Local config (never commit API keys)
+aceforge/config.json
+*.config.json
+
+# Icons — 12,371 PNGs (~20MB). Keep locally, do NOT push to git.
+# Users install these manually or via a separate release asset.
+aceforge/web/icons/
+aceforge/web/icons.js
+
+# Weenie database — 29,569 SQL files (~132MB). Keep locally, do NOT push to git.
+# Users install via the separate 3-Core weenie database release asset.
+aceforge/references/weenie_index.json
+aceforge/references/weenies/

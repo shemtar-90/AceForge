@@ -1,0 +1,181 @@
+name: Build and Release ACEForge
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on Windows
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5.4.0
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Verify imports
+        shell: pwsh
+        run: |
+          python -c "import customtkinter; print('customtkinter OK')"
+          python -c "import anthropic; print('anthropic OK')"
+
+      - name: Prepare reference files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "aceforge/references" | Out-Null
+          $refs = @(
+            "aceforge/references/enums.md",
+            "aceforge/references/spells.md",
+            "aceforge/references/all_spells.txt",
+            "aceforge/references/did_values.md",
+            "aceforge/references/icons.md",
+            "aceforge/references/armor.md",
+            "aceforge/references/clothing.md",
+            "aceforge/references/melee_weapons.md",
+            "aceforge/references/missile_weapons.md",
+            "aceforge/references/casters.md",
+            "aceforge/references/quests.md",
+            "aceforge/references/lore.md",
+            "aceforge/references/schema.md"
+          )
+          $missing = @()
+          foreach ($f in $refs) {
+            if (-not (Test-Path $f)) { $missing += $f }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Warning "Missing $($missing.Count) reference file(s) - AI Mode will have limited context."
+            foreach ($f in $missing) { Write-Warning "  $f" }
+            $txt = "Add reference files from ace-content-generator.skill to enable full AI Mode.`nMissing:`n" + ($missing -join "`n")
+            Set-Content -Path "aceforge/references/README_AI_MODE.txt" -Value $txt
+          } else {
+            Write-Host "All reference files present."
+          }
+
+      - name: Build executable
+        run: python -m PyInstaller ACEForge.spec --noconfirm --clean
+
+      # One-file mode outputs dist/ACEForge.exe (not dist/ACEForge/ACEForge.exe)
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/ACEForge.exe")) {
+            Write-Error "ACEForge.exe not found at dist/ACEForge.exe"
+            Get-ChildItem -Path "dist/" -Recurse | Select-Object FullName
+            exit 1
+          }
+          $mb = [math]::Round((Get-Item "dist/ACEForge.exe").Length / 1MB, 1)
+          Write-Host "ACEForge.exe built successfully - $mb MB"
+          
+          # Verify index.html was bundled — this is the most common failure point
+          Write-Host "Verifying web assets bundled correctly..."
+          $found = $false
+          Get-ChildItem -Path (Split-Path "dist/ACEForge.exe") -Recurse -ErrorAction SilentlyContinue | Where-Object {$_.Name -eq "index.html"} | ForEach-Object {
+            Write-Host "FOUND index.html at: $($_.FullName)"
+            $found = $true
+          }
+          if (-not $found) {
+            Write-Warning "index.html NOT found in bundle — check ACEForge.spec web_datas section"
+          }
+
+      - name: Get version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $v = "${{ github.ref_name }}" -replace '^v', ''
+          } else {
+            $v = "dev-${{ github.run_number }}"
+          }
+          echo "VERSION=$v" >> $env:GITHUB_OUTPUT
+          echo "ZIP_NAME=ACEForge_${v}_Windows.zip" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $v"
+
+      # Stage everything into a clean folder before zipping
+      - name: Stage release folder
+        shell: pwsh
+        run: |
+          $v = "${{ steps.version.outputs.VERSION }}"
+          $stage = "release_stage"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+          # Main executable
+          Copy-Item "dist/ACEForge.exe" "$stage/ACEForge.exe"
+
+          # Supporting docs
+          Copy-Item "README.md"  "$stage/README.md"
+          Copy-Item "LICENSE.txt" "$stage/LICENSE.txt"
+
+          Set-Content "$stage/VERSION.txt" "ACEForge v$v`nBuilt: $(Get-Date -Format 'yyyy-MM-dd HH:mm UTC')`nPlatform: Windows x64 (one-file)"
+
+          Write-Host "Staged:"
+          Get-ChildItem $stage | Select-Object Name, Length
+
+      - name: Create release zip
+        shell: pwsh
+        run: |
+          $zip = "${{ steps.version.outputs.ZIP_NAME }}"
+          Compress-Archive -Path "release_stage/*" -DestinationPath $zip
+          $mb = [math]::Round((Get-Item $zip).Length / 1MB, 1)
+          Write-Host "Created $zip - $mb MB"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: ACEForge-Windows
+          path: ${{ steps.version.outputs.ZIP_NAME }}
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2.2.1
+        with:
+          name: ACEForge ${{ steps.version.outputs.VERSION }}
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: ${{ steps.version.outputs.ZIP_NAME }}
+          body: |
+            ## ACEForge ${{ steps.version.outputs.VERSION }}
+
+            ### How to install
+
+            1. Download **`${{ steps.version.outputs.ZIP_NAME }}`** below
+            2. Extract the zip anywhere — e.g. `C:\ACEForge\`
+            3. Double-click **`ACEForge.exe`**
+            4. Open **Settings** to enter your server name and WCID ranges
+            5. **Manual Mode** works immediately — no API key needed
+            6. For **AI Mode**, add your [Anthropic API key](https://console.anthropic.com) in Settings
+
+            ### Requirements
+
+            - Windows 10 or 11 (64-bit)
+            - No Python installation needed — everything is bundled
+            - First launch may take 3–5 seconds while the app unpacks itself (normal)
+
+            ### Your settings survive upgrades
+
+            `%APPDATA%\ACEForge\config.json` is never touched by reinstalling —
+            your API key, server name, and WCID ranges carry over automatically.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
