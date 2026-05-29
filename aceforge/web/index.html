@@ -2640,7 +2640,28 @@ window.addEventListener('lib_progress',e=>{
   if(cnt && d.total>0) cnt.textContent=`${d.current.toLocaleString()} / ${d.total.toLocaleString()}`;
 });
 window.addEventListener('ai_chunk',e=>{if(!aiGenerating)return;aiFullText+=e.detail;$('aiOut').textContent=aiFullText;$('aiOut').scrollTop=$('aiOut').scrollHeight;});
-window.addEventListener('ai_done',e=>{aiFullText=e.detail;aiGenerating=false;$('aiGenBtn').disabled=false;$('aiStopBtn').style.display='none';$('aiSaveBtn').disabled=false;const c=(aiFullText.match(/FILE:/g)||[]).length;$('aiStatus').textContent=`✓ Done — ${c} file${c!==1?'s':''} ready`;$('aiStatus').className='ai-status done';$('aiOut').scrollTop=0;});
+window.addEventListener('ai_done',e=>{
+  // e.detail may be {text, truncated} object or legacy plain string
+  const payload=e.detail;
+  const isTruncated=payload&&typeof payload==='object'&&payload.truncated;
+  // Use accumulated aiFullText from chunks (most reliable) — ai_done just signals completion
+  aiGenerating=false;
+  $('aiGenBtn').disabled=false;
+  $('aiStopBtn').style.display='none';
+  $('aiSaveBtn').disabled=false;
+  const c=(aiFullText.match(/FILE:/g)||[]).length;
+  $('aiStatus').textContent=`✓ Done — ${c} file${c!==1?'s':''} ready`;
+  $('aiStatus').className='ai-status done';
+  $('aiOut').scrollTop=0;
+  // Show truncation warning if flagged
+  if(isTruncated){
+    const warn=document.createElement('div');
+    warn.style.cssText='background:#3a1a00;border:1px solid #c87137;border-radius:3px;padding:8px 12px;margin:8px 0;font-family:Cinzel,serif;font-size:10px;color:#c87137;letter-spacing:.05em';
+    warn.textContent='⚠  Output may be incomplete — generation was cut short. Try regenerating or use a local LLM with a larger context window.';
+    const out=$('aiOut');
+    if(out&&out.parentNode) out.parentNode.insertBefore(warn,out);
+  }
+});
 window.addEventListener('ai_error',e=>setAIError(e.detail));
 function saveAIFiles(){
   if(!aiFullText)return;

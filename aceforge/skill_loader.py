@@ -156,6 +156,22 @@ class SkillLoader:
         self._cache[filename] = warning
         return warning
 
+    # Files too large for local model context — skip for Ollama
+    LOCAL_SKIP_FILES = {
+        "example_npcs.md",       # 98K — too large for 7B context
+        "example_creatures.md",  # 74K
+        "example_items.md",      # 74K
+        "example_gear.md",       # 25K
+    }
+
+    # Compact always-load set for local models — core rules only
+    LOCAL_ALWAYS_LOAD = [
+        "SKILL.md",
+        "quest_npcs.md",
+        "enums.md",
+        "schema.md",
+    ]
+
     def build_system_prompt(
         self,
         content_type: str,
@@ -163,10 +179,19 @@ class SkillLoader:
         wcid_ranges: dict,
         author: str = "",
         weenie_context: str = "",
+        is_local: bool = False,
     ) -> str:
+        """
+        Build the system prompt. When is_local=True (Ollama/local LLM), use a
+        trimmed prompt that fits within 7B model context windows (~8k tokens target).
+        Cloud models get the full prompt including large example files.
+        """
         parts = []
 
-        for fname in ALWAYS_LOAD:
+        # Local models get a reduced always-load set to save context space
+        always = self.LOCAL_ALWAYS_LOAD if is_local else ALWAYS_LOAD
+
+        for fname in always:
             content = self._read(fname)
             parts.append(content)
             if fname == "SKILL.md":
@@ -174,18 +199,26 @@ class SkillLoader:
 
         extra_files = CONTENT_TYPE_FILES.get(content_type, CONTENT_TYPE_FILES["general"])
         for fname in extra_files:
-            if fname not in ALWAYS_LOAD:
-                content = self._read(fname)
+            if fname in always:
+                continue
+            # Skip large example files for local models — weenie context replaces them
+            if is_local and fname in self.LOCAL_SKIP_FILES:
+                continue
+            content = self._read(fname)
+            if content:
                 parts.append(f"\n\n{'='*60}\n# {fname}\n{'='*60}\n{content}")
 
-        # Inject matching base-game weenies as authoritative format references
+        # Inject matching base-game weenies as format references
+        # For local models: limit to 2 weenies max to save context
         if weenie_context:
-            parts.append(f"\n\n{'='*60}")
-            parts.append("# BASE GAME WEENIE REFERENCES")
-            parts.append("These are actual base-game weenies from the ACE database.")
-            parts.append("Use their property values, DID setups, and body part AAs as authoritative references.")
-            parts.append("='*60")
-            parts.append(weenie_context)
+            # Trim weenie context for local models — keep first 2 weenies only
+            if is_local:
+                sections = weenie_context.split("/* WCID ")
+                trimmed  = "/* WCID ".join(sections[:3])  # preamble + 2 weenies
+                weenie_context = trimmed
+            parts.append(f"\n\n{'='*60}\n# BASE GAME WEENIE REFERENCES")
+            parts.append("These are actual base-game weenies. Match their property structure exactly.")
+            parts.append(f"{'='*60}\n{weenie_context}")
 
         return "\n".join(parts)
 

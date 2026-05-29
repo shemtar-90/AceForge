@@ -451,6 +451,11 @@ class AppAPI:
             base_url=self.config.base_url,
         )
 
+        # Detect local model — Ollama or compatible with ollama_mode flag
+        provider   = self.config.get("provider", "anthropic")
+        ollama_mode = self.config.get("ollama_mode", False)
+        is_local   = provider == "ollama" or bool(ollama_mode)
+
         # Extract keywords from prompt and find matching base-game weenies
         weenie_context = self._build_weenie_context(prompt, content_type)
 
@@ -460,6 +465,7 @@ class AppAPI:
             wcid_ranges=self.config.get_wcid_ranges(),
             author=self.config.get("author", ""),
             weenie_context=weenie_context,
+            is_local=is_local,
         )
 
         threading.Thread(
