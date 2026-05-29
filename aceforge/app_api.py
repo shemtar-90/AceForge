@@ -201,12 +201,14 @@ class AppAPI:
 
     def browse_and_load_index(self) -> dict:
         """
-        Open OS file browser, detect index type from selected file,
-        copy to correct location, reload the skill loader index.
-        Supports: icons.js, weenie_index.json
-        Future-extensible for any additional index types.
+        Open OS file browser. Accepts:
+          - ACEForge_Icons.zip    → extracts icons.js + icons/ to web/
+          - ACEForge_WeenieDB.zip → extracts weenie_index.json + weenies/ to references/
+          - icons.js              → copies to web/
+          - weenie_index.json     → copies to references/ (+ adjacent weenies/ folder)
+        Future index types: add a LIBRARY_MAP entry and a handler block below.
         """
-        import shutil
+        import shutil, zipfile, json, io
         from pathlib import Path
 
         if not self._window:
@@ -218,9 +220,8 @@ class AppAPI:
                 webview.OPEN_DIALOG,
                 allow_multiple=False,
                 file_types=(
-                    "Index Files (*.json;*.js)",
-                    "JSON Index (*.json)",
-                    "JS Index (*.js)",
+                    "ACEForge Packages (*.zip;*.js;*.json)",
+                    "Zip Package (*.zip)",
                     "All Files (*.*)",
                 ),
             )
@@ -234,43 +235,124 @@ class AppAPI:
         if not src_path.exists():
             return {"success": False, "error": "Selected file not found"}
 
-        base   = Path(__file__).parent
-        fname  = src_path.name.lower()
+        base  = Path(__file__).parent
+        fname = src_path.name.lower()
 
-        # ── Detect file type and route to correct destination ──────────────
-        if fname == "icons.js":
-            dst = base / "web" / "icons.js"
-            # Validate: must contain ICONS= array
-            snippet = src_path.read_text(encoding="utf-8", errors="replace")[:500]
-            if "ICONS" not in snippet and "icons" not in snippet.lower():
-                return {"success": False, "error": "File doesn't look like icons.js — expected ICONS=[...] array"}
-            shutil.copy2(src_path, dst)
-            return {"success": True, "message": f"Icon library installed ({src_path.name})"}
+        # ── ZIP PACKAGE — auto-extract to correct locations ────────────────
+        if fname.endswith(".zip"):
+            try:
+                with zipfile.ZipFile(src_path, "r") as zf:
+                    names = zf.namelist()
+
+                    # Detect package type from zip contents
+                    has_icons_js      = any(n.endswith("icons.js")          for n in names)
+                    has_weenie_index  = any(n.endswith("weenie_index.json") for n in names)
+                    has_icon_pngs     = any("/icons/" in n or n.startswith("icons/") for n in names)
+                    has_weenie_sql    = any("/weenies/" in n or n.startswith("weenies/") for n in names)
+
+                    if not has_icons_js and not has_weenie_index:
+                        return {"success": False,
+                                "error": "Zip not recognized. Expected ACEForge_Icons.zip or ACEForge_WeenieDB.zip."}
+
+                    # ── ICONS PACKAGE ──────────────────────────────────────
+                    if has_icons_js:
+                        web_dir  = base / "web"
+                        icon_dst = web_dir / "icons"
+                        icon_dst.mkdir(parents=True, exist_ok=True)
+                        extracted = 0
+                        for member in names:
+                            mlow = member.lower()
+                            # Strip any leading path prefix (ACEForge/aceforge/web/ or flat)
+                            if mlow.endswith("icons.js"):
+                                data = zf.read(member)
+                                (web_dir / "icons.js").write_bytes(data)
+                            elif "/icons/" in mlow or mlow.startswith("icons/"):
+                                # Extract PNG to icons/ folder, basename only
+                                pname = Path(member).name
+                                if pname.endswith(".png"):
+                                    data = zf.read(member)
+                                    (icon_dst / pname).write_bytes(data)
+                                    extracted += 1
+                        return {"success": True,
+                                "message": f"Icon library installed — {extracted:,} icons"}
+
+                    # ── WEENIE DATABASE PACKAGE ────────────────────────────
+                    if has_weenie_index:
+                        refs_dir   = base / "references"
+                        weenie_dst = refs_dir / "weenies"
+                        refs_dir.mkdir(parents=True, exist_ok=True)
+                        weenie_dst.mkdir(parents=True, exist_ok=True)
+                        count = 0
+                        sql_count = 0
+                        for member in names:
+                            mlow = member.lower()
+                            if member.endswith("/"):
+                                continue
+                            # Strip any leading path prefix
+                            pobj = Path(member)
+                            # Find the meaningful part (after any ACEForge/aceforge/references/)
+                            parts = pobj.parts
+                            # Find index of "weenie_index.json" or "weenies" in parts
+                            rel = None
+                            for i, p in enumerate(parts):
+                                if p == "weenie_index.json" or p == "weenies":
+                                    rel = Path(*parts[i:])
+                                    break
+                            if rel is None:
+                                continue
+                            data = zf.read(member)
+                            dst  = refs_dir / rel
+                            dst.parent.mkdir(parents=True, exist_ok=True)
+                            dst.write_bytes(data)
+                            if rel.name == "weenie_index.json":
+                                try:
+                                    count = len(json.loads(data.decode("utf-8", errors="replace")))
+                                except Exception:
+                                    pass
+                            elif rel.name.endswith(".sql"):
+                                sql_count += 1
+                        try:
+                            self.skill_loader._load_weenie_index()
+                        except Exception:
+                            pass
+                        extra = f" + {sql_count:,} SQL files" if sql_count else ""
+                        return {"success": True,
+                                "message": f"Weenie database installed — {count:,} entries{extra}"}
+
+            except zipfile.BadZipFile:
+                return {"success": False, "error": "Invalid zip file."}
+            except Exception as e:
+                return {"success": False, "error": f"Extraction failed: {e}"}
+
+        # ── INDIVIDUAL FILES (fallback for direct file loading) ────────────
+        elif fname == "icons.js":
+            snippet = src_path.read_bytes()[:500].decode("utf-8", errors="replace")
+            if "ICONS" not in snippet:
+                return {"success": False, "error": "Not a valid icons.js file."}
+            shutil.copy2(src_path, base / "web" / "icons.js")
+            return {"success": True, "message": "Icon index installed (icons.js)"}
 
         elif fname == "weenie_index.json":
-            dst = base / "references" / "weenie_index.json"
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            # Validate: must be a JSON array with 'w', 'n', 'f' keys
             try:
-                import json
                 data = json.loads(src_path.read_text(encoding="utf-8", errors="replace"))
                 if not isinstance(data, list) or not data or "w" not in data[0]:
-                    return {"success": False, "error": "File doesn't look like weenie_index.json — expected [{w, n, c, t, f},...] format"}
+                    raise ValueError("wrong format")
                 count = len(data)
-            except Exception as e:
-                return {"success": False, "error": f"Invalid JSON: {e}"}
-            shutil.copy2(src_path, dst)
-            # Also check if weenies/ folder sits alongside the index
+            except Exception:
+                return {"success": False,
+                        "error": "Not a valid weenie_index.json — expected [{w,n,c,t,f},...]."}
+            refs = base / "references"
+            refs.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_path, refs / "weenie_index.json")
+            # Copy adjacent weenies/ folder if present
             weenies_src = src_path.parent / "weenies"
-            weenies_dst = base / "references" / "weenies"
             extra = ""
-            if weenies_src.exists() and weenies_src.is_dir():
-                # Copy the weenies folder tree
+            if weenies_src.exists():
+                weenies_dst = refs / "weenies"
                 if weenies_dst.exists():
                     shutil.rmtree(weenies_dst)
                 shutil.copytree(weenies_src, weenies_dst)
                 extra = " + weenies folder"
-            # Reload the skill loader index
             try:
                 self.skill_loader._load_weenie_index()
             except Exception:
@@ -278,27 +360,9 @@ class AppAPI:
             return {"success": True, "message": f"Weenie database installed — {count:,} entries{extra}"}
 
         else:
-            # Unknown file — try to detect from contents
-            try:
-                snippet = src_path.read_text(encoding="utf-8", errors="replace")[:1000]
-                if "ICONS" in snippet or ("[[" in snippet and "0x" in snippet):
-                    # Looks like an icons file with a non-standard name
-                    dst = base / "web" / "icons.js"
-                    shutil.copy2(src_path, dst)
-                    return {"success": True, "message": f"Icon library installed (detected from contents)"}
-                elif snippet.strip().startswith("[{") and '"w"' in snippet and '"n"' in snippet:
-                    import json
-                    data = json.loads(snippet + "..." if not snippet.endswith("]") else snippet)
-                    dst = base / "references" / "weenie_index.json"
-                    shutil.copy2(src_path, dst)
-                    return {"success": True, "message": f"Weenie index installed (detected from contents)"}
-            except Exception:
-                pass
-            return {
-                "success": False,
-                "error": f"Unrecognized index file: '{src_path.name}'. "
-                         f"Expected 'icons.js' or 'weenie_index.json'."
-            }
+            return {"success": False,
+                    "error": f"Unrecognized file: '{src_path.name}'. "
+                             "Select an ACEForge_Icons.zip or ACEForge_WeenieDB.zip package."}
 
     def unload_library(self, lib_id: str) -> dict:
         """Remove an installed content library."""
