@@ -2163,7 +2163,7 @@ function buildSQL(){
     const respawnSec=gi('genRespawn',300)||300;
     const initCreate=gi('genInitCreate',1)||1;
     const maxCreate=gi('genMaxCreate',1)||1;
-    const genName=creatureName.toLowerCase().replace(/\s+/g,'_')+'_gen';
+    const genName=creatureName.toLowerCase().replace(/\s+/g,'-')+'-gen';
     lines.push('');
     lines.push(`/* ════════════════════════════════════════════════════════════`);
     lines.push(` * GENERATOR — ${creatureName} (WCID ${genWcid})`);
