@@ -663,7 +663,8 @@ class AppAPI:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     creationflags=flags,
-                    text=True,
+                    encoding="utf-8",
+                    errors="replace",   # swap undecodable bytes with ? instead of crashing
                 )
                 last_pct = -1
                 for line in proc.stdout:
