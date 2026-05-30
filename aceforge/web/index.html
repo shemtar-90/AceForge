@@ -1582,7 +1582,7 @@ function buildForm(){
   const prow=document.getElementById('presetsRow');
   if(prow && c.presets && c.presets.length){
     prow.innerHTML='<div style="display:flex;gap:6px;flex-wrap:wrap;padding:6px 0">'+
-      c.presets.map(p=>'<button class="preset-btn" onclick="applyPreset('+JSON.stringify(p)+')" title="'+p.desc+'">'+p.name+'</button>').join('')+
+      c.presets.map(p=>{const n=p.name||p.l||'Preset';const d=p.desc||p.l||'';const dat=p.data||p.d||p;return '<button class="preset-btn" onclick="applyPreset('+JSON.stringify(dat)+')" title="'+d+'">'+n+'</button>';}).join('')+
       '<button class="preset-btn" onclick="openPresetModal()" style="border-style:dashed">+ Save Current</button>'+
       '</div>';
   } else if(prow){
@@ -1713,6 +1713,15 @@ function buildInnerTabs(){
   el.innerHTML=types.map(t=>
     '<button class="itab'+(t.k===curType?' active':'')+' " data-type="'+t.k+'" onclick="switchType(\"'+t.k+'\",this)"><span style="margin-right:4px">'+t.icon+'</span>'+t.label+'</button>'
   ).join('');
+}
+
+
+function switchMode(mode,btn){
+  document.querySelectorAll('.mode-tab').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  document.getElementById('manualWS').classList.toggle('active', mode==='manual');
+  const aiWS=document.getElementById('aiWS');
+  if(aiWS) aiWS.classList.toggle('active', mode==='ai');
 }
 
 
@@ -2124,7 +2133,7 @@ function searchJewelryFn(q){
 }
 
 // ── PRESETS ───────────────────────────────────────────────────────────────────
-function applyPreset(d){Object.entries(d).forEach(([id,v])=>{const e=$(id);if(e)e.value=v;});regen();}
+function applyPreset(p){const d=(p&&typeof p==='object'&&(p.data||p.d))||p;if(!d)return;Object.entries(d).forEach(([id,v])=>{const e=$(id);if(e)e.value=v;});regen();}
 function openPresetModal(){$('presetModal').classList.add('open');setV('presetNameInp',g('fName','Preset'));}
 function closePresetModal(){$('presetModal').classList.remove('open');}
 function confirmSavePreset(){
