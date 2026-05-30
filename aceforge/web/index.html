@@ -619,6 +619,19 @@ function buildForm(){
   buildSubContent();
 }
 
+function addEmote(){
+  emotes.push({category:7,prob:1,wcidFilter:'',questFilter:'',vendorType:1,actions:[]});
+  rebuildPanel('emotes');
+}
+
+function toggleEmote(i){
+  const body=document.getElementById('eb_'+i);
+  const arrow=document.getElementById('et_'+i);
+  if(!body) return;
+  body.classList.toggle('open');
+  if(arrow) arrow.textContent=body.classList.contains('open')?'▼':'▶';
+}
+
 function rebuildPanel(sub){
   // Rebuild a single sub-panel in-place without touching other panels
   const panel=document.querySelector(`[data-sub="${sub}"]`);
@@ -994,38 +1007,90 @@ function onArmorTypeChange(){
 
 // ── RECIPE PROPS ──────────────────────────────────────────────────────────────
 function buildGeneratorProps(){
-  const whenOpts=[[2,'Always (Respawn)'],[3,'Event'],[4,'Sleeping'],[1,'Once']];
-  const targetWcid=g('fGenTargetWcid','800000');
-  const genWcid=targetWcid?(parseInt(targetWcid)+1000000):'';
-  return `<div class="sec"><div class="sh"><div class="st">Spawn Target</div><div class="sl">What this generator creates</div></div>
-    <div class="grid g2">
-      <div class="fg"><div class="fl">Target WCID <span class="fc">the weenie to spawn</span></div><input type="text" id="fGenTargetWcid" value="${g('fGenTargetWcid','800000')}" placeholder="e.g. 800000"></div>
-      <div class="fg"><div class="fl">Generator WCID <span class="fc">auto = Target + 1,000,000</span></div><input type="text" id="fGenWcid" value="${genWcid}" placeholder="auto-calculated" readonly style="opacity:.6;cursor:default"></div>
-      <div class="fg"><div class="fl">Display Name <span class="fc">used in class_Name</span></div><input type="text" id="fGenName" value="${g('fGenName','New Creature')}" placeholder="New Creature"></div>
-      <div class="fg"><div class="fl">Probability <span class="fc">0.0 – 1.0</span></div><input type="text" id="fGenProb" value="${g('fGenProb','1')}"></div>
-    </div></div>
-  <div class="sec"><div class="sh"><div class="st">Spawn Settings</div><div class="sl">Timing and quantity</div></div>
-    <div class="grid g3">
-      <div class="fg"><div class="fl">Respawn Delay <span class="fc">seconds</span></div><input type="text" id="fGenRespawn" value="${g('fGenRespawn','300')}" placeholder="300"></div>
-      <div class="fg"><div class="fl">Init Create <span class="fc">spawns on load</span></div><input type="text" id="fGenInit" value="${g('fGenInit','1')}"></div>
-      <div class="fg"><div class="fl">Max Create <span class="fc">max simultaneous</span></div><input type="text" id="fGenMax" value="${g('fGenMax','1')}"></div>
-    </div>
-    <div class="grid g2" style="margin-top:10px">
-      <div class="fg"><div class="fl">When Create <span class="fc">spawn condition</span></div>
-        <select id="fGenWhen">${opt(whenOpts,g('fGenWhen','2'))}</select></div>
-      <div class="fg"><div class="fl">Event Name <span class="fc">if Event spawn only</span></div><input type="text" id="fGenEventName" value="${g('fGenEventName','')}" placeholder="e.g. HarvestFestival"></div>
-    </div></div>
-  <div class="sec"><div class="sh"><div class="st">Placement Coordinates</div><div class="sl">Fill these in after placing with a spawn tool</div></div>
-    <div class="grid g3">
-      <div class="fg"><div class="fl">obj_Cell_Id <span class="fc">landcell hex</span></div><input type="text" id="fGenCell" value="${g('fGenCell','')}" placeholder="NULL"></div>
-      <div class="fg"><div class="fl">Origin X</div><input type="text" id="fGenOriginX" value="${g('fGenOriginX','')}" placeholder="NULL"></div>
-      <div class="fg"><div class="fl">Origin Y</div><input type="text" id="fGenOriginY" value="${g('fGenOriginY','')}" placeholder="NULL"></div>
-      <div class="fg"><div class="fl">Origin Z</div><input type="text" id="fGenOriginZ" value="${g('fGenOriginZ','')}" placeholder="NULL"></div>
-      <div class="fg"><div class="fl">Angles W</div><input type="text" id="fGenAngW" value="${g('fGenAngW','')}" placeholder="NULL"></div>
-      <div class="fg"><div class="fl">Angles X</div><input type="text" id="fGenAngX" value="${g('fGenAngX','')}" placeholder="NULL"></div>
-      <div class="fg"><div class="fl">Angles Y</div><input type="text" id="fGenAngY" value="${g('fGenAngY','')}" placeholder="NULL"></div>
-      <div class="fg"><div class="fl">Angles Z</div><input type="text" id="fGenAngZ" value="${g('fGenAngZ','')}" placeholder="NULL"></div>
-    </div></div>`;
+  const timeType = g('fGenTimeType','1');
+  const isEvent  = timeType==='3';
+  const isTimed  = timeType==='4';
+  const isEventOrTimed = isEvent||isTimed;
+  const whereOpts=[[1,'Specific Location'],[2,'Scatter (random radius)'],[4,'Specific (coordinates)'],[72,'Contain (inside chest)']];
+  const whenOpts =[[1,'Always (respawn)'],[2,'On Destruction'],[3,'On Event'],[4,'On Generation']];
+  const timeOpts =[[1,'Always (standard respawn)'],[3,'Event-driven'],[4,'Timed interval'],[2,'Absolute']];
+  const wTypeOpts=[[7,'7 · Generator (standard)'],[1,'1 · Generic (event/timed)']];
+  const destrOpts=[[0,'0 · None'],[1,'1 · Destroy'],[2,'2 · Destroy Group']];
+  let h='';
+
+  h+='<div class="sec"><div class="sh"><div class="st">Generator Type</div>';
+  h+='<div class="sl">Controls how and when this generator fires</div></div>';
+  h+='<div class="grid g3">';
+  h+='<div class="fg"><div class="fl">Weenie Type <span class="fc">7=standard · 1=event/timed</span></div>';
+  h+='<select id="fGenWeenieType" oninput="regen()">'+opt(wTypeOpts,g('fGenWeenieType','7'))+'</select></div>';
+  h+='<div class="fg"><div class="fl">Time Type <span class="fc">controls spawn timing</span></div>';
+  h+='<select id="fGenTimeType" oninput="regen();rebuildPanel(curSub)">'+opt(timeOpts,timeType)+'</select></div>';
+  h+='<div class="fg"><div class="fl">Generator Name <span class="fc">class_Name</span></div>';
+  h+='<input type="text" id="fGenName" value="'+g('fGenName','')+'" placeholder="e.g. BossRaid1AddGen"></div>';
+  h+='</div></div>';
+
+  h+='<div class="sec"><div class="sh"><div class="st">Spawn Target</div>';
+  h+='<div class="sl">What this generator spawns</div></div>';
+  h+='<div class="grid g3">';
+  h+='<div class="fg"><div class="fl">Generator WCID <span class="fc">this weenie WCID</span></div>';
+  h+='<input type="text" id="fGenWcid" value="'+g('fGenWcid','')+'" placeholder="e.g. 802253"></div>';
+  h+='<div class="fg"><div class="fl">Target WCID <span class="fc">weenie to spawn</span></div>';
+  h+='<input type="text" id="fGenTargetWcid" value="'+g('fGenTargetWcid','')+'" placeholder="e.g. 800032"></div>';
+  h+='<div class="fg"><div class="fl">Probability <span class="fc">-1=always</span></div>';
+  h+='<input type="text" id="fGenProb" value="'+g('fGenProb','-1')+'" placeholder="-1"></div>';
+  h+='<div class="fg"><div class="fl">Init Create <span class="fc">spawn count on load</span></div>';
+  h+='<input type="text" id="fGenInit" value="'+g('fGenInit','1')+'"></div>';
+  h+='<div class="fg"><div class="fl">Max Create <span class="fc">max simultaneous</span></div>';
+  h+='<input type="text" id="fGenMax" value="'+g('fGenMax','1')+'"></div>';
+  h+='<div class="fg"><div class="fl">Stack Size <span class="fc">-1=default</span></div>';
+  h+='<input type="text" id="fGenStackSize" value="'+g('fGenStackSize','-1')+'"></div>';
+  h+='</div></div>';
+
+  h+='<div class="sec"><div class="sh"><div class="st">Timing &amp; Behavior</div><div class="sl"></div></div>';
+  h+='<div class="grid g3">';
+  h+='<div class="fg"><div class="fl">When Create <span class="fc">trigger condition</span></div>';
+  h+='<select id="fGenWhen" oninput="regen()">'+opt(whenOpts,g('fGenWhen','1'))+'</select></div>';
+  h+='<div class="fg"><div class="fl">Where Create <span class="fc">spawn placement</span></div>';
+  h+='<select id="fGenWhere" oninput="regen()">'+opt(whereOpts,g('fGenWhere','2'))+'</select></div>';
+  h+='<div class="fg"><div class="fl">Respawn Delay <span class="fc">seconds</span></div>';
+  h+='<input type="text" id="fGenRespawn" value="'+g('fGenRespawn','0')+'" placeholder="0"></div>';
+  h+='</div><div class="grid g3" style="margin-top:8px">';
+  h+='<div class="fg"><div class="fl">Regen Interval <span class="fc">float 41</span></div>';
+  h+='<input type="text" id="fGenRegenInterval" value="'+g('fGenRegenInterval','')+'" placeholder="e.g. 5.0"></div>';
+  h+='<div class="fg"><div class="fl">Generator Radius <span class="fc">float 43 — scatter range</span></div>';
+  h+='<input type="text" id="fGenRadius" value="'+g('fGenRadius','')+'" placeholder="e.g. 5.0"></div>';
+  h+='<div class="fg"><div class="fl">Initial Delay <span class="fc">float 121</span></div>';
+  h+='<input type="text" id="fGenInitDelay" value="'+g('fGenInitDelay','')+'" placeholder="e.g. 3.0"></div>';
+  h+='</div></div>';
+
+  if(isEventOrTimed){
+    h+='<div class="sec"><div class="sh"><div class="st">Destruction Settings</div>';
+    h+='<div class="sl">Required for Event and Timed generators</div></div>';
+    h+='<div class="grid g3">';
+    if(isEvent){
+      h+='<div class="fg"><div class="fl">Event Name <span class="fc">string 34 — GeneratorEvent</span></div>';
+      h+='<input type="text" id="fGenEventName" value="'+g('fGenEventName','')+'" placeholder="e.g. BossRaid1"></div>';
+    }
+    h+='<div class="fg"><div class="fl">Destruction Type <span class="fc">int 103</span></div>';
+    h+='<select id="fGenDestrType" oninput="regen()">'+opt(destrOpts,g('fGenDestrType','2'))+'</select></div>';
+    h+='<div class="fg"><div class="fl">End Destruction Type <span class="fc">int 145</span></div>';
+    h+='<select id="fGenEndDestrType" oninput="regen()">'+opt(destrOpts,g('fGenEndDestrType','2'))+'</select></div>';
+    h+='</div></div>';
+  }
+
+  h+='<div class="sec"><div class="sh"><div class="st">Placement Coordinates</div>';
+  h+='<div class="sl">Leave blank — fill in via spawn tool or set to 0</div></div>';
+  h+='<div class="grid g4">';
+  ['Cell:fGenCell','X:fGenOriginX','Y:fGenOriginY','Z:fGenOriginZ',
+   'W:fGenAngW','AngX:fGenAngX','AngY:fGenAngY','AngZ:fGenAngZ'].forEach(p=>{
+    const[label,id]=p.split(':');
+    const ph=label.startsWith('W')?'1':'0';
+    h+='<div class="fg"><div class="fl">'+label+'</div>';
+    h+='<input type="text" id="'+id+'" value="'+g(id,'')+'" placeholder="'+ph+'"></div>';
+  });
+  h+='</div></div>';
+
+  return h;
 }
 
 function buildRecipeProps(){
@@ -1863,37 +1928,92 @@ function buildSQL(){
 
   // ── GENERATOR ────────────────────────────────────────────────────────────────
   if(t==='generator'){
-    const targetWcid=gi('fGenTargetWcid',800000);
-    const genWcid=targetWcid+1000000;
-    const genName=g('fGenName','New Creature').toLowerCase().replace(/[^a-z0-9]+/g,'-')+'-gen';
-    const respawn=gi('fGenRespawn',300);
-    const initCreate=gi('fGenInit',1);
-    const maxCreate=gi('fGenMax',1);
-    const whenCreate=gi('fGenWhen',2);
-    const prob=gf('fGenProb',1.0);
-    const cell=g('fGenCell','')||'NULL';
-    const ox=g('fGenOriginX','')||'NULL';
-    const oy=g('fGenOriginY','')||'NULL';
-    const oz=g('fGenOriginZ','')||'NULL';
-    const aw=g('fGenAngW','')||'NULL';
-    const ax=g('fGenAngX','')||'NULL';
-    const ay=g('fGenAngY','')||'NULL';
-    const az=g('fGenAngZ','')||'NULL';
-    const whenNames={1:'Once',2:'Always',3:'Event',4:'Sleeping'};
-    const eventLabel=whenCreate===3&&g('fGenEventName','')?` /* Event: ${g('fGenEventName','')} */`:'';
-    const lines=[
-      `DELETE FROM \`weenie\` WHERE \`class_Id\` = ${genWcid};`,
-      '',
-      `INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)`,
-      `VALUES (${genWcid}, '${genName}', 7, '2025-01-01 00:00:00') /* Generator */;`,
-      '',
-      `INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)`,
-      `VALUES (${genWcid}, 93, 262144) /* PhysicsState - Hidden */`,
-      `     , (${genWcid}, 133, 4); /* ShowableOnRadar - ShowAlways */`,
-      '',
-      `INSERT INTO \`weenie_properties_generator\` (\`object_Id\`, \`probability\`, \`weenie_Class_Id\`, \`delay\`, \`init_Create\`, \`max_Create\`, \`when_Create\`, \`where_Create\`, \`stack_Size\`, \`palette_Id\`, \`shade\`, \`obj_Cell_Id\`, \`origin_X\`, \`origin_Y\`, \`origin_Z\`, \`angles_W\`, \`angles_X\`, \`angles_Y\`, \`angles_Z\`)`,
-      `VALUES (${genWcid}, ${prob}, ${targetWcid}, ${respawn}, ${initCreate}, ${maxCreate}, ${whenCreate} /* ${whenNames[whenCreate]||'Always'} */, 4 /* Specific */, -1, NULL, NULL, ${cell}, ${ox}, ${oy}, ${oz}, ${aw}, ${ax}, ${ay}, ${az});${eventLabel}`,
-    ];
+    const genWcid    = gi('fGenWcid',802253);
+    const targetWcid = gi('fGenTargetWcid',800000);
+    const genName    = g('fGenName','NewGen').replace(/[^a-zA-Z0-9]/g,'');
+    const weenieType = gi('fGenWeenieType',7);
+    const timeType   = gi('fGenTimeType',1);
+    const prob       = g('fGenProb','-1')||'-1';
+    const initCreate = gi('fGenInit',1);
+    const maxCreate  = gi('fGenMax',1);
+    const stackSize  = gi('fGenStackSize',-1);
+    const whenCreate = gi('fGenWhen',1);
+    const whereCreate= gi('fGenWhere',2);
+    const respawn    = gi('fGenRespawn',0);
+    const regenInt   = g('fGenRegenInterval','')||'';
+    const radius     = g('fGenRadius','')||'';
+    const initDelay  = g('fGenInitDelay','')||'';
+    const eventName  = g('fGenEventName','');
+    const destrType  = gi('fGenDestrType',2);
+    const endDestr   = gi('fGenEndDestrType',2);
+    const cell=g('fGenCell','')||'0';
+    const ox=g('fGenOriginX','')||'0';
+    const oy=g('fGenOriginY','')||'0';
+    const oz=g('fGenOriginZ','')||'0';
+    const aw=g('fGenAngW','')||'1';
+    const ax=g('fGenAngX','')||'0';
+    const ay=g('fGenAngY','')||'0';
+    const az=g('fGenAngZ','')||'0';
+    const isEvent = timeType===3;
+    const isTimed = timeType===4;
+    const timeNames={1:'Always',2:'Absolute',3:'Event',4:'Timed'};
+    const whenNames={1:'Always (respawn)',2:'On Destruction',3:'On Event',4:'On Generation'};
+    const whereNames={1:'Specific Location',2:'Scatter',4:'Specific',72:'Contain'};
+    const lines=[];
+    lines.push(`DELETE FROM \`weenie\` WHERE \`class_Id\` = ${genWcid};`);
+    lines.push('');
+    lines.push(`INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)`);
+    lines.push(`VALUES (${genWcid}, '${genName}', ${weenieType}, '2025-01-01 00:00:00') /* Generator */;`);
+    lines.push('');
+    // INT properties
+    const intProps=[[81,maxCreate,'MaxGeneratedObjects'],[82,initCreate,'InitGeneratedObjects'],[93,1044,'PhysicsState - Ethereal, IgnoreCollisions, Gravity']];
+    if(isEvent||isTimed) intProps.push([103,destrType,'GeneratorDestructionType'],[142,timeType,'GeneratorTimeType - '+timeNames[timeType]],[145,endDestr,'GeneratorEndDestructionType']);
+    else intProps.push([93,1044,'PhysicsState - Ethereal, IgnoreCollisions, Gravity']);
+    // Remove duplicates
+    const seen=new Set(); const deduped=intProps.filter(r=>{if(seen.has(r[0]))return false;seen.add(r[0]);return true;});
+    lines.push(`INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)`);
+    deduped.forEach((r,i)=>{
+      const comma=i<deduped.length-1?'':';';
+      const prefix=i===0?'VALUES ':'     , ';
+      lines.push(`${prefix}(${genWcid}, ${r[0]}, ${r[1]}) /* ${r[2]} */${comma}`);
+    });
+    lines.push('');
+    // BOOL
+    lines.push(`INSERT INTO \`weenie_properties_bool\` (\`object_Id\`, \`type\`, \`value\`)`);
+    lines.push(`VALUES (${genWcid},  1, True ) /* Stuck */`);
+    lines.push(`     , (${genWcid}, 11, True ) /* IgnoreCollisions */`);
+    lines.push(`     , (${genWcid}, 18, True ); /* Visibility */`);
+    lines.push('');
+    // FLOAT
+    const floatProps=[];
+    if(regenInt) floatProps.push([41,regenInt,'RegenerationInterval']);
+    if(radius)   floatProps.push([43,radius,'GeneratorRadius']);
+    if(initDelay)floatProps.push([121,initDelay,'GeneratorInitialDelay']);
+    if(floatProps.length){
+      lines.push(`INSERT INTO \`weenie_properties_float\` (\`object_Id\`, \`type\`, \`value\`)`);
+      floatProps.forEach((r,i)=>{
+        const comma=i<floatProps.length-1?'':';';
+        lines.push(`${i===0?'VALUES ':'     , '}(${genWcid}, ${r[0]}, ${r[1]}) /* ${r[2]} */${comma}`);
+      });
+      lines.push('');
+    }
+    // STRING - name + event
+    const strProps=[[1,genName,'Name']];
+    if(isEvent&&eventName) strProps.push([34,eventName,'GeneratorEvent']);
+    lines.push(`INSERT INTO \`weenie_properties_string\` (\`object_Id\`, \`type\`, \`value\`)`);
+    strProps.forEach((r,i)=>{
+      const comma=i<strProps.length-1?'':';';
+      lines.push(`${i===0?'VALUES ':'     , '}(${genWcid},  ${r[0]}, '${r[1]}') /* ${r[2]} */${comma}`);
+    });
+    lines.push('');
+    // DID
+    lines.push(`INSERT INTO \`weenie_properties_d_i_d\` (\`object_Id\`, \`type\`, \`value\`)`);
+    lines.push(`VALUES (${genWcid},   1,   33555051) /* Setup */`);
+    lines.push(`     , (${genWcid},   8,  100667494); /* Icon */`);
+    lines.push('');
+    // GENERATOR table
+    lines.push(`INSERT INTO \`weenie_properties_generator\` (\`object_Id\`, \`probability\`, \`weenie_Class_Id\`, \`delay\`, \`init_Create\`, \`max_Create\`, \`when_Create\`, \`where_Create\`, \`stack_Size\`, \`palette_Id\`, \`shade\`, \`obj_Cell_Id\`, \`origin_X\`, \`origin_Y\`, \`origin_Z\`, \`angles_W\`, \`angles_X\`, \`angles_Y\`, \`angles_Z\`)`);
+    lines.push(`VALUES (${genWcid}, ${prob}, ${targetWcid}, ${respawn}, ${initCreate}, ${maxCreate}, ${whenCreate} /* ${whenNames[whenCreate]||''} */, ${whereCreate} /* ${whereNames[whereCreate]||''} */, ${stackSize}, 0, 0, ${cell}, ${ox}, ${oy}, ${oz}, ${aw}, ${ax}, ${ay}, ${az});`);
     writeSQLOut(lines.join('\n'));
     return;
   }
@@ -2694,6 +2814,51 @@ window.addEventListener('ollama_setup', e=>{
   }
 });
 
+function checkForUpdate(){
+  if(!window.pywebview) return;
+  window.pywebview.api.check_for_update().then(r=>{
+    if(r.has_update){
+      const ov=document.getElementById('updateOverlay');
+      const msg=document.getElementById('updateMsg');
+      const notes=document.getElementById('updateNotes');
+      if(msg) msg.textContent='ACEForge '+r.latest_version+' is available (you have '+r.current_version+'). Would you like to update now?';
+      if(notes) notes.textContent=r.release_notes||'';
+      ov.style.display='flex';
+      ov._dlUrl=r.download_url;
+    }
+  });
+}
+
+function doUpdate(){
+  const ov=document.getElementById('updateOverlay');
+  const btn=document.getElementById('updateBtn');
+  const prog=document.getElementById('updateProgress');
+  if(btn) btn.disabled=true;
+  if(prog) prog.style.display='block';
+  if(!window.pywebview||!ov._dlUrl) return;
+  window.pywebview.api.download_and_install_update(ov._dlUrl).then(r=>{
+    if(!r.success){
+      if(btn) btn.disabled=false;
+      document.getElementById('updateProgressMsg').textContent='Error: '+r.error;
+    }
+  });
+}
+
+// Reuse ollama_setup events for update download progress
+window.addEventListener('ollama_setup',e=>{
+  const d=e.detail;
+  if(d.event==='download_progress'||d.event==='download_start'){
+    const bar=document.getElementById('updateProgressBar');
+    const msg=document.getElementById('updateProgressMsg');
+    if(bar&&d.total>0) bar.style.width=d.current+'%';
+    if(msg) msg.textContent=d.message;
+  }
+  if(d.event==='download_done'){
+    const msg=document.getElementById('updateProgressMsg');
+    if(msg) msg.textContent=d.message;
+  }
+});
+
 function openDiscord(){
   if(window.pywebview){
     window.pywebview.api.open_url('https://discord.gg/tfb6XUHVKz');
@@ -3015,6 +3180,9 @@ async function init(){
       refreshLibStatus();
       // Show API warning if not using local LLM
       _updateApiWarning(cfg);
+      // Check for app updates silently on startup
+      setTimeout(checkForUpdate, 3000);
+
       // Silently check Ollama — auto-launch if installed but not running
       if(window.pywebview){
         window.pywebview.api.check_ollama().then(s=>{
@@ -3047,6 +3215,30 @@ async function init(){
 window.addEventListener('pywebviewready',init);
 if(!window.pywebview)init();
 </script>
+<!-- UPDATE OVERLAY -->
+<div id="updateOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;align-items:center;justify-content:center">
+  <div style="background:var(--parch);border:1px solid var(--gold);border-radius:4px;width:480px;box-shadow:0 8px 40px rgba(0,0,0,.6)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
+      <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;letter-spacing:.1em;color:var(--gold)">⬆ UPDATE AVAILABLE</div>
+      <button onclick="document.getElementById('updateOverlay').style.display='none'" style="background:none;border:none;font-size:16px;cursor:pointer;color:var(--ink-dim)">✕</button>
+    </div>
+    <div style="padding:20px">
+      <p id="updateMsg" style="font-family:'IM Fell English',serif;font-style:italic;font-size:13px;color:var(--ink-dim);margin-bottom:14px;line-height:1.6"></p>
+      <pre id="updateNotes" style="font-family:'Source Code Pro',monospace;font-size:10px;color:var(--ink-dim);background:var(--parch-dk);border:1px solid var(--border);padding:10px;border-radius:2px;max-height:120px;overflow-y:auto;white-space:pre-wrap;margin-bottom:16px"></pre>
+      <div id="updateProgress" style="display:none;margin-bottom:12px">
+        <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);margin-bottom:4px" id="updateProgressMsg">Downloading…</div>
+        <div style="background:var(--parch-dk);border:1px solid var(--border);border-radius:2px;height:6px">
+          <div id="updateProgressBar" style="background:var(--gold);height:100%;width:0%;transition:width .3s"></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button id="updateBtn" class="top-btn" onclick="doUpdate()" style="background:var(--gold);border-color:var(--gold);color:#1a1200;padding:8px 20px;font-size:11px">⬆ Update Now</button>
+        <button class="top-btn" onclick="document.getElementById('updateOverlay').style.display='none'" style="padding:8px 14px;font-size:11px;background:transparent">Later</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- OLLAMA SETUP OVERLAY -->
 <div id="ollamaOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:300;align-items:center;justify-content:center">
   <div style="background:var(--parch);border:1px solid var(--border);border-radius:4px;width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.6)">

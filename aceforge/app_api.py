@@ -418,6 +418,127 @@ class AppAPI:
 
         return {"success": True}
 
+    # ── Auto-Update ────────────────────────────────────────────────────────────
+
+    APP_VERSION = "1.9.2"
+    GITHUB_REPO = "shemtar-90/AceForge"
+
+    def check_for_update(self) -> dict:
+        """
+        Check GitHub releases API for a newer version.
+        Returns {has_update, latest_version, current_version, download_url, release_notes}
+        """
+        import urllib.request, json as _json
+        try:
+            url = f"https://api.github.com/repos/{self.GITHUB_REPO}/releases/latest"
+            req = urllib.request.Request(url, headers={"User-Agent": "ACEForge-Updater/1.0"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = _json.loads(resp.read())
+            
+            latest_tag  = data.get("tag_name", "").lstrip("v")
+            release_name = data.get("name", latest_tag)
+            body        = data.get("body", "")[:500]
+            
+            # Find the main zip asset
+            assets = data.get("assets", [])
+            dl_url = next(
+                (a["browser_download_url"] for a in assets
+                 if a["name"].lower().endswith(".zip") and "weenie" not in a["name"].lower()
+                 and "icon" not in a["name"].lower()),
+                data.get("zipball_url", "")
+            )
+            
+            # Semantic version compare
+            def vparse(v):
+                try: return tuple(int(x) for x in v.split("."))
+                except: return (0,)
+            
+            has_update = vparse(latest_tag) > vparse(self.APP_VERSION)
+            
+            return {
+                "has_update":      has_update,
+                "current_version": self.APP_VERSION,
+                "latest_version":  latest_tag,
+                "release_name":    release_name,
+                "release_notes":   body,
+                "download_url":    dl_url,
+            }
+        except Exception as e:
+            return {"has_update": False, "error": str(e), "current_version": self.APP_VERSION}
+
+    def download_and_install_update(self, download_url: str) -> dict:
+        """
+        Download the new release zip, extract it over the current install,
+        then restart the application.
+        """
+        import urllib.request, zipfile, shutil, sys, os
+        from pathlib import Path
+
+        if not download_url:
+            return {"success": False, "error": "No download URL provided"}
+
+        try:
+            # Determine install root (where ACEForge.exe or main.py lives)
+            if hasattr(sys, "_MEIPASS"):
+                install_root = Path(sys.executable).parent
+            else:
+                install_root = Path(__file__).parent.parent
+
+            tmp_zip = install_root / "_update_download.zip"
+            tmp_dir = install_root / "_update_extract"
+
+            # Download with progress
+            self._ollama_event("download_start", "Downloading update…", 0, 0)
+
+            def on_progress(block, block_size, total):
+                if total > 0:
+                    pct = min(100, int(block * block_size * 100 / total))
+                    mb  = round(block * block_size / 1024 / 1024, 1)
+                    mbt = round(total / 1024 / 1024, 1)
+                    self._ollama_event("download_progress",
+                        f"Downloading update… {mb} MB / {mbt} MB", pct, 100)
+
+            urllib.request.urlretrieve(download_url, str(tmp_zip), on_progress)
+            self._ollama_event("download_done", "Extracting update…", 100, 100)
+
+            # Extract
+            if tmp_dir.exists():
+                shutil.rmtree(tmp_dir)
+            with zipfile.ZipFile(tmp_zip, "r") as zf:
+                zf.extractall(tmp_dir)
+
+            # Copy new files over install root
+            # Zip should have ACEForge/ at root
+            src_root = next(
+                (tmp_dir / d for d in os.listdir(tmp_dir)
+                 if (tmp_dir / d).is_dir()), tmp_dir
+            )
+            for item in os.listdir(src_root):
+                s = src_root / item
+                d = install_root / item
+                if s.is_dir():
+                    if d.exists():
+                        shutil.rmtree(d)
+                    shutil.copytree(s, d)
+                else:
+                    shutil.copy2(s, d)
+
+            # Cleanup
+            tmp_zip.unlink(missing_ok=True)
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+            # Restart
+            self._ollama_event("download_done", "Update installed! Restarting…", 100, 100)
+            import threading, time
+            def _restart():
+                time.sleep(1.5)
+                os.execl(sys.executable, sys.executable, *sys.argv)
+            threading.Thread(target=_restart, daemon=True).start()
+            return {"success": True, "message": "Update installed. Restarting…"}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def open_url(self, url: str) -> dict:
         """Open a URL in the system default browser."""
         import webbrowser
