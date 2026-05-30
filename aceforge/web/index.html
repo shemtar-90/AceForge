@@ -322,7 +322,13 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
       </div>
       <div class="sf" id="sApiKeyField">
         <label class="sf-label">API Key</label>
-        <input type="password" id="sApiKey" placeholder="Paste your API key here" style="width:100%">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="password" id="sApiKey" placeholder="Paste your API key here" style="flex:1">
+          <span id="apiKeySavedBadge" style="display:none;font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--green);white-space:nowrap">✓ SAVED</span>
+        </div>
+        <div style="font-family:'IM Fell English',serif;font-style:italic;font-size:11px;color:var(--ink-faint);margin-top:3px">
+          Your key is stored locally in config.json and loaded automatically. Only paste a new key to change it.
+        </div>
       </div>
       <div class="sf">
         <label class="sf-label">Model</label>
@@ -735,7 +741,25 @@ function buildProps(){
         <div class="fg"><div class="fl">Weapon Skill <span class="fc">I-48</span></div><select id="fWepSkill">${opt(WEP_SKILLS,44)}</select></div>
         <div class="fg"><div class="fl">Combat Style <span class="fc">I-101</span></div><select id="fCombatStyle">${opt(COMBAT_STYLES,2)}</select></div>
         <div class="fg"><div class="fl">Attack Type <span class="fc">I-47</span></div><select id="fAttackType">${opt(ATTACK_TYPES,4)}</select></div>
-        <div class="fg"><div class="fl">Death Treasure <span class="fc">DID-35</span></div><input type="number" id="fTreasureTier" value="3100"></div>
+        <div class="fg"><div class="fl">Death Treasure <span class="fc">DID-35</span></div>
+        <select id="fTreasureTier" oninput="regen()">
+          <option value="0">0 · None</option>
+          <option value="3098">3098 · Tier 1</option>
+          <option value="3099">3099 · Tier 2</option>
+          <option value="3100" selected>3100 · Tier 3</option>
+          <option value="3101">3101 · Tier 4</option>
+          <option value="3102">3102 · Tier 5</option>
+          <option value="3103">3103 · Tier 6</option>
+          <option value="3104">3104 · Tier 7</option>
+          <option value="3105">3105 · Tier 8</option>
+          <option value="3106">3106 · Tier 9</option>
+          <option value="3107">3107 · Tier 10</option>
+          <option value="3108">3108 · Tier 11</option>
+          <option value="3109">3109 · Tier 12</option>
+          <option value="3110">3110 · Tier 13</option>
+          <option value="3111">3111 · Tier 14</option>
+          <option value="2000">2000 · Custom Tier A</option>
+        </select></div>
       </div></div>
       <div class="sec"><div class="sh"><div class="st">Resistances</div><div class="sl"></div></div>
       <div class="rg">${[['Slash','rSlash'],['Pierce','rPierce'],['Bludge','rBludge'],['Cold','rCold'],['Fire','rFire'],['Acid','rAcid'],['Elec','rElec'],['Nether','rNether']].map(([l,id])=>`<div class="fg"><div class="fl">${l} <span class="fc">F</span></div><input type="text" id="${id}" value="1.0"></div>`).join('')}</div></div>
@@ -3106,7 +3130,9 @@ function openSettings(){
       const autoOpen=$('sAutoOpen');
       if(autoOpen) autoOpen.checked=(cfg.auto_open_folder!==false);
       setV('sBaseUrl',cfg.base_url||'');
-      $('sApiKey').placeholder=cfg.api_key_set?'(already set — paste to change)':$('sApiKey').placeholder;
+      $('sApiKey').placeholder=cfg.api_key_set?'(already set — paste new key to change)':'Paste your API key here';
+      const savedBadge=$('apiKeySavedBadge');
+      if(savedBadge) savedBadge.style.display=cfg.api_key_set?'inline':'none';
       setV('sServerName',cfg.server_name||'Server Name');
       setV('sAuthor',cfg.author||'');
       setV('sOutputDir',cfg.output_dir||'');
