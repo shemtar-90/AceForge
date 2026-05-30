@@ -1451,7 +1451,7 @@ function buildEmotesTab(){
 
 function rebuildPanel(sub){
   // Rebuild a single sub-panel in-place without touching other panels
-  const panels=document.querySelectorAll('[data-sub="'+sub+'"');  const panel=panels[panels.length-1]||null;
+  const panels=document.querySelectorAll('[data-sub="'+sub+'"]');  const panel=panels[panels.length-1]||null;
   if(!panel) return;
   const builders={properties:buildProps,attributes:buildAttrs,skills:buildSkills,spellbook:buildSpellbook,bodyparts:buildBodyPartsTab,emotes:buildEmotesTab,advanced:buildAdvanced};
   panel.innerHTML=(builders[sub]||buildProps)();
@@ -1813,14 +1813,18 @@ function _buildActionFields(fdefs, a, i, j, aType){
     const statSel=buildSearchSelect(`ea_stat_${ii}_${jj}`,stats,a.stat||'',oninput,'Search stats…');
     const valFd=fdefs.find(f=>f.f==='wcid'||f.f==='amount'||f.f==='stackSize');
     const valHtml=valFd?'<div class="fg"><div class="fl">Value</div><input type="text" value="'+(a[valFd.f]||'')+'" placeholder="e.g. 1" oninput="emotes['+ii+'].actions['+jj+'][\''+valFd.f+'\']=this.value;regen()"></div>':'';
-    return '<div class="fg" style="grid-column:span 2"><div class="fl">'+label+'</div>'+statSel+'</div>'+valHtml;
+    const isInqT=[35,36,37,38,39,40,41,42,43,44,45,46,114].includes(aType);
+    const mmHtml=isInqT?
+      '<div class="fg"><div class="fl">Min</div><input type="number" value="'+(a.min||0)+'" placeholder="0" oninput="emotes['+ii+'].actions['+jj+'].min=this.value;regen()"></div>'+
+      '<div class="fg"><div class="fl">Max</div><input type="number" value="'+(a.max||1)+'" placeholder="1" oninput="emotes['+ii+'].actions['+jj+'].max=this.value;regen()"></div>':'';
+    return '<div class="fg" style="grid-column:span '+(isInqT?3:2)+'"><div class="fl">'+label+'</div>'+statSel+'</div>'+mmHtml+valHtml;
   }
 
   // Quest name + value: IncrementQuest, DecrementQuest
   if(aType===33||aType===32){
     const label=aType===33?'IncrementQuest':'DecrementQuest';
     return '<div class="fg" style="grid-column:span 2"><div class="fl">Quest Name</div>'+
-      '<input type="text" value="'+(a.questFlag||'')+'" placeholder="e.g. FreddieFlowerQuest" oninput="emotes['+ii+'].actions['+jj+'].testString=this.value;regen()"></div>'+
+      '<input type="text" value="'+(a.testString||'')+'" placeholder="e.g. FreddieFlowerQuest" oninput="emotes['+ii+'].actions['+jj+'].testString=this.value;regen()"></div>'+
       '<div class="fg"><div class="fl">Value</div>'+
       '<input type="number" value="'+(a.amount||1)+'" placeholder="1" oninput="emotes['+ii+'].actions['+jj+'].amount=this.value;regen()"></div>';
   }
@@ -1829,22 +1833,31 @@ function _buildActionFields(fdefs, a, i, j, aType){
   if(aType===58||aType===60||aType===61){
     const labels={58:'InqFellowQuest',60:'UpdateFellowQuest',61:'StampFellowQuest'};
     return '<div class="fg" style="grid-column:span 3"><div class="fl">Quest Name</div>'+
-      '<input type="text" value="'+(a.questFlag||'')+'" placeholder="e.g. FreddieFlowerQuest" oninput="emotes['+ii+'].actions['+jj+'].testString=this.value;regen()"></div>';
+      '<input type="text" value="'+(a.testString||'')+'" placeholder="e.g. FreddieFlowerQuest" oninput="emotes['+ii+'].actions['+jj+'].testString=this.value;regen()"></div>';
   }
 
   // SetQuestCompletions: quest name + completions value
   if(aType===70){
     return '<div class="fg" style="grid-column:span 2"><div class="fl">Quest Name</div>'+
-      '<input type="text" value="'+(a.questFlag||'')+'" placeholder="e.g. FreddieFlowerQuest" oninput="emotes['+ii+'].actions['+jj+'].testString=this.value;regen()"></div>'+
+      '<input type="text" value="'+(a.testString||'')+'" placeholder="e.g. FreddieFlowerQuest" oninput="emotes['+ii+'].actions['+jj+'].testString=this.value;regen()"></div>'+
       '<div class="fg"><div class="fl">Completions</div>'+
       '<input type="number" value="'+(a.amount||1)+'" placeholder="1" oninput="emotes['+ii+'].actions['+jj+'].amount=this.value;regen()"></div>';
   }
 
-  // Value + delay only: InqNumCharacterTitles, InqPackSpace, SpendLuminance, AwardLuminance
-  if(aType===71||aType===89||aType===112||aType===113){
-    const labels={71:'Min Titles',89:'Pack Space Required',112:'Luminance to Spend',113:'Luminance to Award'};
-    return '<div class="fg" style="grid-column:span 3"><div class="fl">'+(labels[aType]||'Value')+'</div>'+
-      '<input type="number" value="'+(a.amount||'')+'" placeholder="e.g. 1" oninput="emotes['+ii+'].actions['+jj+'].amount=this.value;regen()"></div>';
+  // InqNumCharacterTitles, InqPackSpace — min/max range
+  if(aType===71||aType===89){
+    const lbl={71:'Character Titles',89:'Pack Space'}[aType];
+    return '<div class="fg"><div class="fl">'+lbl+' Min</div>'+
+      '<input type="number" value="'+(a.min||0)+'" placeholder="0" oninput="emotes['+ii+'].actions['+jj+'].min=this.value;regen()"></div>'+
+      '<div class="fg"><div class="fl">'+lbl+' Max</div>'+
+      '<input type="number" value="'+(a.max||99)+'" placeholder="99" oninput="emotes['+ii+'].actions['+jj+'].max=this.value;regen()"></div>';
+  }
+
+  // SpendLuminance, AwardLuminance — single value (heroXP64)
+  if(aType===112||aType===113){
+    const lbl={112:'Luminance to Spend',113:'Luminance to Award'}[aType];
+    return '<div class="fg" style="grid-column:span 3"><div class="fl">'+lbl+'</div>'+
+      '<input type="number" value="'+(a.heroXP64||'')+'" placeholder="e.g. 5000" oninput="emotes['+ii+'].actions['+jj+'].heroXP64=this.value;regen()"></div>';
   }
 
   // InqYesNo — shows sub-note
