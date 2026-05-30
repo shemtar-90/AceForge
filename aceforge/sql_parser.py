@@ -90,6 +90,15 @@ def format_sql(sql: str) -> str:
     # Normalize line endings
     sql = sql.replace("\r\n", "\n").replace("\r", "\n")
 
+    # ── Strip AI-generated summary blocks ─────────────────────────────────────
+    # Remove /* ===== SUMMARY ... ===== END SUMMARY ===== */ blocks
+    sql = re.sub(
+        r"/\*\s*=+\s*SUMMARY\s*=+.*?=+\s*END SUMMARY\s*=+\s*\*/",
+        "",
+        sql,
+        flags=re.DOTALL | re.IGNORECASE,
+    ).strip()
+
     # ── Fix 1: Un-wrap INSERT INTO column lists that span multiple lines ──────
     # Targets weenie_properties_body_part and weenie_properties_emote_action
     # which must have all columns on ONE line per the ACE schema spec.

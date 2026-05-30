@@ -346,3 +346,101 @@ VALUES (WCID, 1, 0x02000003) /* Setup - Generic Human Male */
      , (WCID, 8, 0x06001036); /* Icon */
 ```
 
+
+---
+
+## Lottery / Random Reward NPC Pattern
+
+A lottery NPC accepts payment items and randomly awards prizes. Uses the `probability` field on `weenie_properties_emote` rows to create weighted random outcomes.
+
+### Key Rules for Lottery NPCs
+
+1. **Two separate `Refuse (category=1)` rows** — one per accepted currency item (e.g. MMD Trade Note and Gold Letter). Both route into the same timer/prize chain.
+2. **Multiple prize emotes with probabilities that sum to 1.0** — ACE evaluates them in order; the first one whose random roll succeeds fires.
+3. **Always check a timer first** using `InqQuest` — prevents players from spamming the lottery.
+4. **Stamp the timer after reward** using `StampQuest`.
+5. **`TakeItems (74)`** must remove the payment item BEFORE awarding the prize.
+
+### Probability System in ACE
+
+When multiple `weenie_properties_emote` rows share the same `category` and `quest` filter, ACE picks ONE by rolling a random number. Probabilities are evaluated sequentially — first match wins.
+
+For equal odds across N prizes: each probability = `1.0 / N`
+For weighted odds: assign probabilities that sum to 1.0 (e.g. 0.50, 0.30, 0.15, 0.05)
+
+### Accepting Multiple Currency Items
+
+Use TWO separate `Refuse (category=1)` emotes — one per acceptable item — both routing into the same quest chain:
+
+```sql
+/* Accepts MMD Trade Note (WCID 273) */
+INSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)
+VALUES (WCID, 1 /* Refuse */, 1, 273 /* MMD Trade Note */, NULL, NULL, NULL, NULL, NULL, NULL);
+SET @parent_id = LAST_INSERT_ID();
+INSERT INTO `weenie_properties_emote_action` (...)
+VALUES (@parent_id, 0, 21 /* InqQuest */, 0, 1, NULL, 'LotteryTimer@1', ...);
+
+/* Accepts Gold Letter (WCID XXXXX) — same chain */
+INSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)
+VALUES (WCID, 1 /* Refuse */, 1, GOLD_LETTER_WCID, NULL, NULL, NULL, NULL, NULL, NULL);
+SET @parent_id = LAST_INSERT_ID();
+INSERT INTO `weenie_properties_emote_action` (...)
+VALUES (@parent_id, 0, 21 /* InqQuest */, 0, 1, NULL, 'LotteryTimer@1', ...);
+```
+
+### Prize Selection via Probability
+
+After the timer check passes, use multiple `QuestSuccess` emotes with different probabilities. Each holds a different prize chain:
+
+```sql
+/* Prize A — 50% chance */
+INSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)
+VALUES (WCID, 12 /* QuestSuccess */, 0.50, NULL, NULL, NULL, 'LotteryTimer@1', NULL, NULL, NULL);
+SET @parent_id = LAST_INSERT_ID();
+INSERT INTO `weenie_properties_emote_action` (...)
+VALUES (@parent_id, 0, 74 /* TakeItems */, 0, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, PAYMENT_WCID, 1, ...)
+     , (@parent_id, 1, 10 /* Tell */, 0, 1, NULL, 'Lucky you! Here''s your prize!', ...)
+     , (@parent_id, 2, 3 /* Give */, 0, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, PRIZE_A_WCID, 1, ...)
+     , (@parent_id, 3, 22 /* StampQuest */, 0, 1, NULL, 'LotteryTimer, 1', ...);
+
+/* Prize B — 30% chance */
+INSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)
+VALUES (WCID, 12 /* QuestSuccess */, 0.30, NULL, NULL, NULL, 'LotteryTimer@1', NULL, NULL, NULL);
+SET @parent_id = LAST_INSERT_ID();
+/* ... TakeItems, Tell, Give PRIZE_B, StampQuest ... */
+
+/* Prize C — 15% chance */
+INSERT INTO `weenie_properties_emote` (...)
+VALUES (WCID, 12 /* QuestSuccess */, 0.15, NULL, NULL, NULL, 'LotteryTimer@1', NULL, NULL, NULL);
+/* ... */
+
+/* Prize D (consolation) — 5% chance */
+INSERT INTO `weenie_properties_emote` (...)
+VALUES (WCID, 12 /* QuestSuccess */, 0.05, NULL, NULL, NULL, 'LotteryTimer@1', NULL, NULL, NULL);
+/* ... */
+```
+
+### Timer Already Active (on cooldown)
+
+```sql
+INSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)
+VALUES (WCID, 13 /* QuestFailure */, 1, NULL, NULL, NULL, 'LotteryTimer@1', NULL, NULL, NULL);
+SET @parent_id = LAST_INSERT_ID();
+INSERT INTO `weenie_properties_emote_action` (...)
+VALUES (@parent_id, 0, 10 /* Tell */, 0, 1, NULL, 'The lottery resets daily. Come back tomorrow!', ...);
+```
+
+### Required Quest Flags for Lottery NPC
+
+- `LotteryTimer` — daily/weekly cooldown flag
+- `LotteryTimerStart` — optional: tracks total plays
+
+### TakeItems (type=74) Parameters
+
+| Field | Value |
+|-------|-------|
+| `type` | 74 |
+| `weenie_Class_Id` | WCID of item to take |
+| `stack_Size` | quantity to take (e.g. 1) |
+| All other fields | NULL |
+

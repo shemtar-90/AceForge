@@ -98,12 +98,12 @@ select option{background:#fff;color:#2a1e0a}
 .add-btn:hover{border-color:var(--crimson);color:var(--crimson)}
 .del{font-size:16px;color:var(--crimson-lt);background:none;border:none;cursor:pointer;opacity:.6;padding:0 3px;line-height:1;font-weight:700}
 .del:hover{opacity:1}
-.emote-block{border:1px solid var(--border-lt);margin-bottom:10px;background:var(--parch)}
-.emote-hdr{padding:8px 12px;background:var(--parch-dk);display:flex;align-items:center;gap:8px;cursor:pointer}
+.emote-block{border-radius:3px;margin-bottom:14px;background:var(--parch)}
+.emote-hdr{padding:9px 14px;background:var(--parch-dk);display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.emote-hdr:hover{background:rgba(200,184,152,.5)}
 .emote-hdr-title{font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);flex:1}
-.emote-body{padding:10px 12px;display:none}
+.emote-body{display:none}
 .emote-body.open{display:block}
-.emote-action-row{display:grid;grid-template-columns:24px 160px 1fr 90px 90px 28px;gap:6px;align-items:end;margin-bottom:6px;padding:4px;background:rgba(200,184,152,.1);border-left:2px solid var(--border)}
 .bp-wrap{overflow-x:auto}
 table.bp{width:100%;border-collapse:collapse;font-size:13px}
 table.bp th{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim);text-align:left;padding:4px 4px;border-bottom:1px solid var(--border);white-space:nowrap}
@@ -1294,75 +1294,158 @@ function buildBodyPartsTab(){
 
 // ── EMOTES ────────────────────────────────────────────────────────────────────
 function buildEmotesTab(){
+  const t=curType;
+  const hasEmotes=['creature','npc','item','weapon','armor','jewelry'].includes(t);
+  if(!hasEmotes) return '<div class="sec"><p class="note">Emotes are not applicable for this content type.</p></div>';
+  const blocks=emotes.map((em,i)=>buildEmoteBlock(em,i)).join('');
   return `<div class="sec">
-    <div class="sh"><div class="st">Emote Chains</div><div class="sl"></div></div>
-    <p class="note" style="margin-bottom:10px">Each emote has a category, optional filters, and a list of ordered actions. Click headers to expand/collapse.</p>
-    <div id="emoteBlocks">${emotes.map((em,i)=>buildEmoteBlock(em,i)).join('')}</div>
-    <button class="add-btn" onclick="addEmote()">+ Add Emote Block</button>
+    <div class="sh"><div class="st">Emote Chain Builder</div><div class="sl"></div></div>
+    <p style="font-family:'IM Fell English',serif;font-style:italic;font-size:13px;color:var(--ink-dim);margin-bottom:16px;line-height:1.6">
+      Each <strong style="font-style:normal">Trigger</strong> fires independently based on its category and filters.
+      <strong style="font-style:normal">Responses</strong> execute in order when the trigger fires.
+      Only add emotes when this NPC or item requires interaction logic.
+    </p>
+    <div id="emoteBlocks">${blocks}</div>
+    <button class="add-btn" onclick="addEmote()">+ Add Trigger</button>
   </div>`;
 }
+
+// ── Emote action field definitions ───────────────────────────────────────────
+// Only the fields relevant to each action type are shown.
+const EA_FIELDS = {
+  10:  [{f:'message',   l:'Message',              ph:'What the NPC says privately to the player'}],
+  8:   [{f:'message',   l:'Broadcast Message',     ph:'Visible to nearby players'}],
+  16:  [{f:'message',   l:'World Broadcast',        ph:'Visible to the entire server'}],
+  21:  [{f:'message',   l:'Quest String',           ph:'QuestName@MinValue    e.g. FreddieFlowerQuest@2'}],
+  22:  [{f:'message',   l:'Quest Stamp',            ph:'QuestName, Value    e.g. FreddieFlowerQuest, 1'}],
+  30:  [{f:'message',   l:'Quest Name',             ph:'QuestName'},  {f:'min',l:'Min Solves',ph:'0'}, {f:'max',l:'Max Solves',ph:'1'}],
+  31:  [{f:'message',   l:'Quest to Erase',         ph:'QuestName'}],
+  32:  [{f:'testString',l:'Goto Set Name',          ph:'Label for the target emote set'}],
+  67:  [{f:'testString',l:'Goto Label',             ph:'Label name'}],
+  3:   [{f:'wcid',      l:'Item WCID to Give',      ph:'e.g. 20630'}, {f:'stackSize',l:'Stack Size',ph:'1'}],
+  74:  [{f:'wcid',      l:'Item WCID to Take',      ph:'e.g. 810063'}, {f:'stackSize',l:'Quantity to Take',ph:'1'}],
+  76:  [{f:'wcid',      l:'Item WCID to Check',     ph:'e.g. 810063'}, {f:'stackSize',l:'Quantity Required',ph:'5'}, {f:'testString',l:'Check Label',ph:'OwnsItem-810063_1'}],
+  49:  [{f:'percent',   l:'XP Percent',             ph:'0.0 – 1.0    e.g. 0.15 = 15% of level-appropriate XP'}],
+  113: [{f:'heroXP64',  l:'Luminance Amount',        ph:'e.g. 5000'}],
+  2:   [{f:'amount64',  l:'XP Amount (flat)',        ph:'e.g. 1000000'}],
+  14:  [{f:'spellId',   l:'Spell ID',               ph:'e.g. 2345'}],
+  19:  [{f:'spellId',   l:'Spell ID (instant)',      ph:'e.g. 2345'}],
+  5:   [{f:'motion',    l:'Motion ID',              ph:'e.g. 131072'}],
+  15:  [{f:'message',   l:'Activation String',      ph:'optional'}],
+};
+const EA_DEFAULT = [{f:'message',l:'Message / Quest String',ph:''},{f:'testString',l:'Test String',ph:'optional'}];
+
+const EA_HINTS = {
+  10:'Private message to the interacting player.',
+  8:'Local broadcast — visible to nearby players.',
+  16:'World broadcast — visible server-wide.',
+  21:'Check quest flag. Branches to QuestSuccess / QuestFailure emotes.',
+  22:'Stamp (set) a quest flag. Format: QuestName, Value',
+  30:'Check how many times a quest has been completed. Branches Success / Failure.',
+  31:'Erase (remove) a quest flag completely.',
+  32:'Jump execution to another emote set by label name.',
+  67:'Goto a specific emote label.',
+  3:'Give an item directly to the player.',
+  74:'Remove items from the player\'s inventory.',
+  76:'Check if player owns enough of an item. Branches to TestSuccess / TestFailure.',
+  49:'Award XP proportional to player level. 0.15 = 15% of level-appropriate amount.',
+  113:'Award Luminance points.',
+  2:'Award a flat XP amount.',
+  14:'Cast a spell on the player.',
+  19:'Cast a spell on the player instantly.',
+  5:'Play an animation/motion on the NPC.',
+  15:'Activate something.',
+};
+
+const EMOTE_CAT_COLORS = {
+  1:'#8a3a3a',  // Refuse — red
+  2:'#3a5a8a',  // Vendor — blue
+  7:'#3a7a5a',  // Use — green
+  12:'#5a7a3a', // QuestSuccess — olive
+  13:'#7a5a3a', // QuestFailure — amber
+  22:'#5a3a8a', // TestSuccess — purple
+  23:'#8a5a3a', // TestFailure — brown
+};
 
 function buildEmoteBlock(em,i){
-  const catName=lookupName(EMOTE_CATS,em.category||7);
-  const actions=(em.actions||[]).map((a,j)=>`
-    <div style="border:1px solid var(--border-lt);padding:10px;margin-bottom:8px;background:rgba(200,184,152,.05)">
-      <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px">
-        <span style="font-family:'Source Code Pro',monospace;font-size:10px;font-weight:700;color:var(--ink-dim);padding-top:18px;min-width:28px">[${j}]</span>
-        <div class="fg"><div class="fl">Type</div><select id="ea_t_${i}_${j}" onchange="emotes[${i}].actions[${j}].type=this.value;regen()">${opt(EMOTE_TYPES,a.type||10)}</select></div>
-        <button class="del" onclick="emotes[${i}].actions.splice(${j},1);rebuildPanel('emotes')" style="padding-top:16px">✕</button>
+  const catVal    = parseInt(em.category)||7;
+  const catName   = lookupName(EMOTE_CATS,catVal);
+  const isVendor  = catVal===2;
+  const isRefuse  = catVal===1;
+  const catColor  = EMOTE_CAT_COLORS[catVal]||'#4a4a4a';
+  const summary   = (em.questFilter?` · quest: ${em.questFilter}`:'') + ((em.wcidFilter&&em.wcidFilter!=='')?' · item: '+em.wcidFilter:'');
+
+  // ── Trigger settings row ───────────────────────────────────────────────────
+  const triggerSettings = `
+    <div class="grid g3" style="margin-bottom:10px">
+      <div class="fg"><div class="fl">Category</div>
+        <select onchange="emotes[${i}].category=parseInt(this.value);rebuildPanel('emotes')">${opt(EMOTE_CATS,catVal)}</select></div>
+      <div class="fg"><div class="fl">Probability <span class="fc">0.0 – 1.0</span></div>
+        <input type="text" value="${em.prob||1}" oninput="emotes[${i}].prob=this.value;regen()"></div>
+      <div class="fg"><div class="fl">${isRefuse?'Item WCID <span class="fc">fires for this item</span>':'Item WCID Filter <span class="fc">blank = any</span>'}</div>
+        <input type="number" value="${em.wcidFilter||''}" placeholder="${isRefuse?'required':'0 = any'}" oninput="emotes[${i}].wcidFilter=this.value;regen()"></div>
+      <div class="fg" style="grid-column:span ${isVendor?2:3}">
+        <div class="fl">Quest Filter <span class="fc">blank = none · add @N to check flag ≥ N</span></div>
+        <input type="text" value="${em.questFilter||''}" placeholder="e.g. FreddieFlowerQuest@2  or  OwnsItem-810063_check" oninput="emotes[${i}].questFilter=this.value;regen()"></div>
+      ${isVendor?`<div class="fg"><div class="fl">Vendor Type</div>
+        <select onchange="emotes[${i}].vendorType=this.value;regen()">${opt([[1,'Open'],[2,'Close'],[3,'Sell'],[4,'Buy'],[5,'No Buy']],em.vendorType||1)}</select></div>`:''}
+    </div>`;
+
+  // ── Response rows ──────────────────────────────────────────────────────────
+  const responses = (em.actions||[]).map((a,j)=>{
+    const aType   = parseInt(a.type)||10;
+    const aName   = lookupName(EMOTE_TYPES,aType);
+    const hint    = EA_HINTS[aType]||'';
+    const fdefs   = EA_FIELDS[aType]||EA_DEFAULT;
+    const fhtml   = fdefs.map(fd=>`
+      <div class="fg">
+        <div class="fl">${fd.l}</div>
+        <input type="text" value="${String(a[fd.f]||'').replace(/"/g,'&quot;')}"
+          placeholder="${fd.ph}"
+          oninput="emotes[${i}].actions[${j}]['${fd.f}']=this.value;regen()">
+      </div>`).join('');
+    const delayFld = `<div class="fg" style="max-width:80px"><div class="fl">Delay s</div>
+      <input type="text" value="${a.delay||0}" oninput="emotes[${i}].actions[${j}].delay=this.value;regen()"></div>`;
+    return `
+      <div style="display:flex;gap:0;margin-bottom:6px">
+        <div style="display:flex;align-items:center;justify-content:center;min-width:28px;font-family:'Source Code Pro',monospace;font-size:9px;font-weight:700;color:var(--ink-faint);background:var(--parch-dk);border:1px solid var(--border-lt);border-right:none;padding:4px 0">${j}</div>
+        <div style="flex:1;border:1px solid var(--border-lt);padding:10px 12px;background:rgba(200,184,152,.04)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <div class="fg" style="max-width:180px">
+              <div class="fl">Response Type</div>
+              <select onchange="emotes[${i}].actions[${j}].type=parseInt(this.value);rebuildPanel('emotes')">${opt(EMOTE_TYPES,aType)}</select>
+            </div>
+            <div style="font-family:'IM Fell English',serif;font-style:italic;font-size:11px;color:var(--ink-dim);flex:1;padding-top:18px">${hint}</div>
+            ${j>0?`<button onclick="const a=emotes[${i}].actions;[a[${j}],a[${j-1}]]=[a[${j-1}],a[${j}]];rebuildPanel('emotes')" style="background:none;border:1px solid var(--border);color:var(--ink-dim);cursor:pointer;padding:2px 6px;font-size:11px;margin-top:14px" title="Move up">↑</button>`:''}
+            <button class="del" onclick="emotes[${i}].actions.splice(${j},1);rebuildPanel('emotes')" style="margin-top:14px">✕</button>
+          </div>
+          <div class="grid g3">${fhtml}${delayFld}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="emote-block" style="margin-bottom:14px">
+      <div class="emote-hdr" onclick="toggleEmote(${i})" style="border-left:4px solid ${catColor}">
+        <span style="font-size:11px;color:var(--ink-faint)" id="et_${i}">▼</span>
+        <span style="background:${catColor};color:#fff;font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;padding:2px 8px;border-radius:2px;text-transform:uppercase">${catName}</span>
+        <span style="font-family:'IM Fell English',serif;font-style:italic;font-size:12px;color:var(--ink-dim);flex:1">${summary||'— no filters'}</span>
+        <span style="font-family:monospace;font-size:10px;color:var(--ink-faint)">${(em.actions||[]).length} response${(em.actions||[]).length!==1?'s':''}</span>
+        <button class="del" onclick="event.stopPropagation();emotes.splice(${i},1);rebuildPanel('emotes')" style="margin-left:8px">✕ Remove</button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-        <div class="fg"><div class="fl">Message / Quest Name</div><input type="text" id="ea_m_${i}_${j}" value="${a.message||''}" oninput="emotes[${i}].actions[${j}].message=this.value;regen()" placeholder="Text or quest name"></div>
-        <div class="fg"><div class="fl">Test String</div><input type="text" id="ea_ts_${i}_${j}" value="${a.testString||''}" oninput="emotes[${i}].actions[${j}].testString=this.value;regen()" placeholder="optional"></div>
-        <div class="fg"><div class="fl">Delay (s)</div><input type="text" id="ea_d_${i}_${j}" value="${a.delay||0}" oninput="emotes[${i}].actions[${j}].delay=this.value;regen()"></div>
-        <div class="fg"><div class="fl">Extent</div><input type="number" id="ea_ext_${i}_${j}" value="${a.extent||1}" oninput="emotes[${i}].actions[${j}].extent=this.value;regen()"></div>
-        <div class="fg"><div class="fl">Amount / WCID</div><input type="text" id="ea_a_${i}_${j}" value="${a.amount||''}" oninput="emotes[${i}].actions[${j}].amount=this.value;regen()" placeholder="NULL"></div>
-        <div class="fg"><div class="fl">Amount 64</div><input type="text" id="ea_a64_${i}_${j}" value="${a.amount64||''}" oninput="emotes[${i}].actions[${j}].amount64=this.value;regen()" placeholder="NULL"></div>
-        <div class="fg"><div class="fl">Percent / Luminance</div><input type="text" id="ea_p_${i}_${j}" value="${a.percent||''}" oninput="emotes[${i}].actions[${j}].percent=this.value;regen()" placeholder="NULL"></div>
-        <div class="fg"><div class="fl">Spell ID</div><input type="number" id="ea_sp_${i}_${j}" value="${a.spellId||''}" oninput="emotes[${i}].actions[${j}].spellId=this.value;regen()" placeholder="NULL"></div>
-        <div class="fg"><div class="fl">Stack Size</div><input type="number" id="ea_ss_${i}_${j}" value="${a.stackSize||''}" oninput="emotes[${i}].actions[${j}].stackSize=this.value;regen()" placeholder="NULL"></div>
-        <div class="fg"><div class="fl">Min</div><input type="text" id="ea_min_${i}_${j}" value="${a.min||''}" oninput="emotes[${i}].actions[${j}].min=this.value;regen()" placeholder="NULL"></div>
-        <div class="fg"><div class="fl">Max</div><input type="text" id="ea_max_${i}_${j}" value="${a.max||''}" oninput="emotes[${i}].actions[${j}].max=this.value;regen()" placeholder="NULL"></div>
-        <div class="fg"><div class="fl">Hero XP 64</div><input type="text" id="ea_hxp_${i}_${j}" value="${a.heroXP64||''}" oninput="emotes[${i}].actions[${j}].heroXP64=this.value;regen()" placeholder="NULL"></div>
+      <div class="emote-body open" id="eb_${i}" style="padding:14px;border:1px solid var(--border-lt);border-top:none">
+        <div class="sh" style="margin-bottom:10px"><div class="st" style="font-size:9px">Trigger Settings</div><div class="sl"></div></div>
+        ${triggerSettings}
+        <div class="sh" style="margin-bottom:8px;margin-top:14px">
+          <div class="st" style="font-size:9px">Responses <span style="font-family:'IM Fell English',serif;font-style:italic;font-weight:400;font-size:10px;color:var(--ink-dim);letter-spacing:0;text-transform:none">— execute in order when this trigger fires</span></div>
+          <div class="sl"></div>
+        </div>
+        ${responses||'<p style="font-family:\'IM Fell English\',serif;font-style:italic;font-size:12px;color:var(--ink-faint);margin:0 0 8px">No responses yet. Click Add Response below.</p>'}
+        <button class="add-btn" style="margin-top:4px" onclick="emotes[${i}].actions.push({type:10,message:'',delay:0,wcid:'',stackSize:'',testString:'',percent:'',heroXP64:'',amount64:'',spellId:'',motion:'',min:'',max:''});rebuildPanel('emotes')">+ Add Response</button>
       </div>
-    </div>`).join('');
-  return `<div class="emote-block">
-    <div class="emote-hdr" onclick="toggleEmote(${i})">
-      <span style="font-size:12px;color:var(--ink-mid)" id="et_${i}">▼</span>
-      <span class="emote-hdr-title">${catName} — Prob: ${em.prob||1}${em.questFilter?' | Quest: '+em.questFilter:''}</span>
-      <button class="del" onclick="event.stopPropagation();emotes.splice(${i},1);rebuildPanel('emotes')">✕ Remove</button>
-    </div>
-    <div class="emote-body open" id="eb_${i}">
-      <div class="grid g3" style="margin-bottom:10px">
-        <div class="fg"><div class="fl">Category</div><select id="em_cat_${i}" onchange="emotes[${i}].category=this.value;rebuildPanel('emotes')">${opt(EMOTE_CATS,em.category||7)}</select></div>
-        <div class="fg"><div class="fl">Probability</div><input type="text" id="em_prob_${i}" value="${em.prob||1}" oninput="emotes[${i}].prob=this.value;regen()"></div>
-        <div class="fg"><div class="fl">WCID Filter (0=any)</div><input type="number" id="em_wcid_${i}" value="${em.wcidFilter||0}" oninput="emotes[${i}].wcidFilter=this.value;regen()"></div>
-        <div class="fg" style="grid-column:span 3"><div class="fl">Quest Filter (one word, blank=none)</div><input type="text" id="em_quest_${i}" value="${em.questFilter||''}" oninput="emotes[${i}].questFilter=this.value;regen()"></div>
-      </div>
-      <div style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:6px">Actions</div>
-      <div id="ea_rows_${i}">${actions}</div>
-      <button class="add-btn" style="margin-top:4px" onclick="emotes[${i}].actions.push({type:10,message:'',delay:0,extent:1,amount:'',percent:'',spellId:'',stackSize:'',min:'',max:'',testString:'',amount64:'',heroXP64:''});rebuildPanel('emotes')">+ Add Action</button>
-    </div>
-  </div>`;
+    </div>`;
 }
 
-function toggleEmote(i){
-  const b=$(`eb_${i}`),t=$(`et_${i}`);
-  if(b){b.classList.toggle('open');if(t)t.textContent=b.classList.contains('open')?'▼':'▶';}
-}
-function addEmote(){emotes.push({category:7,prob:1,wcidFilter:0,questFilter:'',actions:[]});rebuildPanel('emotes');}
-
-// ── PROPERTIES TAB (full property editor) ────────────────────────────────────
-// Architecture:
-//   extraInt/Bool/Float/Str/DID hold ONLY additional rows not emitted by the
-//   form fields.  syncAdvancedFromSQL reads what regen() already produced and
-//   shows ALL rows — but the properties tab editor only controls the "extra"
-//   arrays.  The form fields (Name, Level, Damage…) emit their rows
-//   automatically; editing them in the Properties tab would duplicate them.
-//
-//   To avoid confusion we now show the full SQL output in a read-only summary
-//   at the top, and the editable extras below.  The Add flow uses a dropdown
-//   to pick which property type to add first, then lets the user enter a value.
 
 function buildAdvanced(){
   // Type IDs already emitted by the form fields — these are managed/read-only in the Properties tab
@@ -2237,7 +2320,8 @@ function buildSQL(){
       const qf=em.questFilter?`'${em.questFilter}'`:'NULL';
       lines.push('');
       lines.push(`INSERT INTO \`weenie_properties_emote\` (\`object_Id\`, \`category\`, \`probability\`, \`weenie_Class_Id\`, \`style\`, \`substyle\`, \`quest\`, \`vendor_Type\`, \`min_Health\`, \`max_Health\`)`);
-      lines.push(`VALUES (${wcid}, ${em.category||7} /* ${catName} */, ${em.prob||1}, ${wf}, NULL, NULL, ${qf}, NULL, NULL, NULL);`);
+      const vt=parseInt(em.category)===2&&em.vendorType?em.vendorType:'NULL';
+      lines.push(`VALUES (${wcid}, ${em.category||7} /* ${catName} */, ${em.prob||1}, ${wf}, NULL, NULL, ${qf}, ${vt}, NULL, NULL);`);
       lines.push('');
       lines.push(`SET @parent_id = LAST_INSERT_ID();`);
       if(em.actions&&em.actions.length){
@@ -2248,7 +2332,12 @@ function buildSQL(){
           const _n=v=>(v!==undefined&&v!==''&&v!==null)?v:'NULL';
           const _q=v=>v?`'${String(v).replace(/'/g,"''")}'`:'NULL';
           const prefix=ai===0?'VALUES ':'     , ';
-          lines.push(`${prefix}(@parent_id, ${ai}, ${a.type||10} /* ${typeName} */, ${_n(a.delay)||0}, ${_n(a.extent)||1}, NULL, ${_q(a.message)}, ${_q(a.testString)}, ${_n(a.min)}, ${_n(a.max)}, NULL, NULL, NULL, NULL, NULL, NULL, ${_n(a.amount)}, ${_n(a.amount64)}, ${_n(a.heroXP64)}, ${_n(a.percent)}, ${_n(a.spellId)}, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ${_n(a.stackSize)}, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)`);
+          // AwardLevelProportionalXP needs min_64=0, max_64=0 when percent set
+          const min64 = (parseInt(a.type)===49&&a.percent) ? '0' : 'NULL';
+          const max64 = (parseInt(a.type)===49&&a.percent) ? '0' : 'NULL';
+          const motionVal = a.motion ? _n(a.motion) : 'NULL';
+          const wcidVal = (a.wcid&&a.wcid!=='') ? a.wcid : 'NULL';
+          lines.push(`${prefix}(@parent_id, ${ai}, ${a.type||10} /* ${typeName} */, ${_n(a.delay)||0}, ${_n(a.extent)||1}, ${motionVal}, ${_q(a.message)}, ${_q(a.testString)}, ${_n(a.min)}, ${_n(a.max)}, ${min64}, ${max64}, NULL, NULL, NULL, NULL, NULL, NULL, ${_n(a.heroXP64)}, ${_n(a.percent)}, ${_n(a.spellId)}, NULL, NULL, NULL, NULL, NULL, NULL, ${wcidVal}, ${_n(a.stackSize)}, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)`);
         });
         lines.push(';');
       }

@@ -24,15 +24,17 @@ ALWAYS_LOAD = [
 ]
 
 CONTENT_TYPE_FILES = {
-    "monster":  ["example_creatures.md", "did_values.md", "icons.md", "all_spells.txt"],
-    "boss":     ["example_creatures.md", "did_values.md", "icons.md", "all_spells.txt"],
-    "npc":      ["example_npcs.md", "quest_npcs.md", "did_values.md", "icons.md"],
-    "item":     ["example_items.md", "icons.md"],
+    "monster":  ["example_creatures.md", "example_bosses.md", "did_values.md", "icons.md", "all_spells.txt"],
+    "boss":     ["example_bosses.md", "example_creatures.md", "example_raid_npcs.md", "did_values.md", "icons.md", "all_spells.txt"],
+    "npc":      ["example_npcs.md", "example_quest_chain.md", "quest_npcs.md", "did_values.md", "icons.md"],
+    "item":     ["example_items.md", "example_chest.md", "icons.md"],
     "weapon":   ["example_gear.md", "melee_weapons.md", "missile_weapons.md", "casters.md", "icons.md"],
     "armor":    ["example_gear.md", "armor.md", "clothing.md", "icons.md"],
     "jewelry":  ["example_gear.md", "icons.md"],
-    "quest":    ["example_npcs.md", "quest_npcs.md", "example_killtasks.md", "did_values.md", "icons.md"],
-    "general":  ["example_creatures.md", "example_npcs.md", "did_values.md", "icons.md"],
+    "quest":    ["example_npcs.md", "example_quest_chain.md", "quest_npcs.md", "example_killtasks.md", "example_lottery.md", "did_values.md", "icons.md"],
+    "vendor":   ["example_vendor.md", "quest_npcs.md", "icons.md"],
+    "chest":    ["example_chest.md", "example_items.md", "icons.md"],
+    "general":  ["example_creatures.md", "example_npcs.md", "example_quest_chain.md", "did_values.md", "icons.md"],
 }
 
 
@@ -158,10 +160,14 @@ class SkillLoader:
 
     # Files too large for local model context — skip for Ollama
     LOCAL_SKIP_FILES = {
-        "example_npcs.md",       # 98K — too large for 7B context
-        "example_creatures.md",  # 74K
-        "example_items.md",      # 74K
-        "example_gear.md",       # 25K
+        "example_npcs.md",         # 114K
+        "example_creatures.md",    # 74K
+        "example_items.md",        # 74K
+        "example_gear.md",         # 25K
+        "example_bosses.md",       # 61K
+        "example_quest_chain.md",  # 102K
+        "example_raid_npcs.md",    # 163K
+        "example_lottery.md",      # 78K
     }
 
     # Compact always-load set for local models — core rules only

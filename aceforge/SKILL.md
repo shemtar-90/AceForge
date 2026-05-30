@@ -47,6 +47,14 @@
 
 9. **Only add emote sections when the content type actually requires them.** Creatures that simply fight and die do NOT need emotes. NPCs need emotes only when they have quest interactions or dialogue. Do not add empty or boilerplate emote blocks to creatures with no interaction requirement.
 
+10. **NEVER append a summary block after the last file.** Do not output any block like:
+    ```
+    /* ===== SUMMARY =====
+    Files generated: 2
+    ===== END SUMMARY ===== */
+    ```
+    The parser strips these automatically, but they waste tokens and can truncate actual SQL content. End the last file cleanly at its final `;` with nothing after it.
+
 ---
 ## FATAL ERROR PREVENTION: Forbidden SQL Tables
 
