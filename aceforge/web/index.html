@@ -406,6 +406,28 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 <script>
+// ── GLOBAL STATE ──────────────────────────────────────────────────────────────
+let curType       = 'creature';
+let curSub        = 'properties';
+let appConfig     = {};
+let customPresets = {};
+let bodyParts     = [];
+let spells        = [];
+let emotes        = [];
+let createList    = [];
+let extraInt      = [];
+let extraBool     = [];
+let extraFloat    = [];
+let extraStr      = [];
+let extraDID      = [];
+let recipeReqs    = [];
+let recipeReqsBool= [];
+let recipeReqsFloat=[];
+let recipeReqsStr = [];
+let recipeMods    = [];
+let cookbookEntries=[];
+let aiGenerating  = false;
+let aiFullText    = '';
 // ── DATA LOADING ─────────────────────────────────────────────────────────────
 let SPELLS=[], WEAPONS=[], ARMOR=[];
 async function loadData(){
@@ -2974,7 +2996,6 @@ function switchAIType(type,btn){
 }
 
 // ── OLLAMA SETUP ──────────────────────────────────────────────────────────────
-let _ollamaStatus = null;
 
 function openOllamaSetup(){
   const ov=$('ollamaOverlay');
