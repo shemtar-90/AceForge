@@ -1405,13 +1405,17 @@ function switchSub(sub,btn){
 }
 
 function switchType(type,btn){
+  if(!TYPE_CFG[type]) return;
   curType=type; curSub=TYPE_CFG[type].subTabs[0];
   spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
   recipeReqs=[];recipeReqsBool=[];recipeReqsFloat=[];recipeReqsStr=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];
   bodyParts=getBodyParts(31);
   document.querySelectorAll('.itab').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
-  buildForm();
+  try{ buildForm(); }catch(e){
+    const fc=document.getElementById('formContent');
+    if(fc) fc.innerHTML='<div style="padding:20px;color:darkred;font-family:monospace;font-size:11px"><b>switchType('+type+') error:</b><br>'+e.message+'<br><pre>'+e.stack+'</pre></div>';
+  }
 }
 
 function resetAll(){
@@ -1457,7 +1461,7 @@ function buildEmotesTab(){
 
 function rebuildPanel(sub){
   // Rebuild a single sub-panel in-place without touching other panels
-  const panel=document.querySelector(`[data-sub=\"${sub}\"]`);
+  const panels=document.querySelectorAll('[data-sub="'+sub+'"');  const panel=panels[panels.length-1]||null;
   if(!panel) return;
   const builders={properties:buildProps,attributes:buildAttrs,skills:buildSkills,spellbook:buildSpellbook,bodyparts:buildBodyPartsTab,emotes:buildEmotesTab,advanced:buildAdvanced};
   panel.innerHTML=(builders[sub]||buildProps)();
@@ -1596,7 +1600,7 @@ const TYPE_CFG={
   creature:{label:'Creature',icon:'\u2720',desc:'Hostile creatures with combat, loot, and behavior.',
     wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 \u2013 859,999',
     wTypes:[[10,'Creature']],
-    subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes','advanced'],
+    subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes'],
     presets:[
       {l:'Rift Drudge (T6)',d:{fName:'Rift Drudge',fLevel:'180',fXp:'800000',fDmg:'95',fDmgType:'1',fResSlash:'1.0',fResPierce:'1.0',fResBludge:'1.5',fResCold:'0.5',fResFire:'1.8',fResAcid:'0.8',fResElec:'1.0',fResNether:'1.0',fHP:'3200',fStam:'3000',fMana:'500',fLum:'15000',cType:'3'}},
       {l:'Fire Elemental',d:{fName:'Fire Elemental',fLevel:'200',fXp:'1200000',fDmg:'110',fDmgType:'16',fResSlash:'0.6',fResPierce:'0.6',fResBludge:'1.2',fResCold:'2.0',fResFire:'0.1',fResAcid:'1.0',fResElec:'1.0',fResNether:'0.5',fHP:'4000',fStam:'4000',fMana:'800',fLum:'20000',cType:'38'}},
@@ -1606,7 +1610,7 @@ const TYPE_CFG={
   npc:{label:'NPC',icon:'\u25c6',desc:'Quest givers, merchants, and interactive characters.',
     wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 \u2013 859,999',
     wTypes:[[10,'Creature (NPC)'],[12,'Vendor']],
-    subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes','advanced'],
+    subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes'],
     presets:[
       {l:'Generic NPC',d:{fName:'New NPC',fLevel:'275',fShortDesc:'A mysterious figure.'}},
       {l:'Quest Giver',d:{fName:'Quest Giver',fLevel:'275',fShortDesc:'A weathered figure with knowing eyes.',fUseRadius:'3.0'}},
@@ -1615,7 +1619,7 @@ const TYPE_CFG={
   item:{label:'Item',icon:'\u25c8',desc:'Quest tokens, gems, stackables, consumables, and containers.',
     wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
     wTypes:[[38,'Gem'],[51,'Stackable'],[18,'Food'],[34,'Scroll'],[22,'Key'],[20,'Chest'],[21,'Container'],[8,'Book'],[29,'LightSource'],[9,'Coin'],[28,'Healer'],[37,'ManaStone'],[32,'SpellComponent']],
-    subTabs:['properties','emotes','advanced'],
+    subTabs:['properties','emotes'],
     presets:[
       {l:'Quest Token',d:{fName:'Quest Seal',fValue:'100',fEncumb:'5',fMaxStack:'1',fItemUse:'1',fBonded:'1',fAttuned:'1',fScale:'1.0'}},
       {l:'Stackable Drop',d:{fName:'Crafting Fragment',fValue:'50',fEncumb:'10',fMaxStack:'25',fItemUse:'8',fBonded:'0',fAttuned:'0',fScale:'1.0'}},
@@ -1625,7 +1629,7 @@ const TYPE_CFG={
   weapon:{label:'Weapon',icon:'\u2694',desc:'Melee weapons, missile launchers, and casters.',
     wcidFrom:'870000',wcidTo:'879999',wcidRange:'870,000 \u2013 879,999',
     wTypes:[[6,'MeleeWeapon'],[3,'MissileLauncher'],[35,'Caster'],[4,'Missile']],
-    subTabs:['properties','advanced'],
+    subTabs:['properties'],
     presets:[
       {l:'Heavy Sword',d:{fName:'Enchanted Longsword',fDmg:'85',fDmgType:'1',fWepTime:'45',fDmgVar:'0.4',fWepSkill:'44',fWepDef:'1.02',fWepOff:'1.03',fWieldDiff:'290',fValue:'12000',fEncumb:'450',fScale:'1.0'}},
       {l:'Light Spear',d:{fName:'Swift Spear',fDmg:'60',fDmgType:'2',fWepTime:'35',fDmgVar:'0.3',fWepSkill:'45',fWepDef:'1.04',fWepOff:'1.02',fWieldDiff:'250',fValue:'9000',fEncumb:'300',fScale:'1.0'}},
@@ -1635,7 +1639,7 @@ const TYPE_CFG={
   armor:{label:'Armor/Clothing',icon:'\u26e8',desc:'Clothing and armor for all body slots.',
     wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
     wTypes:[[2,'Clothing/Armor']],
-    subTabs:['properties','advanced'],
+    subTabs:['properties'],
     presets:[
       {l:'Plate Chest',d:{fName:'Platemail Cuirass',fArmorLevel:'200',fArmorType:'11',fValidLoc:'512',fValue:'8000',fEncumb:'600',fScale:'1.0'}},
       {l:'Leather Cap',d:{fName:'Leather Cap',fArmorLevel:'60',fArmorType:'2',fValidLoc:'1',fValue:'800',fEncumb:'80',fScale:'1.0'}},
@@ -1646,7 +1650,7 @@ const TYPE_CFG={
   jewelry:{label:'Jewelry',icon:'\u25ce',desc:'Rings, necklaces, bracelets, and wristlets.',
     wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
     wTypes:[[38,'Gem (Jewelry)']],
-    subTabs:['properties','advanced'],
+    subTabs:['properties'],
     presets:[
       {l:'Ring',d:{fName:'Ring of Vigor',fValue:'1000',fEncumb:'5',fBonded:'0',fAttuned:'0',fArmorType:'1',fValidLoc:'134217728',fScale:'1.0'}},
       {l:'Necklace',d:{fName:'Amulet of Warding',fValue:'2000',fEncumb:'8',fBonded:'0',fAttuned:'0',fArmorType:'1',fValidLoc:'1048576',fScale:'1.0'}},
