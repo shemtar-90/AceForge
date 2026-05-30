@@ -435,7 +435,7 @@ const PROP_BOOL={1:'Stuck',6:'AiUsesMana',7:'AiUseHumanMagicAnimations',8:'Allow
 const PROP_FLOAT={1:'HeartbeatInterval',3:'HealthRate',4:'StaminaRate',5:'ManaRate',12:'Shade',13:'ArmorModVsSlash',14:'ArmorModVsPierce',15:'ArmorModVsBludgeon',16:'ArmorModVsCold',17:'ArmorModVsFire',18:'ArmorModVsAcid',19:'ArmorModVsElectric',21:'WeaponLength',22:'DamageVariance',29:'WeaponDefense',31:'VisualAwarenessRange',34:'PowerupTime',37:'BuyPrice',38:'SellPrice',39:'DefaultScale',41:'RegenerationInterval',43:'GeneratorRadius',54:'UseRadius',62:'WeaponOffense',64:'ResistSlash',65:'ResistPierce',66:'ResistBludgeon',67:'ResistFire',68:'ResistCold',69:'ResistAcid',70:'ResistElectric',71:'ResistHealthBoost',72:'ResistStaminaDrain',75:'ResistManaBoost',80:'AiUseMagicDelay',104:'ObviousRadarRange',125:'ResistHealthDrain',136:'CriticalMultiplier',144:'ManaConversionMod',149:'WeaponMissileDefense',150:'WeaponMagicDefense',152:'ElementalDamageMod',165:'ArmorModVsNether',166:'ResistNether'};
 const PROP_STRING={1:'Name',7:'Inscription',14:'Use',15:'ShortDesc',16:'LongDesc',17:'ActivationTalk',18:'UseMessage',20:'PluralName',22:'ActivationFailure',33:'Quest',34:'GeneratorEvent',38:'AppraisalPortalDestination',45:'KillQuest',49:'KillQuest2',50:'KillQuest3'};
 const PROP_DID={1:'Setup',2:'MotionTable',3:'SoundTable',4:'CombatTable',6:'PaletteBase',7:'ClothingBase',8:'Icon',9:'EyesTexture',10:'NoseTexture',11:'MouthTexture',12:'DefaultStyle',13:'DefaultSubStyle',14:'HeadObject',15:'HairTexture',16:'DefaultHairColor',17:'DefaultEyesColor',18:'DefaultSkinColor',19:'DefaultHairTexture',20:'IconHires',21:'ObjCells',22:'PhysicsEffectTable',23:'UseSound',24:'UseTargetAnimation',25:'UseTargetFailedAnimation',26:'ItemSkillLevelLimit',27:'LastPortal',28:'LinkedPortalOne',29:'WieldedTreasureType',30:'InventoryTreasureType',31:'ShopTreasureType',32:'DeathTreasureType',33:'MutateFilter',34:'UseCreateItem',35:'TsysMutationFilter',36:'IconOverlay',37:'IconOverlay2',38:'IconUnderlay',39:'AugmentationMutationData',40:'AugmentationEffect',41:'ProcSpell',42:'AugmentationCreateItem',43:'AlternateCurrency',44:'BlueSurgeSpell',45:'YellowSurgeSpell',46:'RedSurgeSpell',47:'OlthoiDeathTreasureType',48:'VendorShopTemplate',49:'LinkedLifestone',50:'LinkedPortalTwo',51:'OriginalPortal',52:'BiomeCombatTable',53:'UseItemAnimation',54:'UseItemFailAnimation',55:'CreateItemWielded',56:'EquipmentSetID',57:'WieldedTreasure2',58:'WieldedTreasure3',59:'WieldedTreasure4',60:'NpcLooksLikeObject',61:'PCAPPhysicsBurden'};
-const EMOTE_CATS=[[3,'Death'],[7,'Use'],[8,'Activation'],[9,'Generation'],[10,'PickUp'],[11,'Drop'],[14,'Taunt'],[15,'WoundedTaunt'],[16,'KillTaunt'],[17,'NewEnemy'],[18,'Scream'],[19,'Homesick'],[20,'ReceiveCritical'],[21,'ResistSpell'],[24,'HearChat'],[25,'Wield'],[26,'UnWield'],[1,'Refuse'],[2,'Vendor'],[4,'Portal'],[5,'HeartBeat'],[6,'Give'],[12,'QuestSuccess'],[13,'QuestFailure'],[22,'TestSuccess'],[23,'TestFailure'],[27,'EventSuccess'],[28,'EventFailure'],[29,'TestNoQuality'],[32,'GotoSet'],[33,'NumFellowsSuccess'],[34,'NumFellowsFailure']];
+const EMOTE_CATS=[[1,'Refuse'],[2,'Vendor'],[3,'Death'],[4,'Portal'],[5,'HeartBeat'],[6,'Give'],[7,'Use'],[8,'Activation'],[9,'Generation'],[10,'PickUp'],[11,'Drop'],[12,'QuestSuccess'],[13,'QuestFailure'],[14,'Taunt'],[15,'WoundedTaunt'],[16,'KillTaunt'],[17,'NewEnemy'],[18,'Scream'],[19,'Homesick'],[20,'ReceiveCritical'],[21,'ResistSpell'],[22,'TestSuccess'],[23,'TestFailure'],[24,'HearChat'],[25,'Wield'],[26,'UnWield'],[27,'EventSuccess'],[28,'EventFailure'],[29,'TestNoQuality'],[32,'GotoSet'],[33,'NumFellowsSuccess'],[34,'NumFellowsFailure']];
 const EMOTE_TYPES=[[1,'Act'],[2,'AwardXP'],[3,'Give'],[4,'MoveHome'],[5,'Motion'],[6,'Move'],[8,'Say'],[10,'Tell'],[11,'Turn'],[12,'TurnToTarget'],[14,'CastSpell'],[15,'Activate'],[16,'WorldBroadcast'],[17,'LocalBroadcast'],[18,'DirectBroadcast'],[19,'CastSpellInstant'],[21,'InqQuest'],[22,'StampQuest'],[23,'StartEvent'],[24,'StopEvent'],[27,'TeachSpell'],[30,'InqQuestSolves'],[31,'EraseQuest'],[32,'DecrementQuest'],[33,'IncrementQuest'],[34,'AddCharacterTitle'],[35,'InqBoolStat'],[36,'InqIntStat'],[37,'InqFloatStat'],[38,'InqStringStat'],[39,'InqAttributeStat'],[40,'InqRawAttributeStat'],[41,'InqSecondaryAttributeStat'],[42,'InqRawSecondaryAttributeStat'],[43,'InqSkillStat'],[44,'InqRawSkillStat'],[45,'InqSkillTrained'],[46,'InqSkillSpecialized'],[47,'AwardTrainingCredits'],[48,'InflictVitaePenalty'],[49,'AwardLevelProportionalXP'],[50,'AwardLevelProportionalSkillXP'],[51,'InqEvent'],[52,'ForceMotion'],[53,'SetIntStat'],[54,'IncrementIntStat'],[55,'DecrementIntStat'],[56,'CreateTreasure'],[57,'ResetHomePosition'],[58,'InqFellowQuest'],[60,'UpdateFellowQuest'],[61,'StampFellowQuest'],[62,'AwardNoShareXP'],[63,'SetSanctuaryPosition'],[64,'TellFellow'],[65,'FellowBroadcast'],[66,'LockFellow'],[67,'Goto'],[68,'PopUp'],[69,'SetBoolStat'],[70,'SetQuestCompletions'],[71,'InqNumCharacterTitles'],[73,'PetCastSpellOnOwner'],[74,'TakeItems'],[75,'InqYesNo'],[76,'InqOwnsItems'],[77,'DeleteSelf'],[79,'UpdateMyQuest'],[80,'InqMyQuest'],[81,'StampMyQuest'],[82,'InqMyQuestSolves'],[83,'EraseMyQuest'],[84,'DecrementMyQuest'],[85,'IncrementMyQuest'],[86,'SetMyQuestCompletions'],[87,'MoveToPos'],[88,'LocalSignal'],[89,'InqPackSpace'],[90,'RemoveVitaePenalty'],[91,'SetEyeTexture'],[92,'SetEyePalette'],[93,'SetNoseTexture'],[94,'SetNosePalette'],[95,'SetMouthTexture'],[96,'SetMouthPalette'],[97,'SetHeadObject'],[98,'SetHeadPalette'],[99,'TeleportTarget'],[100,'TeleportSelf'],[101,'StartBarber'],[110,'UntrainSkill'],[112,'SpendLuminance'],[113,'AwardLuminance'],[114,'InqInt64Stat'],[115,'SetInt64Stat'],[118,'SetFloatStat'],[119,'AddContract'],[120,'RemoveContract']];
 const RECIPE_SOURCE_TYPE=[[0,'Player'],[1,'Source'],[60,'Dye']];
 const MOD_TYPE=[[0,'SuccessTarget'],[1,'SuccessSource'],[2,'SuccessPlayer'],[3,'SuccessResult'],[4,'FailureTarget'],[5,'FailureSource'],[6,'FailurePlayer'],[7,'FailureResult']];
@@ -1358,13 +1358,38 @@ const EA_HINTS = {
 };
 
 const EMOTE_CAT_COLORS = {
-  1:'#8a3a3a',  // Refuse — red
-  2:'#3a5a8a',  // Vendor — blue
-  7:'#3a7a5a',  // Use — green
-  12:'#5a7a3a', // QuestSuccess — olive
-  13:'#7a5a3a', // QuestFailure — amber
-  22:'#5a3a8a', // TestSuccess — purple
-  23:'#8a5a3a', // TestFailure — brown
+  1: '#8a3a3a',   // Refuse
+  2: '#3a5a8a',   // Vendor
+  3: '#5a3a3a',   // Death
+  4: '#4a5a8a',   // Portal
+  5: '#4a4a5a',   // HeartBeat
+  6: '#3a6a6a',   // Give
+  7: '#3a7a5a',   // Use
+  8: '#5a6a3a',   // Activation
+  9: '#4a6a4a',   // Generation
+  10:'#6a5a3a',   // PickUp
+  11:'#5a5a4a',   // Drop
+  12:'#4a7a3a',   // QuestSuccess
+  13:'#8a6a2a',   // QuestFailure
+  14:'#7a3a5a',   // Taunt
+  15:'#8a4a4a',   // WoundedTaunt
+  16:'#7a3a3a',   // KillTaunt
+  17:'#6a4a3a',   // NewEnemy
+  18:'#8a4a5a',   // Scream
+  19:'#4a5a6a',   // Homesick
+  20:'#7a4a4a',   // ReceiveCritical
+  21:'#5a5a7a',   // ResistSpell
+  22:'#4a3a8a',   // TestSuccess
+  23:'#7a5a3a',   // TestFailure
+  24:'#3a6a7a',   // HearChat
+  25:'#4a7a6a',   // Wield
+  26:'#5a6a5a',   // UnWield
+  27:'#3a7a4a',   // EventSuccess
+  28:'#7a5a2a',   // EventFailure
+  29:'#6a5a5a',   // TestNoQuality
+  32:'#5a4a7a',   // GotoSet
+  33:'#4a6a5a',   // NumFellowsSuccess
+  34:'#6a5a4a',   // NumFellowsFailure
 };
 
 function buildEmoteBlock(em,i){
