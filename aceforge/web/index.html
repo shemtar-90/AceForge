@@ -442,6 +442,17 @@ const PROP_FLOAT={1:'HeartbeatInterval',3:'HealthRate',4:'StaminaRate',5:'ManaRa
 const PROP_STRING={1:'Name',7:'Inscription',14:'Use',15:'ShortDesc',16:'LongDesc',17:'ActivationTalk',18:'UseMessage',20:'PluralName',22:'ActivationFailure',33:'Quest',34:'GeneratorEvent',38:'AppraisalPortalDestination',45:'KillQuest',49:'KillQuest2',50:'KillQuest3'};
 const PROP_DID={1:'Setup',2:'MotionTable',3:'SoundTable',4:'CombatTable',6:'PaletteBase',7:'ClothingBase',8:'Icon',9:'EyesTexture',10:'NoseTexture',11:'MouthTexture',12:'DefaultStyle',13:'DefaultSubStyle',14:'HeadObject',15:'HairTexture',16:'DefaultHairColor',17:'DefaultEyesColor',18:'DefaultSkinColor',19:'DefaultHairTexture',20:'IconHires',21:'ObjCells',22:'PhysicsEffectTable',23:'UseSound',24:'UseTargetAnimation',25:'UseTargetFailedAnimation',26:'ItemSkillLevelLimit',27:'LastPortal',28:'LinkedPortalOne',29:'WieldedTreasureType',30:'InventoryTreasureType',31:'ShopTreasureType',32:'DeathTreasureType',33:'MutateFilter',34:'UseCreateItem',35:'TsysMutationFilter',36:'IconOverlay',37:'IconOverlay2',38:'IconUnderlay',39:'AugmentationMutationData',40:'AugmentationEffect',41:'ProcSpell',42:'AugmentationCreateItem',43:'AlternateCurrency',44:'BlueSurgeSpell',45:'YellowSurgeSpell',46:'RedSurgeSpell',47:'OlthoiDeathTreasureType',48:'VendorShopTemplate',49:'LinkedLifestone',50:'LinkedPortalTwo',51:'OriginalPortal',52:'BiomeCombatTable',53:'UseItemAnimation',54:'UseItemFailAnimation',55:'CreateItemWielded',56:'EquipmentSetID',57:'WieldedTreasure2',58:'WieldedTreasure3',59:'WieldedTreasure4',60:'NpcLooksLikeObject',61:'PCAPPhysicsBurden'};
 const EMOTE_CATS=[[1,'Refuse'],[2,'Vendor'],[3,'Death'],[4,'Portal'],[5,'HeartBeat'],[6,'Give'],[7,'Use'],[8,'Activation'],[9,'Generation'],[10,'PickUp'],[11,'Drop'],[12,'QuestSuccess'],[13,'QuestFailure'],[14,'Taunt'],[15,'WoundedTaunt'],[16,'KillTaunt'],[17,'NewEnemy'],[18,'Scream'],[19,'Homesick'],[20,'ReceiveCritical'],[21,'ResistSpell'],[22,'TestSuccess'],[23,'TestFailure'],[24,'HearChat'],[25,'Wield'],[26,'UnWield'],[27,'EventSuccess'],[28,'EventFailure'],[29,'TestNoQuality'],[32,'GotoSet'],[33,'NumFellowsSuccess'],[34,'NumFellowsFailure']];
+// ── CORE HELPERS ─────────────────────────────────────────────────────────────
+const $   = id => document.getElementById(id);
+const opt = (arr,selVal) => arr.map(r=>`<option value="${r[0]}"${r[0]==selVal?' selected':''} >${r[0]} · ${r[1]}</option>`).join('');
+const g   = (id,d='')  => {const e=$(id);return e?e.value:d;};
+const gi  = (id,d=0)   => parseInt(g(id,d))||d;
+const gf  = (id,d=0.0) => parseFloat(g(id,d))||d;
+const _n  = v => (v===''||v===null||v===undefined)?'NULL':v;
+const _q  = v => (v===''||v===null||v===undefined)?'NULL':`'${String(v).replace(/'/g,"''")}'`;
+const nm  = (id,d='')  => g(id,d);
+const lookupName = (arr,val) => {const f=arr.find(r=>r[0]==val);return f?f[1]:String(val);};
+
 // TYPES TO INCLUDE/EXCLUDE — see user notes
 // Removed: 6=Move, 50=AwardLevelProportionalSkillXP, 64=TellFellow,
 //           79=UpdateMyQuest, 91-98=eye/nose/mouth/head textures,
@@ -795,6 +806,679 @@ const EA_HINTS={
   56:'Create a treasure item.',
   12:'Turn to face a target.',
 };
+
+
+
+const BODY_PARTS_BIPED=[
+  {k:0,name:'Head'},{k:1,name:'Chest'},{k:2,name:'Abdomen'},
+  {k:3,name:'UpperArm'},{k:4,name:'LowerArm'},{k:5,name:'Hand'},
+  {k:6,name:'UpperLeg'},{k:7,name:'LowerLeg'},{k:8,name:'Foot'}
+];
+
+function buildProps(){
+  const t=curType;
+  if(t==='quest') return buildQuestProps();
+  if(t==='recipe') return buildRecipeProps();
+  if(t==='jewelry') return buildJewelryProps();
+  const isCreature=t==='creature'||t==='npc';
+  let h='';
+  if(isCreature){
+    h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Identity</div><div class=\"sl\"></div></div>
+    <div class=\"grid g3\">
+      <div class=\"fg\"><div class=\"fl\">Creature Type <span class=\"fc\">I-2</span></div><select id=\"cType\" onchange=\"onCTypeChange()\">${CREATURE_TYPES.map(([v,l])=>`<option value=\"${v}\"${v===31?' selected':''}>${v}  ${l}</option>`).join('')}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Default Scale <span class=\"fc\">F-39</span></div><input type=\"text\" id=\"fScale\" value=\"1.0\"></div>
+      <div class=\"fg\"><div class=\"fl\">Palette <span class=\"fc\">I-3</span></div><select id=\"fPalette\">${opt(PALETTES,9)}</select></div>
+    </div></div>`;
+    if(t==='creature'){
+      h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Combat</div><div class=\"sl\"></div></div>
+      <div class=\"grid g3\">
+        <div class=\"fg\"><div class=\"fl\">Damage <span class=\"fc\">I-44</span></div><input type=\"number\" id=\"fDmg\" value=\"80\"></div>
+        <div class=\"fg\"><div class=\"fl\">Damage Type <span class=\"fc\">I-45</span></div><select id=\"fDmgType\">${opt(DMG_TYPES,1)}</select></div>
+        <div class=\"fg\"><div class=\"fl\">Weapon Skill <span class=\"fc\">I-48</span></div><select id=\"fWepSkill\">${opt(WEP_SKILLS,44)}</select></div>
+        <div class=\"fg\"><div class=\"fl\">Combat Style <span class=\"fc\">I-101</span></div><select id=\"fCombatStyle\">${opt(COMBAT_STYLES,2)}</select></div>
+        <div class=\"fg\"><div class=\"fl\">Attack Type <span class=\"fc\">I-47</span></div><select id=\"fAttackType\">${opt(ATTACK_TYPES,4)}</select></div>
+        <div class=\"fg\"><div class=\"fl\">Death Treasure <span class=\"fc\">DID-35</span></div><input type=\"number\" id=\"fTreasureTier\" value=\"3100\"></div>
+      </div></div>
+      <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Resistances</div><div class=\"sl\"></div></div>
+      <div class=\"rg\">${[['Slash','rSlash'],['Pierce','rPierce'],['Bludge','rBludge'],['Cold','rCold'],['Fire','rFire'],['Acid','rAcid'],['Elec','rElec'],['Nether','rNether']].map(([l,id])=>`<div class=\"fg\"><div class=\"fl\">${l} <span class=\"fc\">F</span></div><input type=\"text\" id=\"${id}\" value=\"1.0\"></div>`).join('')}</div></div>
+      <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Vitals &amp; Rewards</div><div class=\"sl\"></div></div>
+      <div class=\"grid g3\">
+        <div class=\"fg\"><div class=\"fl\">Max Health <span class=\"fc\">V-1</span></div><input type=\"number\" id=\"fHP\" value=\"2000\"></div>
+        <div class=\"fg\"><div class=\"fl\">Max Stamina <span class=\"fc\">V-3</span></div><input type=\"number\" id=\"fStam\" value=\"2000\"></div>
+        <div class=\"fg\"><div class=\"fl\">Max Mana <span class=\"fc\">V-5</span></div><input type=\"number\" id=\"fMana\" value=\"800\"></div>
+        <div class=\"fg\"><div class=\"fl\">Luminance Award <span class=\"fc\">I-332</span></div><input type=\"number\" id=\"fLum\" value=\"5000\"></div>
+        <div class=\"fg\"><div class=\"fl\">Aggro Range <span class=\"fc\">F-31</span></div><input type=\"text\" id=\"fAggroRange\" value=\"16.0\"></div>
+        <div class=\"fg\"><div class=\"fl\">Casts Magic <span class=\"fc\">B-6</span></div><select id=\"fUsesMana\"><option value=\"0\">No</option><option value=\"1\">Yes</option></select></div>
+      </div></div>
+    <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Contains Treasure</div><div class=\"sl\"></div></div>
+      <p class=\"note\" style=\"margin-bottom:8px\">Items that drop on death (CorpseDrop) or are contained/wielded. Use existing WCIDs for in-game items (Pyreals=273, MMD=20634)  do NOT create new weenies for them.</p>
+      <div id=\"createListRows\">${buildCreateListRows()}</div>
+      <button class=\"add-btn\" onclick=\"addCreateListRow()\">+ Add Item</button>
+    </div>
+    <div class=\"sec\"><div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Creature Ratings</div><div class=\"sl\"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323']].map(([l,id,fc])=>`
+      <div style=\"display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)\">
+        <div style=\"flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)\">${l} <span class=\"fc\">${fc}</span></div>
+        <input type=\"number\" id=\"${id}\" value=\"0\" style=\"width:100px;text-align:right;border-bottom:1px solid var(--border)\">
+      </div>`).join('')}
+        </div>`;
+    }
+    if(t==='npc'){
+      const isVendor=gi('fWType',10)===12;
+      h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">NPC Settings</div><div class=\"sl\"></div></div>
+      <div class=\"grid g3\">
+        <div class=\"fg\"><div class=\"fl\">Use Radius <span class=\"fc\">F-54</span></div><input type=\"text\" id=\"fUseRadius\" value=\"3.0\"></div>
+        <div class=\"fg\"><div class=\"fl\">Radar Color <span class=\"fc\">I-95</span></div><select id=\"fRadarColor\">${opt(RADAR_COLORS,8)}</select></div>
+        <div class=\"fg\"><div class=\"fl\">Max Health <span class=\"fc\">V-1</span></div><input type=\"number\" id=\"fHP\" value=\"500\"></div>
+        <div class=\"fg\" style=\"grid-column:span 3\"><div class=\"fl\">Short Description <span class=\"fc\">S-15</span></div><input type=\"text\" id=\"fShortDesc\" value=\"\"></div>
+        <div class=\"fg\" style=\"grid-column:span 3\"><div class=\"fl\">Long Description <span class=\"fc\">S-16</span></div><input type=\"text\" id=\"fLongDesc\" value=\"\"></div>
+      </div></div>`;
+      if(isVendor){
+        h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Vendor Settings</div><div class=\"sl\"></div></div>
+        <div class=\"grid g3\">
+          <div class=\"fg\"><div class=\"fl\">Buy Price Multiplier <span class=\"fc\">F-37</span></div><input type=\"text\" id=\"fBuyRate\" value=\"1.0\"></div>
+          <div class=\"fg\"><div class=\"fl\">Sell Price Multiplier <span class=\"fc\">F-38</span></div><input type=\"text\" id=\"fSellRate\" value=\"1.1\"></div>
+          <div class=\"fg\"><div class=\"fl\">Min Value Buys <span class=\"fc\">I-75</span></div><input type=\"number\" id=\"fMerchMinVal\" value=\"0\"></div>
+          <div class=\"fg\"><div class=\"fl\">Max Value Buys <span class=\"fc\">I-76</span></div><input type=\"number\" id=\"fMerchMaxVal\" value=\"0\"></div>
+          <div class=\"fg\"><div class=\"fl\">Item Types Buys <span class=\"fc\">I-74</span></div><input type=\"number\" id=\"fMerchItemTypes\" value=\"0\"></div>
+          <div class=\"fg\"><div class=\"fl\">Happy Mean <span class=\"fc\">I-126</span></div><input type=\"number\" id=\"fVendorHappy\" value=\"0\"></div>
+        </div></div>`;
+      }
+    h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Contains Treasure</div><div class=\"sl\"></div></div>
+      <p class=\"note\" style=\"margin-bottom:8px\">Items the NPC contains, wields, or sells. Use existing WCIDs (273=Pyreals, 20634=MMD). Destination: Contain=0, Wield=1, Shop=5.</p>
+      <div id=\"createListRows\">${buildCreateListRows()}</div>
+      <button class=\"add-btn\" onclick=\"addCreateListRow()\">+ Add Item</button>
+    </div>
+    <div class=\"sec\"><div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Creature Ratings</div><div class=\"sl\"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323']].map(([l,id,fc])=>`
+      <div style=\"display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)\">
+        <div style=\"flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)\">${l} <span class=\"fc\">${fc}</span></div>
+        <input type=\"number\" id=\"${id}\" value=\"0\" style=\"width:100px;text-align:right;border-bottom:1px solid var(--border)\">
+      </div>`).join('')}
+    </div>`;
+    }
+  }
+  if(t==='item'){
+    h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Item Database Lookup</div><div class=\"sl\"></div></div>
+    <div class=\"fg sdrop-wrap\"><div class=\"fl\">Search by name to pre-fill values</div>
+      <input type=\"text\" id=\"itemSearch\" placeholder=\"Type item name\" autocomplete=\"off\" onfocus=\"openItemSearch(this.value)\" oninput=\"searchItemFn(this.value)\">
+      <div class=\"sdrop-box\" id=\"itemSearch_drop\"><div class=\"sdrop-none\">Type to search items</div></div>
+    </div></div>
+    <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Item Properties</div><div class=\"sl\"></div></div>
+    <div class=\"grid g3\">
+      <div class=\"fg\"><div class=\"fl\">Value <span class=\"fc\">I-19</span></div><input type=\"number\" id=\"fValue\" value=\"100\"></div>
+      <div class=\"fg\"><div class=\"fl\">Encumbrance <span class=\"fc\">I-5</span></div><input type=\"number\" id=\"fEncumb\" value=\"10\"></div>
+      <div class=\"fg\"><div class=\"fl\">Max Stack Size <span class=\"fc\">I-11</span></div><input type=\"number\" id=\"fMaxStack\" value=\"1\"></div>
+      <div class=\"fg\"><div class=\"fl\">Item Useable <span class=\"fc\">I-16</span></div><select id=\"fItemUse\">${opt(ITEM_USE,1)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Bonded <span class=\"fc\">I-33</span></div><select id=\"fBonded\">${opt(BONDED,1)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Attuned <span class=\"fc\">I-114</span></div><select id=\"fAttuned\">${opt(ATTUNED,1)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Default Scale <span class=\"fc\">F-39</span></div><input type=\"text\" id=\"fScale\" value=\"1.0\"></div>
+      <div class=\"fg\"><div class=\"fl\">Palette <span class=\"fc\">I-3</span></div><select id=\"fPalette\">${opt(PALETTES,39)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Spellcraft <span class=\"fc\">I-106</span></div><input type=\"number\" id=\"fSpellcraft\" value=\"0\"></div>
+      <div class=\"fg span2\"><div class=\"fl\">Short Description <span class=\"fc\">S-15</span></div><input type=\"text\" id=\"fShortDesc\" value=\"\"></div>
+      <div class=\"fg span3\"><div class=\"fl\">Use Message <span class=\"fc\">S-14</span></div><input type=\"text\" id=\"fUseMsg\" value=\"\"></div>
+    </div>
+    <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Gear Ratings</div><div class=\"sl\"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-370'],['Dmg Resist','fDmgResist','I-371'],['Crit Rating','fCritRating','I-372'],['CritDmg Rating','fCritDmgRating','I-373'],['CritRes Rating','fCritResRating','I-374'],['Heal Resist','fHealResist','I-375'],['Heal Boost','fHealBoost','I-376']].map(([l,id,fc])=>`
+      <div style=\"display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)\">
+        <div style=\"flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)\">${l} <span class=\"fc\">${fc}</span></div>
+        <input type=\"number\" id=\"${id}\" value=\"0\" style=\"width:100px;text-align:right;border-bottom:1px solid var(--border)\">
+      </div>`).join('')}    </div>`;
+  }
+  if(t==='weapon'){
+    h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Weapon Database Lookup</div><div class=\"sl\"></div></div>
+    <div class=\"fg sdrop-wrap\"><div class=\"fl\">Search by name to pre-fill values</div>
+      <input type=\"text\" id=\"wepSearch\" placeholder=\"Type weapon name\" autocomplete=\"off\" onfocus=\"openWeaponSearch(this.value)\" oninput=\"searchWeaponFn(this.value)\">
+      <div class=\"sdrop-box\" id=\"wepSearch_drop\"><div class=\"sdrop-none\">Type to search</div></div>
+    </div></div>
+    <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Weapon Properties</div><div class=\"sl\"></div></div>
+    <div class=\"grid g3\">
+      <div class=\"fg\"><div class=\"fl\">Damage <span class=\"fc\">I-44</span></div><input type=\"number\" id=\"fDmg\" value=\"80\"></div>
+      <div class=\"fg\"><div class=\"fl\">Damage Type <span class=\"fc\">I-45</span></div><select id=\"fDmgType\">${opt(DMG_TYPES,1)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Weapon Skill <span class=\"fc\">I-48</span></div><select id=\"fWepSkill\">${opt(WEP_SKILLS,44)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Weapon Time <span class=\"fc\">I-49</span></div><input type=\"number\" id=\"fWepTime\" value=\"45\"></div>
+      <div class=\"fg\"><div class=\"fl\">Damage Variance <span class=\"fc\">F-22</span></div><input type=\"text\" id=\"fDmgVar\" value=\"0.4\"></div>
+      <div class=\"fg\"><div class=\"fl\">Attack Type <span class=\"fc\">I-47</span></div><select id=\"fAttackType\">${opt(ATTACK_TYPES,4)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Defense Mod <span class=\"fc\">F-29</span></div><input type=\"text\" id=\"fWepDef\" value=\"1.0\"></div>
+      <div class=\"fg\"><div class=\"fl\">Offense Mod <span class=\"fc\">F-62</span></div><input type=\"text\" id=\"fWepOff\" value=\"1.0\"></div>
+      <div class=\"fg\"><div class=\"fl\">Wield Difficulty <span class=\"fc\">I-160</span></div><input type=\"number\" id=\"fWieldDiff\" value=\"290\"></div>
+      <div class=\"fg\"><div class=\"fl\">Value <span class=\"fc\">I-19</span></div><input type=\"number\" id=\"fValue\" value=\"5000\"></div>
+      <div class=\"fg\"><div class=\"fl\">Encumbrance <span class=\"fc\">I-5</span></div><input type=\"number\" id=\"fEncumb\" value=\"400\"></div>
+      <div class=\"fg\"><div class=\"fl\">Default Scale <span class=\"fc\">F-39</span></div><input type=\"text\" id=\"fScale\" value=\"1.0\"></div>
+      <div class=\"fg\"><div class=\"fl\">Missile Defense Mod <span class=\"fc\">F-149</span></div><input type=\"text\" id=\"fMissileDef\" value=\"0\"></div>
+      <div class=\"fg\"><div class=\"fl\">Magic Defense Mod <span class=\"fc\">F-150</span></div><input type=\"text\" id=\"fMagicDef\" value=\"0\"></div>
+      <div class=\"fg\"><div class=\"fl\">Elemental Dmg Bonus <span class=\"fc\">I-204</span></div><input type=\"number\" id=\"fElemBonus\" value=\"0\"></div>
+      <div class=\"fg\"><div class=\"fl\">Crit Multiplier <span class=\"fc\">F-136</span></div><input type=\"text\" id=\"fCritMult\" value=\"1.0\"></div>
+      <div class=\"fg\"><div class=\"fl\">Palette <span class=\"fc\">I-3</span></div><select id=\"fPalette\">${opt(PALETTES,20)}</select></div>
+    </div></div>
+    <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Gear Ratings</div><div class=\"sl\"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-370'],['Dmg Resist','fDmgResist','I-371'],['Crit Rating','fCritRating','I-372'],['CritDmg Rating','fCritDmgRating','I-373'],['CritRes Rating','fCritResRating','I-374'],['Heal Resist','fHealResist','I-375'],['Heal Boost','fHealBoost','I-376']].map(([l,id,fc])=>`
+      <div style=\"display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)\">
+        <div style=\"flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)\">${l} <span class=\"fc\">${fc}</span></div>
+        <input type=\"number\" id=\"${id}\" value=\"0\" style=\"width:100px;text-align:right;border-bottom:1px solid var(--border)\">
+      </div>`).join('')}    `;
+  }
+  if(t==='armor'){
+    h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Armor/Clothing Database Lookup</div><div class=\"sl\"></div></div>
+    <div class=\"fg sdrop-wrap\"><div class=\"fl\">Search by name to pre-fill values</div>
+      <input type=\"text\" id=\"armorSearch\" placeholder=\"Type armor or clothing name\" autocomplete=\"off\" oninput=\"searchArmorFn(this.value)\">
+      <div class=\"sdrop-box\" id=\"armorSearch_drop\"><div class=\"sdrop-none\">Type to search</div></div>
+    </div></div>
+    <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Armor Properties</div><div class=\"sl\"></div></div>
+    <div class=\"grid g3\">
+      <div class=\"fg\"><div class=\"fl\">Armor Level <span class=\"fc\">I-28</span></div><input type=\"number\" id=\"fArmorLevel\" value=\"100\"></div>
+      <div class=\"fg\"><div class=\"fl\">Armor Type <span class=\"fc\">I-27</span></div><select id=\"fArmorType\" onchange=\"onArmorTypeChange()\">${opt(ARMOR_TYPES,11)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Slot (Valid Location) <span class=\"fc\">I-9</span></div><select id=\"fValidLoc\">${opt(ARMOR_SLOTS,512)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Value <span class=\"fc\">I-19</span></div><input type=\"number\" id=\"fValue\" value=\"3000\"></div>
+      <div class=\"fg\"><div class=\"fl\">Encumbrance <span class=\"fc\">I-5</span></div><input type=\"number\" id=\"fEncumb\" value=\"300\"></div>
+      <div class=\"fg\"><div class=\"fl\">Default Scale <span class=\"fc\">F-39</span></div><input type=\"text\" id=\"fScale\" value=\"1.0\"></div>
+      <div class=\"fg\"><div class=\"fl\">Palette <span class=\"fc\">I-3</span></div><select id=\"fPalette\">${opt(PALETTES,9)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Spellcraft <span class=\"fc\">I-106</span></div><input type=\"number\" id=\"fSpellcraft\" value=\"0\"></div>
+    </div>
+    <div class=\"sh\" style=\"margin-top:12px\"><div class=\"st\">Elemental Modifiers</div><div class=\"sl\"></div>
+      <span id=\"clothNote\" style=\"font-family:'Cinzel',serif;font-size:9px;font-weight:700;color:var(--ink-dim);display:none\">(Cloth  disabled)</span>
+    </div>
+    <div class=\"rg\" id=\"elemMods\">
+      ${[['Slash','mSlash'],['Pierce','mPierce'],['Bludge','mBludge'],['Cold','mCold'],['Fire','mFire'],['Acid','mAcid'],['Elec','mElec'],['Nether','mNether']].map(([l,id])=>`<div class=\"fg\"><div class=\"fl\">${l} <span class=\"fc\">F</span></div><input type=\"text\" id=\"${id}\" value=\"1.0\"></div>`).join('')}
+    </div>
+    <div class=\"sh\" style=\"margin-top:12px\"><div class=\"st\">Resistances (Armor AL Overrides)</div><div class=\"sl\"></div></div>
+    <div class=\"rg\">
+      ${[['Slash AL','alSlash'],['Pierce AL','alPierce'],['Bludge AL','alBludge'],['Cold AL','alCold'],['Fire AL','alFire'],['Acid AL','alAcid'],['Elec AL','alElec'],['Nether AL','alNether']].map(([l,id])=>`<div class=\"fg\"><div class=\"fl\">${l} <span class=\"fc\">I</span></div><input type=\"number\" id=\"${id}\" value=\"0\"></div>`).join('')}
+    </div>
+    <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Gear Ratings</div><div class=\"sl\"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-370'],['Dmg Resist','fDmgResist','I-371'],['Crit Rating','fCritRating','I-372'],['CritDmg Rating','fCritDmgRating','I-373'],['CritRes Rating','fCritResRating','I-374'],['Heal Resist','fHealResist','I-375'],['Heal Boost','fHealBoost','I-376']].map(([l,id,fc])=>`
+      <div style=\"display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)\">
+        <div style=\"flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)\">${l} <span class=\"fc\">${fc}</span></div>
+        <input type=\"number\" id=\"${id}\" value=\"0\" style=\"width:100px;text-align:right;border-bottom:1px solid var(--border)\">
+      </div>`).join('')}    </div>`;
+  }
+  return h;
+}
+
+function buildCreateListRows(){
+  return createList.map((r,i)=>`
+    <div style=\"display:grid;grid-template-columns:130px 1fr 80px 70px 28px;gap:8px;align-items:end;margin-bottom:8px\">
+      <div class=\"fg\"><div class=\"fl\">Destination</div>
+        <select id=\"cl_dest_${i}\" onchange=\"createList[${i}].dest=parseInt(this.value);regen()\">
+          <option value=\"2\"${r.dest===2?' selected':''}>2  CorpseDrop</option>
+          <option value=\"1\"${r.dest===1?' selected':''}>1  Wield</option>
+          <option value=\"0\"${r.dest===0?' selected':''}>0  Contain</option>
+          <option value=\"5\"${r.dest===5?' selected':''}>5  Shop</option>
+        </select></div>
+      <div class=\"fg\">
+        <div class=\"fl\">Item WCID <span style=\"color:var(--ink-faint);font-size:9px\">(273=Pyreal, 20634=MMD)</span></div>
+        <input type=\"number\" id=\"cl_wcid_${i}\" value=\"${r.wcid||0}\" oninput=\"createList[${i}].wcid=parseInt(this.value);regen()\">
+      </div>
+      <div class=\"fg\"><div class=\"fl\">Stack</div>
+        <input type=\"number\" id=\"cl_stack_${i}\" value=\"${r.stack||1}\" oninput=\"createList[${i}].stack=parseInt(this.value);regen()\"></div>
+      <div class=\"fg\"><div class=\"fl\">Probability</div>
+        <input type=\"text\" id=\"cl_prob_${i}\" value=\"${r.prob!==undefined?r.prob:1}\" oninput=\"createList[${i}].prob=parseFloat(this.value)||1;regen()\" placeholder=\"1.0\"></div>
+      <button class=\"del\" onclick=\"createList.splice(${i},1);rebuildPanel('properties')\"></button>
+    </div>`).join('');
+}
+
+function addCreateListRow(){
+  createList.push({dest:2,wcid:0,stack:1,prob:1});
+  rebuildPanel('properties');
+}
+
+function buildQuestProps(){
+  return `<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Quest Flag Properties</div><div class=\"sl\"></div></div>
+  <p class=\"note\" style=\"margin-bottom:12px\">Quest names must be a single word  no spaces. These insert directly into the <code style=\"font-family:'Source Code Pro',monospace;font-size:13px\">quest</code> table. No ItemType, no Emotes.</p>
+  <div class=\"grid g2\">
+    <div class=\"fg\" style=\"grid-column:span 2\"><div class=\"fl\">Quest Name (one word, no spaces) <span class=\"fc\">name</span></div>
+      <input type=\"text\" id=\"fName\" value=\"NewQuest\" oninput=\"regen()\" style=\"font-family:'Source Code Pro',monospace;font-weight:700\"></div>
+    <div class=\"fg\"><div class=\"fl\">Min Delta (cooldown seconds) <span class=\"fc\">min_Delta</span></div><input type=\"number\" id=\"fMinDelta\" value=\"0\"></div>
+    <div class=\"fg\"><div class=\"fl\">Max Solves (-1 = unlimited) <span class=\"fc\">max_Solves</span></div><input type=\"number\" id=\"fMaxSolves\" value=\"1\"></div>
+    <div class=\"fg\" style=\"grid-column:span 2\"><div class=\"fl\">Message <span class=\"fc\">message</span></div><input type=\"text\" id=\"fMsg\" value=\"NewQuest\"></div>
+  </div>
+  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Cooldown Quick-Fill</div><div class=\"sl\"></div></div>
+  <div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-top:4px\">
+    ${[['No cooldown','0'],['1 hour','3600'],['20 hours','72000'],['24 hours','86400'],['48 hours','172800'],['7 days','604800'],['30 days','2592000']].map(([l,v])=>`<button class=\"pill\" onclick=\"setQField('fMinDelta',${v})\">${l}</button>`).join('')}
+  </div>
+  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Quest Sequencing (AI Mode Only)</div><div class=\"sl\"></div></div>
+  <p class=\"note\">Full quest sequencing  NPC emotes, kill tasks, rewards, multi-step flows  is available in AI Mode only. Switch to AI Mode and select Quest to generate a complete multi-file quest sequence. The AI will request approval before generating more than 20 files.</p>
+  </div>`;
+}
+
+function buildJewelryProps(){
+  // Slot quick-fill buttons with correct ValidLocations from reference files
+  const SLOTS=[
+    [32768,'Necklace'],[786432,'Ring (Finger)'],[196608,'Bracelet (Wrist)'],
+    [67108864,'Trinket'],[1048576,'NeckWear Alt'],[524288,'WristWear Alt'],
+  ];
+  return `<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Jewelry Database Lookup</div><div class=\"sl\"></div></div>
+  <div class=\"fg sdrop-wrap\"><div class=\"fl\">Search by name to pre-fill values</div>
+    <input type=\"text\" id=\"jewSearch\" placeholder=\"Type jewelry name\" autocomplete=\"off\" onfocus=\"openJewelrySearch(this.value)\" oninput=\"searchJewelryFn(this.value)\">
+    <div class=\"sdrop-box\" id=\"jewSearch_drop\"><div class=\"sdrop-none\">Type to search</div></div>
+  </div></div>
+  <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Jewelry Slot</div><div class=\"sl\"></div></div>
+  <div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px\">
+    ${SLOTS.map(([v,l])=>`<button class=\"pill\" onclick=\"setQField('fValidLoc',${v})\">${l}</button>`).join('')}
+  </div>
+  <div style=\"display:flex;flex-direction:column;gap:10px\">
+    <div style=\"display:flex;gap:12px\">
+      <div class=\"fg\"><div class=\"fl\">Valid Location <span class=\"fc\">I-9</span></div><input type=\"number\" id=\"fValidLoc\" value=\"32768\"></div>
+      <div class=\"fg\"><div class=\"fl\">Value (pyreals) <span class=\"fc\">I-19</span></div><input type=\"number\" id=\"fValue\" value=\"50000\"></div>
+      <div class=\"fg\"><div class=\"fl\">Encumbrance <span class=\"fc\">I-5</span></div><input type=\"number\" id=\"fEncumb\" value=\"60\"></div>
+      <div class=\"fg\"><div class=\"fl\">Mass <span class=\"fc\">I-8</span></div><input type=\"number\" id=\"fMass\" value=\"90\"></div>
+    </div>
+    <div style=\"display:flex;gap:12px\">
+      <div class=\"fg\"><div class=\"fl\">Spellcraft <span class=\"fc\">I-106</span></div><input type=\"number\" id=\"fSpellcraft\" value=\"350\"></div>
+      <div class=\"fg\"><div class=\"fl\">Item Cur Mana <span class=\"fc\">I-107</span></div><input type=\"number\" id=\"fItemCurMana\" value=\"3000\"></div>
+      <div class=\"fg\"><div class=\"fl\">Item Max Mana <span class=\"fc\">I-108</span></div><input type=\"number\" id=\"fItemMaxMana\" value=\"3000\"></div>
+      <div class=\"fg\"><div class=\"fl\">Item Difficulty <span class=\"fc\">I-109</span></div><input type=\"number\" id=\"fItemDiff\" value=\"0\"></div>
+    </div>
+    <div style=\"display:flex;gap:12px\">
+      <div class=\"fg\"><div class=\"fl\">Palette Template <span class=\"fc\">I-3</span></div><select id=\"fPalette\">${opt(PALETTES,1)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Default Scale <span class=\"fc\">F-39</span></div><input type=\"text\" id=\"fScale\" value=\"0.5\"></div>
+      <div class=\"fg\"><div class=\"fl\">Mana Rate <span class=\"fc\">F-5</span></div><input type=\"text\" id=\"fManaRate\" value=\"-0.033\"></div>
+      <div class=\"fg\"><div class=\"fl\">Shade <span class=\"fc\">F-12</span></div><input type=\"text\" id=\"fShade\" value=\"0.66\"></div>
+    </div>
+    <div style=\"display:flex;gap:12px\">
+      <div class=\"fg\"><div class=\"fl\">Bonded <span class=\"fc\">I-33</span></div><select id=\"fBonded\">${opt(BONDED,0)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Attuned <span class=\"fc\">I-114</span></div><select id=\"fAttuned\">${opt(ATTUNED,0)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Inscribable <span class=\"fc\">B-22</span></div><select id=\"fInscribable\"><option value=\"1\">True</option><option value=\"0\">False</option></select></div>
+      <div class=\"fg\"><div class=\"fl\">Short Description <span class=\"fc\">S-15</span></div><input type=\"text\" id=\"fShortDesc\" value=\"\"></div>
+    </div>
+  </div>
+  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Gear Ratings</div><div class=\"sl\"></div></div>
+    ${[['Dmg Rating','fDmgRating','I-370'],['Dmg Resist','fDmgResist','I-371'],['Crit Rating','fCritRating','I-372'],['CritDmg Rating','fCritDmgRating','I-373'],['CritRes Rating','fCritResRating','I-374'],['Heal Resist','fHealResist','I-375'],['Heal Boost','fHealBoost','I-376']].map(([l,id,fc])=>`
+      <div style=\"display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)\">
+        <div style=\"flex:1;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)\">${l} <span class=\"fc\">${fc}</span></div>
+        <input type=\"number\" id=\"${id}\" value=\"0\" style=\"width:100px;text-align:right;border-bottom:1px solid var(--border)\">
+      </div>`).join('')}  </div>`;
+}
+
+function setQField(id,v){const e=$(id);if(e){e.value=v;regen();}}
+function onCTypeChange(){
+  bodyParts=getBodyParts(gi('cType',31));
+  // Rebuild only the body parts panel in-place
+  const bpPanel=document.querySelector('[data-sub=\"bodyparts\"]');
+  if(bpPanel){
+    bpPanel.innerHTML=buildBodyPartsTab();
+    bpPanel.querySelectorAll('input,select').forEach(e=>e.addEventListener('input',onFieldInput));
+  }
+  regen();
+}
+function onArmorTypeChange(){
+  const isCloth=gi('fArmorType',11)===1;
+  ['mSlash','mPierce','mBludge','mCold','mFire','mAcid','mElec','mNether'].forEach(id=>{const e=$(id);if(e)e.disabled=isCloth;});
+  const note=$('clothNote');if(note)note.style.display=isCloth?'block':'none';
+}
+
+//  RECIPE PROPS 
+function buildRecipeProps(){
+  function makeReqRows(arr,nm){
+    return arr.map((r,i)=>`
+    <div style=\"display:grid;grid-template-columns:110px 90px 150px 130px 1fr 28px;gap:8px;align-items:end;margin-bottom:6px\">
+      <div class=\"fg\"><div class=\"fl\">Req Type</div><select id=\"${nm}_t_${i}\" onchange=\"${nm}[${i}].type=this.value;regen()\">${opt(REQUIREMENT_TYPE,r.type)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Stat ID</div><input type=\"number\" id=\"${nm}_s_${i}\" value=\"${r.stat}\" oninput=\"${nm}[${i}].stat=this.value;regen()\"></div>
+      <div class=\"fg\"><div class=\"fl\">Value</div><input type=\"text\" id=\"${nm}_v_${i}\" value=\"${r.value||''}\" oninput=\"${nm}[${i}].value=this.value;regen()\"></div>
+      <div class=\"fg\"><div class=\"fl\">Compare</div><select id=\"${nm}_c_${i}\" onchange=\"${nm}[${i}].compare=this.value;regen()\">${opt(COMPARE_TYPE,r.compare)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Message</div><input type=\"text\" id=\"${nm}_m_${i}\" value=\"${r.message||''}\" oninput=\"${nm}[${i}].message=this.value;regen()\"></div>
+      <button class=\"del\" onclick=\"${nm}.splice(${i},1);rebuildPanel('properties')\"></button>
+    </div>`).join('');
+  }
+  const reqRows=makeReqRows(recipeReqs,'recipeReqs');
+  const reqBoolRows=makeReqRows(recipeReqsBool,'recipeReqsBool');
+  const reqFloatRows=makeReqRows(recipeReqsFloat,'recipeReqsFloat');
+  const reqStrRows=makeReqRows(recipeReqsStr,'recipeReqsStr');
+  const modRows=recipeMods.map((m,i)=>`
+    <div style=\"display:grid;grid-template-columns:120px 80px 130px 130px 80px 28px;gap:8px;align-items:end;margin-bottom:6px\">
+      <div class=\"fg\"><div class=\"fl\">Mod Type</div><select id=\"rmod_t_${i}\" onchange=\"recipeMods[${i}].type=this.value;regen()\">${opt(MOD_TYPE,m.type)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Stat ID</div><input type=\"number\" id=\"rmod_s_${i}\" value=\"${m.stat||0}\" oninput=\"recipeMods[${i}].stat=this.value;regen()\"></div>
+      <div class=\"fg\"><div class=\"fl\">Operation</div><select id=\"rmod_o_${i}\" onchange=\"recipeMods[${i}].operation=this.value;regen()\">${opt(MOD_OP,m.operation)}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Value</div><input type=\"text\" id=\"rmod_v_${i}\" value=\"${m.value||0}\" oninput=\"recipeMods[${i}].value=this.value;regen()\"></div>
+      <div class=\"fg\"><div class=\"fl\">Source</div><select id=\"rmod_src_${i}\" onchange=\"recipeMods[${i}].source=this.value;regen()\">${opt(RECIPE_SOURCE_TYPE,m.source)}</select></div>
+      <button class=\"del\" onclick=\"recipeMods.splice(${i},1);rebuildPanel('properties')\"></button>
+    </div>`).join('');
+  const cbRows=cookbookEntries.map((e,i)=>`
+    <div style=\"display:grid;grid-template-columns:1fr 1fr 28px;gap:8px;align-items:end;margin-bottom:6px\">
+      <div class=\"fg\"><div class=\"fl\">Source WCID  Name (comment)</div>
+        <div style=\"display:grid;grid-template-columns:80px 1fr;gap:8px\">
+          <input type=\"number\" id=\"cb_src_${i}\" value=\"${e.src||0}\" oninput=\"cookbookEntries[${i}].src=this.value;regen()\">
+          <input type=\"text\" id=\"cb_lbl_${i}\" value=\"${e.srcLabel||''}\" placeholder=\"name comment\" oninput=\"cookbookEntries[${i}].srcLabel=this.value;regen()\">
+        </div>
+      </div>
+      <div class=\"fg\"><div class=\"fl\">Target WCID</div><input type=\"number\" id=\"cb_tgt_${i}\" value=\"${e.tgt||0}\" oninput=\"cookbookEntries[${i}].tgt=this.value;regen()\"></div>
+      <button class=\"del\" onclick=\"cookbookEntries.splice(${i},1);rebuildPanel('properties')\"></button>
+    </div>`).join('');
+  return `<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Recipe Core</div><div class=\"sl\"></div></div>
+  <div class=\"grid g3\">
+    <div class=\"fg\"><div class=\"fl\">Recipe ID <span class=\"fc\">id</span></div><input type=\"number\" id=\"fWcid\" value=\"600000\" oninput=\"regen()\"></div>
+    <div class=\"fg\"><div class=\"fl\">Skill <span class=\"fc\">skill</span></div><select id=\"fRecipeSkill\">${[...ALL_SKILLS,[[38,'Alchemy'],[39,'Cooking']].flat()].flat().reduce((acc,s,i,arr)=>{if(i%2===0)acc.push(arr.slice(i,i+2));return acc;},[]).map(([v,l])=>`<option value=\"${v}\">${v}  ${l}</option>`).join('')}</select></div>
+    <div class=\"fg\"><div class=\"fl\">Difficulty <span class=\"fc\">difficulty</span></div><input type=\"number\" id=\"fRecipeDiff\" value=\"900\"></div>
+    <div class=\"fg\"><div class=\"fl\">Success WCID <span class=\"fc\">success_W_C_I_D</span></div><input type=\"number\" id=\"fSuccessWcid\" value=\"0\"></div>
+    <div class=\"fg\"><div class=\"fl\">Success Amount <span class=\"fc\">success_Amount</span></div><input type=\"number\" id=\"fSuccessAmt\" value=\"1\"></div>
+    <div class=\"fg\"><div class=\"fl\">Fail WCID <span class=\"fc\">fail_W_C_I_D</span></div><input type=\"number\" id=\"fFailWcid\" value=\"0\"></div>
+    <div class=\"fg\" style=\"grid-column:span 3\"><div class=\"fl\">Success Message</div><input type=\"text\" id=\"fSuccessMsg\" value=\"You apply the recipe successfully.\"></div>
+    <div class=\"fg\" style=\"grid-column:span 3\"><div class=\"fl\">Fail Message</div><input type=\"text\" id=\"fFailMsg\" value=\"You apply the recipe but destroy the target.\"></div>
+    <div class=\"fg\"><div class=\"fl\">Destroy Source (success)</div><input type=\"text\" id=\"fDestroySourceSuccess\" value=\"1\"></div>
+    <div class=\"fg\"><div class=\"fl\">Destroy Target (fail)</div><input type=\"text\" id=\"fDestroyTargetFail\" value=\"1\"></div>
+  </div>
+  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Requirements  Int (recipe_requirements_int)</div><div class=\"sl\"></div></div>
+  ${reqRows}
+  <button class=\"add-btn\" onclick=\"recipeReqs.push({type:0,stat:105,value:1,compare:6,message:'Requirement not met!'});rebuildPanel('properties')\">+ Add Int Requirement</button>
+  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Requirements  Bool (recipe_requirements_bool)</div><div class=\"sl\"></div></div>
+  ${reqBoolRows}
+  <button class=\"add-btn\" onclick=\"recipeReqsBool.push({type:0,stat:1,value:'True',compare:6,message:'Requirement not met!'});rebuildPanel('properties')\">+ Add Bool Requirement</button>
+  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Requirements  Float (recipe_requirements_float)</div><div class=\"sl\"></div></div>
+  ${reqFloatRows}
+  <button class=\"add-btn\" onclick=\"recipeReqsFloat.push({type:0,stat:3,value:'0.0',compare:6,message:'Requirement not met!'});rebuildPanel('properties')\">+ Add Float Requirement</button>
+  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Requirements  String (recipe_requirements_string)</div><div class=\"sl\"></div></div>
+  ${reqStrRows}
+  <button class=\"add-btn\" onclick=\"recipeReqsStr.push({type:0,stat:1,value:'',compare:6,message:'Requirement not met!'});rebuildPanel('properties')\">+ Add String Requirement</button>
+  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Modifications (recipe_mods)</div><div class=\"sl\"></div></div>
+  <p class=\"note\">Values with decimals go to recipe_mods_float, whole numbers to recipe_mods_int.</p>
+  ${modRows}
+  <button class=\"add-btn\" onclick=\"recipeMods.push({type:0,stat:0,operation:2,value:0,source:1});rebuildPanel('properties')\">+ Add Modification</button>
+  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Cook Book (source  target pairs)</div><div class=\"sl\"></div></div>
+  ${cbRows}
+  <button class=\"add-btn\" onclick=\"cookbookEntries.push({src:0,srcLabel:'',tgt:0});rebuildPanel('properties')\">+ Add Source  Target Pair</button>
+  </div>`;
+}
+
+//  ATTRIBUTES 
+function buildAttrs(){
+  const attrs=[[1,'Strength'],[2,'Endurance'],[3,'Quickness'],[4,'Coordination'],[5,'Focus'],[6,'Self']];
+  return `<div class=\"sec\">
+    <div class=\"sh\"><div class=\"st\">Attributes</div><div class=\"sl\"></div></div>
+    <div class=\"grid g3\">${attrs.map(([t,n])=>`<div class=\"fg\"><div class=\"fl\">${n} <span class=\"fc\">A-${t}</span></div><input type=\"number\" id=\"attr_${t}\" value=\"260\"></div>`).join('')}</div>
+    <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Vitals</div><div class=\"sl\"></div></div>
+    <div class=\"grid g3\">
+      <div class=\"fg\"><div class=\"fl\">MaxHealth <span class=\"fc\">V-1</span></div><input type=\"number\" id=\"vital_1\" value=\"2000\"></div>
+      <div class=\"fg\"><div class=\"fl\">MaxStamina <span class=\"fc\">V-3</span></div><input type=\"number\" id=\"vital_3\" value=\"2000\"></div>
+      <div class=\"fg\"><div class=\"fl\">MaxMana <span class=\"fc\">V-5</span></div><input type=\"number\" id=\"vital_5\" value=\"800\"></div>
+    </div></div>`;
+}
+
+//  SKILLS 
+// Core skills always shown; extras added by user
+const CORE_SKILL_IDS=[6,7,15,44]; // MeleeDefense,MissileDefense,MagicDefense,HeavyWeapons
+let extraSkills=[]; // [{id,sac,init}]
+
+function buildSkills(){
+  const level=gi('fLevel',100);
+  const base=Math.floor(level*2.2);
+  const skillSelect=ALL_SKILLS.map(([id,name])=>`<option value=\"${id}\">${name} (SK-${id})</option>`).join('');
+  const extraRows=extraSkills.map((sk,i)=>{
+    const name=ALL_SKILLS.find(([id])=>id==sk.id)?.[1]||'Unknown';
+    return `<div style=\"display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-lt)\">
+      <div style=\"flex:1;font-family:'Cinzel',serif;font-size:11px;font-weight:700;color:var(--ink-mid)\">${name} <span class=\"fc\">SK-${sk.id}</span></div>
+      <select id=\"sk_sac_x_${i}\" style=\"width:150px\" onchange=\"extraSkills[${i}].sac=parseInt(this.value);regen()\">${opt(SKILL_SAC,sk.sac||2)}</select>
+      <input type=\"number\" id=\"sk_init_x_${i}\" value=\"${sk.init||base}\" style=\"width:90px\" oninput=\"extraSkills[${i}].init=parseInt(this.value);regen()\">
+      <button class=\"del\" onclick=\"extraSkills.splice(${i},1);rebuildPanel('skills')\"></button>
+    </div>`;
+  }).join('');
+  return `<div class=\"sec\">
+    <div class=\"sh\"><div class=\"st\">Skills</div><div class=\"sl\"></div></div>
+    <p class=\"warn\" style=\"margin-bottom:10px\"> Retired skill types 15 and 813 are never valid.</p>
+    <p class=\"note\" style=\"margin-bottom:14px\">Base skill auto-calculated from level ${level}  ~${base}.</p>
+    ${CORE_SKILL_IDS.map(id=>{
+      const name=ALL_SKILLS.find(([sid])=>sid===id)?.[1]||'Skill';
+      return `<div style=\"display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-lt)\">
+        <div style=\"flex:1;font-family:'Cinzel',serif;font-size:11px;font-weight:700;color:var(--ink-mid)\">${name} <span class=\"fc\">SK-${id}</span></div>
+        <select id=\"sk_sac_${id}\" style=\"width:150px\">${opt(SKILL_SAC,2)}</select>
+        <input type=\"number\" id=\"sk_init_${id}\" value=\"${base}\" style=\"width:90px\">
+        <button class=\"del\" onclick=\"removeCoreSkill(${id})\" title=\"Remove\"></button>
+      </div>`;
+    }).join('')}
+    ${extraRows}
+    <div style=\"margin-top:12px;display:flex;gap:10px;align-items:center\">
+      <div class=\"fg sdrop-wrap\" style=\"flex:1\">
+        <input type=\"text\" id=\"skillSearchInp\" placeholder=\"Search skills to add\" autocomplete=\"off\" oninput=\"filterSkillSearch(this.value)\" style=\"border:1px dashed var(--border);padding:6px 10px\">
+        <div class=\"sdrop-box\" id=\"skillSearch_drop\"><div class=\"sdrop-none\">Type to search skills</div></div>
+      </div>
+      <button class=\"add-btn\" style=\"width:auto;margin-top:0;padding:8px 16px\" onclick=\"addSkillByName()\">+ Add Skill</button>
+    </div>
+  </div>`;
+}
+
+function filterSkillSearch(q){
+  const drop=$('skillSearch_drop');if(!drop)return;
+  if(!q||q.length<1){drop.classList.remove('open');return;}
+  const ql=q.toLowerCase();
+  const matches=ALL_SKILLS.filter(([id,name])=>name.toLowerCase().includes(ql)&&!CORE_SKILL_IDS.includes(id)).slice(0,20);
+  drop.innerHTML=matches.length
+    ?matches.map(([id,name])=>`<div class=\"sdrop-item\" onclick=\"addSkillById(${id})\">${name}<small>SK-${id}</small></div>`).join('')
+    :'<div class=\"sdrop-none\">No skills found</div>';
+  drop.classList.add('open');
+}
+
+function removeCoreSkill(id){
+  const idx=CORE_SKILL_IDS.indexOf(id);
+  if(idx>=0) CORE_SKILL_IDS.splice(idx,1);
+  rebuildPanel('skills');
+}
+
+function addSkillById(id){
+  const level=gi('fLevel',100);
+  const base=Math.floor(level*2.2);
+  if(!extraSkills.find(s=>s.id===id)){
+    extraSkills.push({id,sac:2,init:base});
+    rebuildPanel('skills');
+  }
+  $('skillSearch_drop')?.classList.remove('open');
+  setV('skillSearchInp','');
+}
+
+function addSkillByName(){
+  // fallback: just open the dropdown
+  $('skillSearchInp')?.focus();
+}
+
+//  SPELL BOOK 
+function buildSpellbook(){
+  const rows=spells.map((sp,i)=>`
+    <div style=\"display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-lt)\">
+      <div class=\"fg sdrop-wrap\" style=\"flex:2\">
+        <div class=\"fl\">Spell Name <span style=\"color:var(--ink-faint);font-size:9px\">(type or click )</span></div>
+        <div style=\"display:flex;gap:0\">
+          <input type=\"text\" id=\"sp_nm_${i}\" value=\"${sp.name||''}\" oninput=\"filterSpells(${i},this.value)\" onfocus=\"openSpellDrop(${i})\" autocomplete=\"off\" placeholder=\"Search spells\" style=\"border-bottom:2px solid var(--border);flex:1\">
+          <button onclick=\"openSpellDrop(${i})\" tabindex=\"-1\" style=\"border:none;border-bottom:2px solid var(--border);background:var(--parch);padding:0 8px;cursor:pointer;color:var(--ink-dim);font-size:11px\"></button>
+        </div>
+        <div class=\"sdrop-box\" id=\"sp_drop_${i}\"><div class=\"sdrop-none\">Type to search, or click  to browse</div></div>
+      </div>
+      <div class=\"fg\" style=\"max-width:80px\">
+        <div class=\"fl\">ID <span class=\"fc\">spell</span></div>
+        <input type=\"number\" id=\"sp_id_${i}\" value=\"${sp.id||''}\" oninput=\"spells[${i}].id=this.value;regen()\">
+      </div>
+      <div class=\"fg\" style=\"max-width:90px\">
+        <div class=\"fl\">Probability</div>
+        <input type=\"text\" id=\"sp_pr_${i}\" value=\"${sp.prob||'2.0'}\" oninput=\"spells[${i}].prob=this.value;regen()\">
+      </div>
+      <button class=\"del\" onclick=\"spells.splice(${i},1);rebuildPanel('spellbook')\" style=\"margin-top:16px\"></button>
+    </div>`).join('');
+  return `<div class=\"sec\">
+    <div class=\"sh\"><div class=\"st\">Spell Book</div><div class=\"sl\"></div></div>
+    <p class=\"note\" style=\"margin-bottom:10px\">Search by name  ID fills automatically. Probability 2.0 = 100% cast chance. Value >2.0: actual% = value2.0.</p>
+    ${rows}
+    <button class=\"add-btn\" style=\"margin-top:10px\" onclick=\"spells.push({id:'',name:'',prob:'2.0'});rebuildPanel('spellbook')\">+ Add Spell</button>
+  </div>`;
+}
+
+function openSpellDrop(idx){
+  const inp=$(`sp_nm_${idx}`);
+  const query=inp?inp.value:'';
+  // Show first 60 spells or filter by current text
+  const ql=query.toLowerCase();
+  const matches=ql.length>=1
+    ? SPELLS.filter(s=>s[1].toLowerCase().includes(ql))
+    : SPELLS;
+  const drop=$(`sp_drop_${idx}`);
+  if(!drop)return;
+  if(matches.length){
+    const items=matches.map(s=>{
+      const safeName=s[1].replace(/\"/g,'&quot;').replace(/'/g,'&#39;');
+      return `<div class=\"sdrop-item\" onmousedown=\"event.preventDefault();selectSpell(${idx},${s[0]},'${safeName}')\">${s[1]}<small>${s[0]}</small></div>`;
+    }).join('');
+    drop.innerHTML=`<div class=\"sdrop-list\">${items}</div>`;
+  } else {
+    drop.innerHTML='<div class=\"sdrop-none\">No results</div>';
+  }
+  // Close all other spell drops first
+  document.querySelectorAll('.sdrop-box.open').forEach(d=>{if(d.id!==`sp_drop_${idx}`)d.classList.remove('open');});
+  drop.classList.add('open');
+}
+
+function filterSpells(idx,query){
+  if(spells[idx]) spells[idx].name=query;
+  const drop=$(`sp_drop_${idx}`);if(!drop)return;
+  const q=query.toLowerCase();
+  // Show matching results, or top 60 if empty
+  const matches=q.length>=1
+    ?SPELLS.filter(s=>s[1].toLowerCase().includes(q)).slice(0,50)
+    :SPELLS.slice(0,60);
+  const items2=matches.map(s=>{
+    const safeName=s[1].replace(/\"/g,'&quot;').replace(/'/g,'&#39;');
+    return `<div class=\"sdrop-item\" onmousedown=\"event.preventDefault();selectSpell(${idx},${s[0]},'${safeName}')\">${s[1]}<small>${s[0]}</small></div>`;
+  }).join('');
+  drop.innerHTML=matches.length?`<div class=\"sdrop-list\">${items2}</div>`:'<div class=\"sdrop-none\">No results</div>';
+  if(q.length>=1||drop.classList.contains('open')) drop.classList.add('open');
+}
+function selectSpell(idx,id,name){
+  const decoded=name.replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&');
+  spells[idx]={...spells[idx],id,name:decoded};
+  const ie=$('sp_id_'+idx),ne=$('sp_nm_'+idx),dr=$('sp_drop_'+idx);
+  if(ie)ie.value=id;if(ne)ne.value=decoded;if(dr)dr.classList.remove('open');regen();
+}
+
+//  BODY PARTS 
+function buildBodyPartsTab(){
+  const cType=gi('cType',31);
+  const setName=CREATURE_BODY_MAP[cType]||'biped';
+  const rows=bodyParts.map((bp,i)=>`<tr>
+    <td style=\"font-family:'Cinzel',serif;font-size:9px;font-weight:700;color:var(--ink-mid);white-space:nowrap\">${bp.n}</td>
+    <td><select id=\"bp_dt_${i}\" style=\"font-size:11px\">${opt(DMG_TYPES,4)}</select></td>
+    <td><input type=\"number\" id=\"bp_dv_${i}\" value=\"${bp.dVal||0}\"></td>
+    <td><input type=\"number\" id=\"bp_al_${i}\" value=\"${bp.baseAL||80}\"></td>
+    <td><input type=\"number\" id=\"bp_sl_${i}\" value=\"${bp.sl||64}\"></td>
+    <td><input type=\"number\" id=\"bp_pi_${i}\" value=\"${bp.pi||56}\"></td>
+    <td><input type=\"number\" id=\"bp_bl_${i}\" value=\"${bp.bl||120}\"></td>
+    <td><input type=\"number\" id=\"bp_co_${i}\" value=\"${bp.co||40}\"></td>
+    <td><input type=\"number\" id=\"bp_fi_${i}\" value=\"${bp.fi||120}\"></td>
+    <td><input type=\"number\" id=\"bp_ac_${i}\" value=\"${bp.ac||80}\"></td>
+    <td><input type=\"number\" id=\"bp_el_${i}\" value=\"${bp.el||80}\"></td>
+    <td><input type=\"number\" id=\"bp_nt_${i}\" value=\"${bp.nt||0}\"></td>
+  </tr>`).join('');
+  return `<div class=\"sec bp-wrap\">
+    <div class=\"sh\"><div class=\"st\">Body Parts</div><div class=\"sl\"></div>
+      <span style=\"font-family:'Cinzel',serif;font-size:9px;font-weight:700;color:var(--ink-dim)\">Layout: ${setName} (auto from Creature Type)</span>
+    </div>
+    <table class=\"bp\"><thead><tr><th>Part</th><th>DmgType</th><th>DVal</th><th>Base AL</th><th>Slash</th><th>Pierce</th><th>Bludge</th><th>Cold</th><th>Fire</th><th>Acid</th><th>Elec</th><th>Nether</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+  </div>`;
+}
+
+function onFieldInput(){regen();}
+
+function switchSub(sub,btn){
+  curSub=sub;
+  document.querySelectorAll('.ctab').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  document.querySelectorAll('#formContent .sub-panel').forEach(p=>{
+    p.classList.toggle('active',p.dataset.sub===sub);
+  });
+}
+
+function switchType(type,btn){
+  curType=type; curSub=TYPE_CFG[type].subTabs[0];
+  spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
+  recipeReqs=[];recipeReqsBool=[];recipeReqsFloat=[];recipeReqsStr=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];
+  bodyParts=getBodyParts(31);
+  document.querySelectorAll('.itab').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  buildForm();
+}
+
+function resetAll(){
+  curType='creature'; curSub='properties';
+  spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
+  recipeReqs=[];recipeReqsBool=[];recipeReqsFloat=[];recipeReqsStr=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];
+  bodyParts=getBodyParts(31);
+  buildForm();
+  document.querySelectorAll('.itab').forEach(b=>{
+    b.classList.toggle('active',b.dataset&&b.dataset.type==='creature');
+  });
+}
+
+function addEmote(){
+  emotes.push({category:7,prob:1,wcidFilter:'',questFilter:'',vendorType:1,actions:[]});
+  rebuildPanel('emotes');
+}
+
+function toggleEmote(i){
+  const body=document.getElementById('eb_'+i);
+  const arrow=document.getElementById('et_'+i);
+  if(!body) return;
+  body.classList.toggle('open');
+  if(arrow) arrow.textContent=body.classList.contains('open')?'▼':'▶';
+}
+
+function buildEmotesTab(){
+  const t=curType;
+  const hasEmotes=['creature','npc','item','weapon','armor','jewelry'].includes(t);
+  if(!hasEmotes) return '<div class="sec"><p style="font-size:12px;color:var(--ink-dim);padding:8px">Emotes not applicable.</p></div>';
+  const blocks=emotes.map((em,i)=>buildEmoteBlock(em,i)).join('');
+  return `<div class="sec">
+    <div class="sh"><div class="st">Emote Chain Builder</div><div class="sl"></div></div>
+    <p style="font-family:'IM Fell English',serif;font-style:italic;font-size:13px;color:var(--ink-dim);margin-bottom:16px;line-height:1.6">
+      Each <strong style="font-style:normal">Trigger</strong> fires independently based on category and filters.
+      <strong style="font-style:normal">Responses</strong> execute in order when the trigger fires.
+    </p>
+    <div id="emoteBlocks">${blocks}</div>
+    <button class="add-btn" onclick="addEmote()">+ Add Trigger</button>
+  </div>`;
+}
+
+
+function rebuildPanel(sub){
+  // Rebuild a single sub-panel in-place without touching other panels
+  const panel=document.querySelector(`[data-sub=\"${sub}\"]`);
+  if(!panel) return;
+  const builders={properties:buildProps,attributes:buildAttrs,skills:buildSkills,spellbook:buildSpellbook,bodyparts:buildBodyPartsTab,emotes:buildEmotesTab,advanced:buildAdvanced};
+  panel.innerHTML=(builders[sub]||buildProps)();
+  panel.querySelectorAll('input,select,textarea').forEach(e=>e.addEventListener('input',onFieldInput));
+  regen();
+}
+
+function buildGeneratorProps(){
+  const whenOpts=[[2,'Always (Respawn)'],[3,'Event'],[4,'Sleeping'],[1,'Once']];
+  const targetWcid=g('fGenTargetWcid','800000');
+  const genWcid=targetWcid?(parseInt(targetWcid)+1000000):'';
+  return `<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Spawn Target</div><div class=\"sl\">What this generator creates</div></div>
+    <div class=\"grid g2\">
+      <div class=\"fg\"><div class=\"fl\">Target WCID <span class=\"fc\">the weenie to spawn</span></div><input type=\"text\" id=\"fGenTargetWcid\" value=\"${g('fGenTargetWcid','800000')}\" placeholder=\"e.g. 800000\"></div>
+      <div class=\"fg\"><div class=\"fl\">Generator WCID <span class=\"fc\">auto = Target + 1,000,000</span></div><input type=\"text\" id=\"fGenWcid\" value=\"${genWcid}\" placeholder=\"auto-calculated\" readonly style=\"opacity:.6;cursor:default\"></div>
+      <div class=\"fg\"><div class=\"fl\">Display Name <span class=\"fc\">used in class_Name</span></div><input type=\"text\" id=\"fGenName\" value=\"${g('fGenName','New Creature')}\" placeholder=\"New Creature\"></div>
+      <div class=\"fg\"><div class=\"fl\">Probability <span class=\"fc\">0.0 \\u2013 1.0</span></div><input type=\"text\" id=\"fGenProb\" value=\"${g('fGenProb','1')}\"></div>
+    </div></div>
+  <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Spawn Settings</div><div class=\"sl\">Timing and quantity</div></div>
+    <div class=\"grid g3\">
+      <div class=\"fg\"><div class=\"fl\">Respawn Delay <span class=\"fc\">seconds</span></div><input type=\"text\" id=\"fGenRespawn\" value=\"${g('fGenRespawn','300')}\" placeholder=\"300\"></div>
+      <div class=\"fg\"><div class=\"fl\">Init Create <span class=\"fc\">spawns on load</span></div><input type=\"text\" id=\"fGenInit\" value=\"${g('fGenInit','1')}\"></div>
+      <div class=\"fg\"><div class=\"fl\">Max Create <span class=\"fc\">max simultaneous</span></div><input type=\"text\" id=\"fGenMax\" value=\"${g('fGenMax','1')}\"></div>
+    </div>
+    <div class=\"grid g2\" style=\"margin-top:10px\">
+      <div class=\"fg\"><div class=\"fl\">When Create <span class=\"fc\">spawn condition</span></div>
+        <select id=\"fGenWhen\">${opt(whenOpts,g('fGenWhen','2'))}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Event Name <span class=\"fc\">if Event spawn only</span></div><input type=\"text\" id=\"fGenEventName\" value=\"${g('fGenEventName','')}\" placeholder=\"e.g. HarvestFestival\"></div>
+    </div></div>
+  <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Placement Coordinates</div><div class=\"sl\">Fill these in after placing with a spawn tool</div></div>
+    <div class=\"grid g3\">
+      <div class=\"fg\"><div class=\"fl\">obj_Cell_Id <span class=\"fc\">landcell hex</span></div><input type=\"text\" id=\"fGenCell\" value=\"${g('fGenCell','')}\" placeholder=\"NULL\"></div>
+      <div class=\"fg\"><div class=\"fl\">Origin X</div><input type=\"text\" id=\"fGenOriginX\" value=\"${g('fGenOriginX','')}\" placeholder=\"NULL\"></div>
+      <div class=\"fg\"><div class=\"fl\">Origin Y</div><input type=\"text\" id=\"fGenOriginY\" value=\"${g('fGenOriginY','')}\" placeholder=\"NULL\"></div>
+      <div class=\"fg\"><div class=\"fl\">Origin Z</div><input type=\"text\" id=\"fGenOriginZ\" value=\"${g('fGenOriginZ','')}\" placeholder=\"NULL\"></div>
+      <div class=\"fg\"><div class=\"fl\">Angles W</div><input type=\"text\" id=\"fGenAngW\" value=\"${g('fGenAngW','')}\" placeholder=\"NULL\"></div>
+      <div class=\"fg\"><div class=\"fl\">Angles X</div><input type=\"text\" id=\"fGenAngX\" value=\"${g('fGenAngX','')}\" placeholder=\"NULL\"></div>
+      <div class=\"fg\"><div class=\"fl\">Angles Y</div><input type=\"text\" id=\"fGenAngY\" value=\"${g('fGenAngY','')}\" placeholder=\"NULL\"></div>
+      <div class=\"fg\"><div class=\"fl\">Angles Z</div><input type=\"text\" id=\"fGenAngZ\" value=\"${g('fGenAngZ','')}\" placeholder=\"NULL\"></div>
+    </div></div>`;
+}
+
+const CREATURE_BODY_MAP={31:'biped',10:'biped',1:'biped',2:'biped',3:'biped',4:'biped',5:'biped',6:'biped',7:'biped',8:'biped',9:'biped',13:'biped',14:'biped',15:'biped',16:'biped',17:'biped',18:'biped',19:'biped',20:'biped',22:'biped',23:'biped',28:'biped',29:'biped',30:'biped',32:'biped',38:'biped',39:'biped',44:'biped',46:'biped',48:'biped',60:'biped',61:'biped',75:'biped',99:'biped',100:'biped',101:'biped'};
 
 
 const EMOTE_CAT_COLORS = {
