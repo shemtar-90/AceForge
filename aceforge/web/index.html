@@ -481,34 +481,24 @@ const lookupName = (arr,val) => {const f=arr.find(r=>r[0]==val);return f?f[1]:St
 //           101=StartBarber, 119=AddContract, 120=RemoveContract
 const EMOTE_TYPES=[
   [1,'Act'],[2,'AwardXP'],[3,'Give'],[5,'Motion'],[8,'Say'],
-  [10,'Tell'],[11,'Turn'],[12,'TurnToTarget'],
-  [14,'CastSpell'],[15,'Activate'],[16,'WorldBroadcast'],
-  [17,'LocalBroadcast'],[18,'DirectBroadcast'],[19,'CastSpellInstant'],
-  [21,'InqQuest'],[22,'StampQuest'],[23,'StartEvent'],[24,'StopEvent'],
-  [27,'TeachSpell'],[30,'InqQuestSolves'],[31,'EraseQuest'],
-  [32,'DecrementQuest'],[33,'IncrementQuest'],[34,'AddCharacterTitle'],
-  [35,'InqBoolStat'],[36,'InqIntStat'],[37,'InqFloatStat'],[38,'InqStringStat'],
-  [39,'InqAttributeStat'],[40,'InqRawAttributeStat'],
-  [41,'InqSecondaryAttributeStat'],[42,'InqRawSecondaryAttributeStat'],
-  [43,'InqSkillStat'],[44,'InqRawSkillStat'],
-  [45,'InqSkillTrained'],[46,'InqSkillSpecialized'],
-  [47,'AwardTrainingCredits'],[48,'InflictVitaePenalty'],
-  [49,'AwardLevelProportionalXP'],[51,'InqEvent'],
-  [52,'ForceMotion'],[53,'SetIntStat'],[54,'IncrementIntStat'],[55,'DecrementIntStat'],
-  [56,'CreateTreasure'],[57,'ResetHomePosition'],
-  [58,'InqFellowQuest'],[60,'UpdateFellowQuest'],[61,'StampFellowQuest'],
-  [62,'AwardNoShareXP'],[63,'SetSanctuaryPosition'],
-  [65,'FellowBroadcast'],[66,'LockFellow'],[67,'Goto'],[68,'PopUp'],
-  [69,'SetBoolStat'],[70,'SetQuestCompletions'],[71,'InqNumCharacterTitles'],
-  [73,'PetCastSpellOnOwner'],[74,'TakeItems'],[75,'InqYesNo'],[76,'InqOwnsItems'],
-  [77,'DeleteSelf'],[80,'InqMyQuest'],[81,'StampMyQuest'],
-  [82,'InqMyQuestSolves'],[83,'EraseMyQuest'],
-  [84,'DecrementMyQuest'],[85,'IncrementMyQuest'],[86,'SetMyQuestCompletions'],
-  [87,'MoveToPos'],[88,'LocalSignal'],[89,'InqPackSpace'],
-  [90,'RemoveVitaePenalty'],[99,'TeleportTarget'],[100,'TeleportSelf'],
-  [110,'UntrainSkill'],[112,'SpendLuminance'],[113,'AwardLuminance'],
-  [114,'InqInt64Stat'],[115,'SetInt64Stat'],[118,'SetFloatStat'],
+  [10,'Tell'],[11,'Turn'],[12,'TurnToTarget'],[14,'CastSpell'],[15,'Activate'],
+  [16,'WorldBroadcast'],[17,'LocalBroadcast'],[18,'DirectBroadcast'],[19,'CastSpellInstant'],[21,'InqQuest'],
+  [22,'StampQuest'],[23,'StartEvent'],[24,'StopEvent'],[27,'TeachSpell'],[30,'InqQuestSolves'],
+  [31,'EraseQuest'],[32,'DecrementQuest'],[33,'IncrementQuest'],[34,'AddCharacterTitle'],[35,'InqBoolStat'],
+  [36,'InqIntStat'],[37,'InqFloatStat'],[38,'InqStringStat'],[39,'InqAttributeStat'],[40,'InqRawAttributeStat'],
+  [41,'InqSecondaryAttributeStat'],[42,'InqRawSecondaryAttributeStat'],[43,'InqSkillStat'],[44,'InqRawSkillStat'],[45,'InqSkillTrained'],
+  [46,'InqSkillSpecialized'],[47,'AwardTrainingCredits'],[48,'InflictVitaePenalty'],[49,'AwardLevelProportionalXP'],[51,'InqEvent'],
+  [52,'ForceMotion'],[53,'SetIntStat'],[54,'IncrementIntStat'],[55,'DecrementIntStat'],[56,'CreateTreasure'],
+  [57,'ResetHomePosition'],[58,'InqFellowQuest'],[60,'UpdateFellowQuest'],[61,'StampFellowQuest'],[62,'AwardNoShareXP'],
+  [63,'SetSanctuaryPosition'],[65,'FellowBroadcast'],[66,'LockFellow'],[67,'Goto'],[68,'PopUp'],
+  [69,'SetBoolStat'],[70,'SetQuestCompletions'],[71,'InqNumCharacterTitles'],[73,'PetCastSpellOnOwner'],[74,'TakeItems'],
+  [75,'InqYesNo'],[76,'InqOwnsItems'],[77,'DeleteSelf'],[80,'InqMyQuest'],[81,'StampMyQuest'],
+  [82,'InqMyQuestSolves'],[83,'EraseMyQuest'],[84,'DecrementMyQuest'],[85,'IncrementMyQuest'],[86,'SetMyQuestCompletions'],
+  [87,'MoveToPos'],[88,'LocalSignal'],[89,'InqPackSpace'],[90,'RemoveVitaePenalty'],[99,'TeleportTarget'],
+  [100,'TeleportSelf'],[110,'UntrainSkill'],[112,'SpendLuminance'],[113,'AwardLuminance'],[114,'InqInt64Stat'],
+  [115,'SetInt64Stat'],[118,'SetFloatStat']
 ];
+
 
 // MyQuest types — only shown for NPC content type
 const EMOTE_NPC_ONLY_TYPES=new Set([80,81,82,83,84,85,86]);
@@ -1826,6 +1816,37 @@ function _buildActionFields(fdefs, a, i, j, aType){
     return '<div class="fg" style="grid-column:span 2"><div class="fl">'+label+'</div>'+statSel+'</div>'+valHtml;
   }
 
+  // Quest name + value: IncrementQuest, DecrementQuest
+  if(aType===33||aType===32){
+    const label=aType===33?'IncrementQuest':'DecrementQuest';
+    return '<div class="fg" style="grid-column:span 2"><div class="fl">Quest Name</div>'+
+      '<input type="text" value="'+(a.questFlag||'')+'" placeholder="e.g. FreddieFlowerQuest" oninput="emotes['+ii+'].actions['+jj+'].testString=this.value;regen()"></div>'+
+      '<div class="fg"><div class="fl">Value</div>'+
+      '<input type="number" value="'+(a.amount||1)+'" placeholder="1" oninput="emotes['+ii+'].actions['+jj+'].amount=this.value;regen()"></div>';
+  }
+
+  // Quest name only: InqFellowQuest, UpdateFellowQuest, StampFellowQuest
+  if(aType===58||aType===60||aType===61){
+    const labels={58:'InqFellowQuest',60:'UpdateFellowQuest',61:'StampFellowQuest'};
+    return '<div class="fg" style="grid-column:span 3"><div class="fl">Quest Name</div>'+
+      '<input type="text" value="'+(a.questFlag||'')+'" placeholder="e.g. FreddieFlowerQuest" oninput="emotes['+ii+'].actions['+jj+'].testString=this.value;regen()"></div>';
+  }
+
+  // SetQuestCompletions: quest name + completions value
+  if(aType===70){
+    return '<div class="fg" style="grid-column:span 2"><div class="fl">Quest Name</div>'+
+      '<input type="text" value="'+(a.questFlag||'')+'" placeholder="e.g. FreddieFlowerQuest" oninput="emotes['+ii+'].actions['+jj+'].testString=this.value;regen()"></div>'+
+      '<div class="fg"><div class="fl">Completions</div>'+
+      '<input type="number" value="'+(a.amount||1)+'" placeholder="1" oninput="emotes['+ii+'].actions['+jj+'].amount=this.value;regen()"></div>';
+  }
+
+  // Value + delay only: InqNumCharacterTitles, InqPackSpace, SpendLuminance, AwardLuminance
+  if(aType===71||aType===89||aType===112||aType===113){
+    const labels={71:'Min Titles',89:'Pack Space Required',112:'Luminance to Spend',113:'Luminance to Award'};
+    return '<div class="fg" style="grid-column:span 3"><div class="fl">'+(labels[aType]||'Value')+'</div>'+
+      '<input type="number" value="'+(a.amount||'')+'" placeholder="e.g. 1" oninput="emotes['+ii+'].actions['+jj+'].amount=this.value;regen()"></div>';
+  }
+
   // InqYesNo — shows sub-note
   if(aType===75){
     return '<div class="fg" style="grid-column:span 3"><div class="fl">Question Message</div>'
@@ -2867,7 +2888,7 @@ function buildSQL(){
           const isStatType=[35,36,37,38,39,40,41,42,43,44,45,46,53,54,55,69,110,115,118].includes(atype);
           // Spell-based types
           const spellVal=(a.spellId&&a.spellId!=='')?_n(a.spellId):'NULL';
-          lines.push(`${prefix}(@parent_id, ${ai}, ${atype} /* ${typeName} */, ${_n(a.delay)||0}, ${_n(a.extent)||1}, ${motionVal}, ${_q(a.message)}, ${_q(a.testString)}, ${_n(a.min)}, ${_n(a.max)}, ${min64}, ${max64}, NULL, NULL, ${isStatType?statVal:'NULL'}, NULL, NULL, NULL, ${_n(a.heroXP64)}, ${_n(a.percent)}, ${spellVal}, NULL, NULL, NULL, NULL, NULL, NULL, ${wcidVal}, ${_n(a.stackSize)}, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)`);
+          lines.push(`${prefix}(@parent_id, ${ai}, ${atype} /* ${typeName} */, ${_n(a.delay)||0}, ${_n(a.extent)||1}, ${motionVal}, ${_q(a.message)}, ${_q(a.testString)}, ${_n(a.min)}, ${_n(a.max)}, ${min64}, ${max64}, NULL, NULL, ${isStatType?statVal:'NULL'}, NULL, ${_n(a.amount)}, NULL, ${_n(a.heroXP64)}, ${_n(a.percent)}, ${spellVal}, NULL, NULL, NULL, NULL, NULL, NULL, ${wcidVal}, ${_n(a.stackSize)}, NULL, NULL, NULL, ${isLocType?locCell:'NULL'}, ${isLocType?locOx:'NULL'}, ${isLocType?locOy:'NULL'}, ${isLocType?locOz:'NULL'}, ${isLocType?locAw:'NULL'}, ${isLocType?locAx:'NULL'}, ${isLocType?locAy:'NULL'}, ${isLocType?locAz:'NULL'})`);
         });
         lines.push(';');
       }
