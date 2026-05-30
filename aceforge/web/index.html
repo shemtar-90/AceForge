@@ -1696,6 +1696,26 @@ function extractInsertValues(sql, tableName){
   return result;
 }
 
+function buildInnerTabs(){
+  const el=document.getElementById('innerTabs');
+  if(!el) return;
+  const types=[
+    {k:'creature', icon:'✠', label:'CREATURE'},
+    {k:'npc',      icon:'◆', label:'NPC'},
+    {k:'item',     icon:'◈', label:'ITEM'},
+    {k:'weapon',   icon:'⚔', label:'WEAPON'},
+    {k:'armor',    icon:'⛨', label:'ARMOR'},
+    {k:'jewelry',  icon:'◎', label:'JEWELRY'},
+    {k:'recipe',   icon:'⚗', label:'RECIPE'},
+    {k:'quest',    icon:'◇', label:'QUEST'},
+    {k:'generator',icon:'⟙', label:'GENERATOR'},
+  ];
+  el.innerHTML=types.map(t=>
+    '<button class="itab'+(t.k===curType?' active':'')+' " data-type="'+t.k+'" onclick="switchType(\"'+t.k+'\",this)"><span style="margin-right:4px">'+t.icon+'</span>'+t.label+'</button>'
+  ).join('');
+}
+
+
 const EMOTE_CAT_COLORS = {
   1: '#8a3a3a',   // Refuse
   2: '#3a5a8a',   // Vendor
