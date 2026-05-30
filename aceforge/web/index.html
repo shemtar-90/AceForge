@@ -1846,21 +1846,12 @@ function buildEmoteBlock(em,i){
   const summary=(em.questFilter?' · quest: '+em.questFilter:'')+
     ((em.wcidFilter&&em.wcidFilter!==''&&em.wcidFilter!=='0')?' · item: '+em.wcidFilter:'');
 
-  // Trigger settings
-  let ps='<div class="grid g3" style="margin-bottom:10px">';
+  // Trigger settings - Category and Probability only
+  let ps='<div class="grid g2" style="margin-bottom:10px">';
   ps+='<div class="fg"><div class="fl">Category</div>';
   ps+='<select onchange="emotes['+i+'].category=parseInt(this.value);rebuildPanel(\'emotes\')">'+opt(EMOTE_CATS,catVal)+'</select></div>';
   ps+='<div class="fg"><div class="fl">Probability <span class="fc">0.0 – 1.0</span></div>';
   ps+='<input type="text" value="'+(em.prob!=null?em.prob:1)+'" oninput="emotes['+i+'].prob=this.value;regen()"></div>';
-  ps+='<div class="fg"><div class="fl">'+(isRefuse?'Item WCID <span class="fc">fires for this item</span>':'Item WCID Filter <span class="fc">blank = any</span>')+'</div>';
-  ps+='<input type="number" value="'+(em.wcidFilter||'')+'" placeholder="'+(isRefuse?'required':'0 = any')+'" oninput="emotes['+i+'].wcidFilter=this.value;regen()"></div>';
-  ps+='<div class="fg" style="grid-column:span '+(isVendor?2:3)+'">';
-  ps+='<div class="fl">Quest Filter <span class="fc">blank = none · add @N to check flag ≥ N</span></div>';
-  ps+='<input type="text" value="'+(em.questFilter||'')+'" placeholder="e.g. FreddieFlowerQuest@2" oninput="emotes['+i+'].questFilter=this.value;regen()"></div>';
-  if(isVendor){
-    ps+='<div class="fg"><div class="fl">Vendor Type</div>';
-    ps+='<select onchange="emotes['+i+'].vendorType=this.value;regen()">'+opt([[1,'Open'],[2,'Close'],[3,'Sell'],[4,'Buy'],[5,'No Buy']],em.vendorType||1)+'</select></div>';
-  }
   ps+='</div>';
 
   // Response rows
