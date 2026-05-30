@@ -1531,7 +1531,7 @@ function buildSubContent(){
     const active=sub===curSub?'active':'';
     const fn=builders[sub]||buildProps;
     let html='';
-    try{ html=fn(); }catch(e){ html='<p style="color:red;padding:10px">Error in '+sub+': '+e.message+'</p>'; }
+    try{ html=fn(); }catch(e){ html='<div style="padding:10px;color:darkred;font-family:monospace;font-size:11px"><b>Error in '+sub+':</b><br>'+e.message+'</div>'; console.error('buildSubContent '+sub+':',e); }
     return '<div class="sub-panel '+active+'" data-sub="'+sub+'">'+html+'</div>';
   }).join('');
   fc.querySelectorAll('input,select,textarea').forEach(e=>e.addEventListener('input',onFieldInput));
@@ -3546,10 +3546,15 @@ function saveSettings(){
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function init(){
-  await loadData();
-  buildInnerTabs();
-  buildAITabs();
-  buildForm();
+  try{ await loadData(); }catch(e){ console.warn('loadData:',e); }
+  try{ buildInnerTabs(); }catch(e){ console.warn('buildInnerTabs:',e); }
+  try{ buildAITabs(); }catch(e){ console.warn('buildAITabs:',e); }
+  try{ buildForm(); }catch(e){
+    const fc=document.getElementById('formContent');
+    if(fc) fc.innerHTML='<div style="padding:20px;color:darkred;font-family:monospace;font-size:12px">'+
+      '<b>buildForm error:</b><br>'+e.message+'<br><pre>'+e.stack+'</pre></div>';
+    console.error('buildForm:',e);
+  }
   if(window.pywebview){
     window.pywebview.api.get_config().then(cfg=>{
       appConfig=cfg;
