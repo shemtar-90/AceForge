@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACEForge Workbench</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=IM+Fell+English:ital@0;1&family=Source+Code+Pro:wght@400;500&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --parch:#ede4ce;--parch-light:#f5eedf;--parch-dark:#d6c9a8;
+  --ink:#2a1e0a;--ink-mid:#5a4a28;--ink-dim:#8a7a58;--ink-faint:#b8a888;
+  --crimson:#7a1515;--crimson-dark:#5a0d0d;--crimson-light:#c04040;
+  --sql-bg:#14100a;--sql-line:#2a2010;
+  --gold:#c8a040;--gold-light:#e8c060;
+  --border:#c8b898;--border-light:#ddd0b8;
+}
+html,body{height:100%;overflow:hidden;font-family:'Crimson Text',serif;background:var(--parch);color:var(--ink);font-size:15px}
+.topbar{background:var(--parch);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:52px;flex-shrink:0}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-cross{color:var(--crimson);font-size:18px;font-weight:700}
+.logo-name{font-family:'Cinzel',serif;font-size:18px;font-weight:700;letter-spacing:0.15em;color:var(--ink)}
+.logo-sub{font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:12px;margin-left:4px}
+.topbar-right{display:flex;align-items:center;gap:6px}
+.top-info{text-align:right;margin-right:12px}
+.top-info-label{font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.15em;color:var(--ink-dim);text-transform:uppercase}
+.top-info-val{font-family:'Cinzel',serif;font-size:11px;font-weight:700;color:var(--ink)}
+.top-btn{font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;border:1px solid var(--border);background:transparent;color:var(--ink-mid);padding:5px 12px;cursor:pointer;transition:all 0.15s}
+.top-btn:hover{background:var(--parch-dark);border-color:var(--ink-mid)}
+.main-tabs{background:var(--parch-light);border-bottom:2px solid var(--border);padding:0 20px;display:flex;gap:0;flex-shrink:0}
+.main-tab{font-family:'Cinzel',serif;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;padding:12px 16px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--ink-dim);display:flex;align-items:center;gap:6px;transition:all 0.15s;background:none;border-top:none;border-left:none;border-right:none}
+.main-tab:hover{color:var(--ink)}
+.main-tab.active{color:var(--crimson);border-bottom-color:var(--crimson)}
+.workspace{display:grid;grid-template-columns:1fr 400px;flex:1;min-height:0;overflow:hidden}
+.left-panel{background:var(--parch-light);border-right:1px solid var(--border);overflow-y:auto;padding-bottom:80px}
+.right-panel{background:var(--sql-bg);display:flex;flex-direction:column;overflow:hidden}
+.wb-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--parch)}
+.wb-title{font-family:'Cinzel',serif;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--crimson)}
+.wb-title span{color:var(--ink-dim);font-weight:400}
+.wcid-label{font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:var(--ink-dim)}
+.wcid-inputs{display:flex;align-items:center;gap:6px;margin-top:3px}
+.wcid-input{font-family:'Source Code Pro',monospace;font-size:12px;font-weight:500;color:var(--ink);background:var(--parch-light);border:1px solid var(--border);padding:3px 8px;width:76px;text-align:center}
+.wcid-sep{color:var(--ink-dim)}
+.wb-desc{font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:12px;margin-top:2px}
+.identity-row{padding:14px 18px 8px;display:grid;grid-template-columns:76px 1fr 72px 1fr 170px;gap:10px;align-items:end;border-bottom:1px solid var(--border-light)}
+.field-group{display:flex;flex-direction:column;gap:3px}
+.field-label{font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:var(--ink-dim);display:flex;justify-content:space-between}
+.field-code{color:var(--ink-faint);font-family:'Source Code Pro',monospace;font-size:9px}
+input[type=text],input[type=number],select{font-family:'Crimson Text',serif;font-size:14px;color:var(--ink);background:var(--parch);border:none;border-bottom:1.5px solid var(--border);padding:4px 2px;width:100%;outline:none;transition:border-color 0.15s;-webkit-appearance:none;appearance:none}
+input[type=text]:focus,input[type=number]:focus,select:focus{border-bottom-color:var(--crimson)}
+select{cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a7a58'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 4px center;padding-right:18px;background-color:var(--parch)}
+select option{background:#fff;color:#2a1e0a}
+.sub-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--parch);padding:0 18px;flex-shrink:0}
+.sub-tab{font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;padding:9px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;color:var(--ink-dim);background:none;border-top:none;border-left:none;border-right:none;display:flex;align-items:center;gap:5px;transition:all 0.15s}
+.sub-tab:hover{color:var(--ink)}
+.sub-tab.active{color:var(--crimson);border-bottom-color:var(--crimson)}
+.presets-row{padding:10px 18px 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--border-light)}
+.presets-label{font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-dim)}
+.preset-pill{font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.08em;padding:4px 12px;border:1px solid var(--border);background:transparent;color:var(--ink-mid);cursor:pointer;border-radius:12px;transition:all 0.15s}
+.preset-pill:hover{background:var(--parch-dark);border-color:var(--crimson);color:var(--crimson)}
+.section{padding:10px 18px}
+.section-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.section-title{font-family:'Cinzel',serif;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--ink)}
+.section-line{flex:1;height:1px;background:var(--border-light)}
+.field-grid{display:grid;gap:10px 14px}
+.fg-2{grid-template-columns:1fr 1fr}
+.fg-3{grid-template-columns:1fr 1fr 1fr}
+.fg-4{grid-template-columns:1fr 1fr 1fr 1fr}
+.resist-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.resist-cell{display:flex;flex-direction:column;gap:3px}
+.sql-header{padding:12px 16px;border-bottom:1px solid #2a2010;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.sql-title{font-family:'Cinzel',serif;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--gold);display:flex;align-items:center;gap:6px}
+.sql-title::before{content:'◆';font-size:9px}
+.sql-btns{display:flex;gap:5px}
+.sql-btn{font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;border:1px solid #3a3020;background:transparent;color:#8a7a58;padding:4px 10px;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;gap:4px}
+.sql-btn:hover{border-color:var(--gold);color:var(--gold)}
+.sql-output{flex:1;overflow-y:auto;padding:14px 16px;font-family:'Source Code Pro',monospace;font-size:11px;line-height:1.8;color:#c8b898;white-space:pre-wrap}
+.sql-kw{color:#e8d080;font-weight:500}
+.sql-str{color:#e0a080}
+.sql-num{color:#80c0e8}
+.sql-cmt{color:#5a7a5a;font-style:italic}
+.forge-bar{position:fixed;bottom:0;left:0;right:400px;background:var(--parch);border-top:1px solid var(--border);padding:10px 18px;display:flex;gap:10px;align-items:center;z-index:100}
+.forge-input{flex:1;font-family:'IM Fell English',serif;font-style:italic;font-size:13px;color:var(--ink-dim);background:transparent;border:none;outline:none;padding:3px}
+.forge-input::placeholder{color:var(--ink-faint)}
+.forge-btn{font-family:'Cinzel',serif;font-size:10px;letter-spacing:0.1em;padding:9px 18px;background:var(--crimson);color:#f5eedf;border:none;cursor:pointer;text-transform:uppercase;transition:all 0.15s;white-space:nowrap}
+.forge-btn:hover{background:var(--crimson-dark)}
+.add-btn{font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;border:1px dashed var(--border);background:transparent;color:var(--ink-dim);padding:6px 14px;cursor:pointer;width:100%;margin-top:4px;transition:all 0.15s}
+.add-btn:hover{border-color:var(--crimson);color:var(--crimson)}
+.del-btn{font-size:15px;color:var(--crimson-light);background:none;border:none;cursor:pointer;opacity:0.6;line-height:1;padding:0 4px}
+.del-btn:hover{opacity:1}
+.spell-row{display:grid;grid-template-columns:80px 1fr 110px 28px;gap:8px;align-items:end;margin-bottom:8px}
+.bp-table{width:100%;border-collapse:collapse;font-size:11px}
+.bp-table th{font-family:'Cinzel',serif;font-size:8px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-dim);text-align:left;padding:3px 5px;border-bottom:1px solid var(--border)}
+.bp-table td{padding:2px 5px;border-bottom:1px solid var(--border-light)}
+.bp-table td input,.bp-table td select{font-size:11px;padding:2px 0}
+.bp-table tr:hover td{background:rgba(200,184,152,0.15)}
+.left-panel::-webkit-scrollbar,.sql-output::-webkit-scrollbar{width:4px}
+.left-panel::-webkit-scrollbar-track,.sql-output::-webkit-scrollbar-track{background:transparent}
+.left-panel::-webkit-scrollbar-thumb{background:var(--border)}
+.sql-output::-webkit-scrollbar-thumb{background:#3a3020}
+.warn-text{color:var(--crimson);font-size:11px;font-style:italic;margin-bottom:8px}
+</style>
+</head>
+<body style="display:flex;flex-direction:column;height:100vh">
+
+<div class="topbar">
+  <div class="logo">
+    <span class="logo-cross">✠</span>
+    <span class="logo-name">ACEFORGE</span>
+    <span class="logo-sub">— Weenie Workbench</span>
+  </div>
+  <div class="topbar-right">
+    <div class="top-info">
+      <div class="top-info-label">Active <span id="activeTypeName">Creature</span></div>
+      <div class="top-info-val">WCID <span id="topWcidRange">850,000 – 859,999</span></div>
+    </div>
+    <button class="top-btn" onclick="saveSQL()">💾 Save SQL</button>
+    <button class="top-btn" onclick="resetAll()">↺ Reset</button>
+  </div>
+</div>
+
+<div class="main-tabs">
+  <button class="main-tab active" onclick="switchMain('creature',this)">✠ Creature</button>
+  <button class="main-tab" onclick="switchMain('npc',this)">◆ NPC</button>
+  <button class="main-tab" onclick="switchMain('item',this)">◈ Item</button>
+  <button class="main-tab" onclick="switchMain('weapon',this)">⚔ Weapon</button>
+  <button class="main-tab" onclick="switchMain('armor',this)">⛨ Armor</button>
+  <button class="main-tab" onclick="switchMain('quest',this)">◇ Quest</button>
+</div>
+
+<div class="workspace" style="flex:1;overflow:hidden;display:grid">
+  <div class="left-panel" id="leftPanel">
+    <div class="wb-header">
+      <div>
+        <div class="wb-title" id="wbTitle">✠ Creature <span>· Workbench</span></div>
+        <div class="wb-desc" id="wbDesc">Hostile creatures with combat, loot, and behavior.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end">
+        <div class="wcid-label">WCID Range</div>
+        <div class="wcid-inputs">
+          <input class="wcid-input" type="text" id="wcidFrom" value="850000" oninput="regenerateSQL()">
+          <span class="wcid-sep">–</span>
+          <input class="wcid-input" type="text" id="wcidTo" value="859999">
+        </div>
+      </div>
+    </div>
+    <div class="identity-row">
+      <div class="field-group">
+        <div class="field-label">WCID <span class="field-code">key</span></div>
+        <input type="number" id="fWcid" value="850000" oninput="regenerateSQL()">
+      </div>
+      <div class="field-group">
+        <div class="field-label">Name <span class="field-code">S-1</span></div>
+        <input type="text" id="fName" value="New Creature" oninput="regenerateSQL()">
+      </div>
+      <div class="field-group" id="levelGroup">
+        <div class="field-label">Level <span class="field-code">I-25</span></div>
+        <input type="number" id="fLevel" value="100" oninput="regenerateSQL()">
+      </div>
+      <div class="field-group" id="xpGroup">
+        <div class="field-label">XP Override <span class="field-code">I-146</span></div>
+        <input type="number" id="fXp" value="50000" oninput="regenerateSQL()">
+      </div>
+      <div class="field-group">
+        <div class="field-label">Weenie Type <span class="field-code">type</span></div>
+        <select id="fWeenieType" onchange="onWeenieTypeChange()"><option value="10">10 · Creature</option></select>
+      </div>
+    </div>
+    <div class="sub-tabs" id="subTabs"></div>
+    <div class="presets-row" id="presetsRow"></div>
+    <div id="tabContent"></div>
+  </div>
+
+  <div class="right-panel">
+    <div class="sql-header">
+      <div class="sql-title">Generated SQL</div>
+      <div class="sql-btns">
+        <button class="sql-btn" onclick="copySQL()">⊡ Copy</button>
+        <button class="sql-btn" onclick="downloadSQL()">↓ Download</button>
+        <button class="sql-btn" onclick="saveSQL()">+ Save File</button>
+      </div>
+    </div>
+    <div class="sql-output" id="sqlOutput"></div>
+  </div>
+</div>
+
+<div class="forge-bar">
+  <input class="forge-input" id="forgeInput" placeholder="e.g. A level 180 ice drudge for a snowy biome — high cold resist, weak to fire, casts Frost Bolt…">
+  <button class="forge-btn" onclick="onForge()">+ Forge with AI</button>
+</div>
+
+<script>
+const TYPE_CONFIG={
+  creature:{label:'Creature',desc:'Hostile creatures with combat, loot, and behavior.',wcidRange:'850,000 – 859,999',wcidFrom:'850000',wcidTo:'859999',
+    weenieTypes:[{v:10,l:'10 · Creature'}],
+    subTabs:['properties','attributes','skills','spellbook','bodyparts'],
+    presets:[
+      {label:'Rift Drudge (T6)',data:{fName:'Rift Drudge',fLevel:'180',fXp:'800000',cType:'3',fDmg:'95',fDmgType:'1',fWepSkill:'44',fResSlash:'1.0',fResPierce:'1.0',fResBludge:'1.5',fResCold:'0.5',fResFire:'1.8',fResAcid:'0.8',fResElec:'1.0',fResNether:'1.0',fHP:'3200',fStam:'3000',fMana:'500',fLum:'15000',fXpOv:'800000'}},
+      {label:'Fire Elemental',data:{fName:'Fire Elemental',fLevel:'200',fXp:'1200000',cType:'38',fDmg:'110',fDmgType:'16',fWepSkill:'44',fResSlash:'0.6',fResPierce:'0.6',fResBludge:'1.2',fResCold:'2.0',fResFire:'0.1',fResAcid:'1.0',fResElec:'1.0',fResNether:'0.5',fHP:'4000',fStam:'4000',fMana:'800',fLum:'20000'}},
+      {label:'Frost Skeleton',data:{fName:'Frost Skeleton',fLevel:'150',fXp:'400000',cType:'30',fDmg:'75',fDmgType:'1',fWepSkill:'44',fResSlash:'0.8',fResPierce:'0.7',fResBludge:'1.5',fResCold:'0.2',fResFire:'1.5',fResAcid:'1.0',fResElec:'1.0',fResNether:'0.3',fHP:'2200',fStam:'2000',fMana:'500',fLum:'8000'}},
+      {label:'Acid Olthoi',data:{fName:'Acid Olthoi',fLevel:'220',fXp:'1800000',cType:'1',fDmg:'130',fDmgType:'32',fWepSkill:'44',fResSlash:'0.8',fResPierce:'1.2',fResBludge:'1.0',fResCold:'1.0',fResFire:'1.0',fResAcid:'0.1',fResElec:'1.2',fResNether:'1.0',fHP:'5000',fStam:'4000',fMana:'500',fLum:'25000'}},
+    ]},
+  npc:{label:'NPC',desc:'Quest givers, merchants, and interactive characters.',wcidRange:'850,000 – 859,999',wcidFrom:'850000',wcidTo:'859999',
+    weenieTypes:[{v:10,l:'10 · Creature (NPC)'},{v:12,l:'12 · Vendor'}],
+    subTabs:['properties','attributes','emotes'],
+    presets:[
+      {label:'Quest Giver',data:{fName:'New Quest Giver',fLevel:'275',fXp:'0',fUseRadius:'3.0',fShortDesc:'A weathered figure with knowing eyes.'}},
+      {label:'Vendor',data:{fName:'New Merchant',fLevel:'275',fXp:'0',fUseRadius:'5.0',fShortDesc:'A traveling merchant.'}},
+    ]},
+  item:{label:'Item',desc:'Quest tokens, gems, stackables, and consumables.',wcidRange:'810,000 – 819,999',wcidFrom:'810000',wcidTo:'819999',
+    weenieTypes:[{v:38,l:'38 · Gem'},{v:51,l:'51 · Stackable'},{v:18,l:'18 · Food'},{v:34,l:'34 · Scroll'},{v:22,l:'22 · Key'}],
+    subTabs:['properties'],
+    presets:[
+      {label:'Quest Token',data:{fName:'Quest Token',fValue:'100',fEncumb:'5',fMaxStack:'1',fItemUseable:'1',fBonded:'1',fAttuned:'1'}},
+      {label:'Stackable Drop',data:{fName:'Crafting Fragment',fValue:'50',fEncumb:'10',fMaxStack:'25',fItemUseable:'8',fBonded:'0',fAttuned:'0'}},
+      {label:'Consumable',data:{fName:'Health Philtre',fValue:'300',fEncumb:'15',fMaxStack:'10',fItemUseable:'2',fBonded:'0',fAttuned:'0'}},
+    ]},
+  weapon:{label:'Weapon',desc:'Melee weapons, missile launchers, and casters.',wcidRange:'870,000 – 879,999',wcidFrom:'870000',wcidTo:'879999',
+    weenieTypes:[{v:6,l:'6 · MeleeWeapon'},{v:3,l:'3 · MissileLauncher'},{v:35,l:'35 · Caster'}],
+    subTabs:['properties'],
+    presets:[
+      {label:'Heavy Sword',data:{fName:'Enchanted Longsword',fDmg:'85',fDmgType:'1',fWepTime:'45',fDmgVar:'0.4',fWepSkill:'44',fWepDef:'1.02',fWepOff:'1.03',fWieldDiff:'290',fValue:'12000',fEncumb:'450'}},
+      {label:'Light Spear',data:{fName:'Swift Spear',fDmg:'60',fDmgType:'2',fWepTime:'35',fDmgVar:'0.3',fWepSkill:'45',fWepDef:'1.04',fWepOff:'1.02',fWieldDiff:'250',fValue:'9000',fEncumb:'300'}},
+      {label:'Finesse Dagger',data:{fName:'Venom Dagger',fDmg:'45',fDmgType:'2',fWepTime:'28',fDmgVar:'0.2',fWepSkill:'46',fWepDef:'1.06',fWepOff:'1.05',fWieldDiff:'240',fValue:'8000',fEncumb:'200'}},
+      {label:'War Magic Staff',data:{fName:'Staff of War',fDmg:'0',fDmgType:'0',fWepTime:'0',fDmgVar:'0',fWepSkill:'34',fWepDef:'1.05',fWepOff:'1.0',fWieldDiff:'300',fValue:'15000',fEncumb:'250'}},
+    ]},
+  armor:{label:'Armor',desc:'Clothing and armor pieces for all body slots.',wcidRange:'810,000 – 819,999',wcidFrom:'810000',wcidTo:'819999',
+    weenieTypes:[{v:2,l:'2 · Clothing/Armor'}],
+    subTabs:['properties'],
+    presets:[
+      {label:'Plate Chest',data:{fName:'Platemail Cuirass',fArmorLevel:'200',fArmorType:'11',fValidLoc:'512',fValue:'8000',fEncumb:'600'}},
+      {label:'Leather Cap',data:{fName:'Leather Cap',fArmorLevel:'60',fArmorType:'2',fValidLoc:'1',fValue:'800',fEncumb:'80'}},
+      {label:'Amuli Coat',data:{fName:'Amuli Coat',fArmorLevel:'160',fArmorType:'7',fValidLoc:'2',fValue:'5000',fEncumb:'350'}},
+      {label:'Covenant Gloves',data:{fName:'Covenant Gauntlets',fArmorLevel:'400',fArmorType:'15',fValidLoc:'32',fValue:'25000',fEncumb:'200'}},
+    ]},
+  quest:{label:'Quest',desc:'Kill contracts, quest flags, and progression items.',wcidRange:'860,000 – 869,999',wcidFrom:'860000',wcidTo:'869999',
+    weenieTypes:[{v:38,l:'38 · Gem (Contract)'},{v:38,l:'38 · Gem (Kill Contract)'}],
+    subTabs:['properties','emotes'],
+    presets:[
+      {label:'Kill Contract',data:{fName:'Kill Contract',fValue:'1',fEncumb:'5',fBonded:'1',fAttuned:'1',fItemUseable:'8',fMaxStack:'1'}},
+      {label:'Quest Token',data:{fName:'Quest Seal',fValue:'100',fEncumb:'5',fBonded:'1',fAttuned:'1',fItemUseable:'1',fMaxStack:'1'}},
+    ]},
+};
+
+const CREATURE_TYPES=[[0,'0 · None'],[1,'1 · Olthoi'],[2,'2 · Banderling'],[3,'3 · Drudge'],[4,'4 · Mosswart'],[5,'5 · Lugian'],[6,'6 · Tumerok'],[7,'7 · Mite'],[8,'8 · Tusker'],[13,'13 · Golem'],[14,'14 · Undead'],[15,'15 · Gromnie'],[16,'16 · Reedshark'],[17,'17 · Armoredillo'],[18,'18 · Fae'],[19,'19 · Virindi'],[20,'20 · Wisp'],[22,'22 · Shadow'],[23,'23 · Mattekar'],[28,'28 · Monouga'],[29,'29 · Zefir'],[30,'30 · Skeleton'],[31,'31 · Human'],[32,'32 · Shreth'],[38,'38 · FireElemental'],[39,'39 · Snowman'],[44,'44 · Grievver'],[46,'46 · Ursuin'],[48,'48 · HollowMinion'],[60,'60 · AcidElemental'],[61,'61 · FrostElemental'],[75,'75 · Burun'],[99,'99 · GearKnight'],[100,'100 · Gurog'],[101,'101 · Anekshay']];
+const DAMAGE_TYPES=[[1,'1 · Slash'],[2,'2 · Pierce'],[4,'4 · Bludgeon'],[8,'8 · Cold'],[16,'16 · Fire'],[32,'32 · Acid'],[64,'64 · Electric'],[1024,'1024 · Nether']];
+const WEAPON_SKILLS=[[44,'44 · HeavyWeapons'],[45,'45 · LightWeapons'],[46,'46 · FinesseWeapons'],[41,'41 · TwoHandedCombat'],[47,'47 · MissileWeapons'],[34,'34 · WarMagic'],[33,'33 · LifeMagic'],[43,'43 · VoidMagic']];
+const COMBAT_STYLES=[[2,'2 · OneHanded'],[4,'4 · OneHanded+Shield'],[8,'8 · TwoHanded'],[512,'512 · Magic'],[16,'16 · Bow'],[32,'32 · Crossbow'],[128,'128 · ThrownWeapon']];
+const ATTACK_TYPES=[[1,'1 · Punch'],[2,'2 · Thrust'],[4,'4 · Slash'],[6,'6 · Thrust+Slash'],[8,'8 · Kick'],[32,'32 · DoubleSlash'],[64,'64 · TripleSlash'],[128,'128 · DoubleThrust']];
+const ARMOR_SLOTS=[[1,'1 · Head'],[2,'2 · Chest'],[4,'4 · Abdomen'],[8,'8 · UpperArm'],[16,'16 · LowerArm'],[32,'32 · Hand'],[64,'64 · UpperLeg'],[128,'128 · LowerLeg'],[256,'256 · Foot'],[512,'512 · ChestArmor'],[1024,'1024 · AbdomenArmor'],[2048,'2048 · UpperArmArmor'],[4096,'4096 · LowerArmArmor'],[8192,'8192 · UpperLegArmor'],[16384,'16384 · LowerLegArmor'],[32768,'32768 · NeckWear']];
+const ARMOR_TYPES=[[0,'0 · None'],[1,'1 · Cloth'],[2,'2 · Leather'],[3,'3 · StuddedLeather'],[4,'4 · Scale'],[5,'5 · Chainmail'],[6,'6 · DiffusingWeave'],[7,'7 · Amuli'],[8,'8 · Celdon'],[9,'9 · Haebrean'],[10,'10 · Yoroi'],[11,'11 · Platemail'],[12,'12 · Lorica'],[13,'13 · Nariyid'],[14,'14 · Alduressa'],[15,'15 · Covenant'],[17,'17 · Koveras'],[18,'18 · Olthoi']];
+const ITEM_USEABLE=[[1,'1 · No'],[2,'2 · Self'],[4,'4 · Wielded'],[8,'8 · Contained'],[16,'16 · Viewed'],[32,'32 · Remote']];
+const BONDED_STATUS=[[-2,'-2 · Destroy on Death'],[-1,'-1 · Slippery (drops)'],[0,'0 · Normal'],[1,'1 · Bonded (kept)'],[2,'2 · Sticky']];
+const ATTUNED_STATUS=[[0,'0 · Normal'],[1,'1 · Attuned (no drop)'],[2,'2 · Sticky']];
+const PALETTE_TEMPLATES=[[1,'1 · AquaBlue'],[2,'2 · Blue'],[4,'4 · Brown'],[8,'8 · Green'],[9,'9 · Grey'],[14,'14 · Red'],[17,'17 · Yellow'],[19,'19 · Copper'],[20,'20 · Silver'],[21,'21 · Gold'],[39,'39 · Black'],[40,'40 · Bronze'],[48,'48 · White'],[41,'41 · SandyYellow'],[42,'42 · DarkBrown'],[46,'46 · Tan']];
+const ALL_SKILLS=[[6,'MeleeDefense'],[7,'MissileDefense'],[14,'ArcaneLore'],[15,'MagicDefense'],[16,'ManaConversion'],[33,'LifeMagic'],[34,'WarMagic'],[41,'TwoHandedCombat'],[43,'VoidMagic'],[44,'HeavyWeapons'],[45,'LightWeapons'],[46,'FinesseWeapons'],[47,'MissileWeapons'],[48,'Shield'],[49,'DualWield'],[50,'Recklessness'],[51,'SneakAttack'],[52,'DirtyFighting']];
+const SKILL_SAC=[[1,'1 · Untrained'],[2,'2 · Trained'],[3,'3 · Specialized']];
+const BODY_PARTS=[{key:0,name:'Head'},{key:1,name:'Chest'},{key:2,name:'Abdomen'},{key:3,name:'UpperArm'},{key:4,name:'LowerArm'},{key:5,name:'Hand'},{key:6,name:'UpperLeg'},{key:7,name:'LowerLeg'},{key:8,name:'Foot'}];
+
+let currentType='creature';
+let currentSub='properties';
+let spells=[];
+let bodyParts=BODY_PARTS.map(b=>({...b,dType:4,dVal:0,dVar:0,baseAL:80,slash:64,pierce:56,bludge:120,cold:40,fire:120,acid:80,elec:80,nether:24}));
+
+const sel=id=>document.getElementById(id);
+const opt=list=>list.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
+const g=(id,d='')=>{const e=sel(id);return e?e.value:d;};
+const gi=(id,d=0)=>parseInt(g(id,d))||d;
+const gf=(id,d=0)=>parseFloat(g(id,d))||d;
+
+function switchMain(type,btn){
+  currentType=type;currentSub='properties';
+  document.querySelectorAll('.main-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  buildForm();
+}
+
+function switchSub(sub,btn){
+  currentSub=sub;
+  document.querySelectorAll('.sub-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  buildSubContent();
+}
+
+function buildForm(){
+  const cfg=TYPE_CONFIG[currentType];
+  sel('wbTitle').innerHTML=`✠ ${cfg.label} <span>· Workbench</span>`;
+  sel('wbDesc').textContent=cfg.desc;
+  sel('wcidFrom').value=cfg.wcidFrom;
+  sel('wcidTo').value=cfg.wcidTo;
+  sel('fWcid').value=cfg.wcidFrom;
+  sel('topWcidRange').textContent=cfg.wcidRange;
+  sel('activeTypeName').textContent=cfg.label;
+  sel('fWeenieType').innerHTML=cfg.weenieTypes.map(t=>`<option value="${t.v}">${t.l}</option>`).join('');
+  const levelGroup=sel('levelGroup');const xpGroup=sel('xpGroup');
+  const showLevel=['creature','npc'].includes(currentType);
+  if(levelGroup)levelGroup.style.display=showLevel?'':'none';
+  if(xpGroup)xpGroup.style.display=currentType==='creature'?'':'none';
+  const st=sel('subTabs');
+  const icons={properties:'⚙',attributes:'◈',skills:'+',spellbook:'+',bodyparts:'✠',emotes:'◇'};
+  const labels={properties:'Properties',attributes:'Attributes',skills:'Skills',spellbook:'Spell Book',bodyparts:'Body Parts',emotes:'Emotes'};
+  st.innerHTML=cfg.subTabs.map((s,i)=>`<button class="sub-tab${i===0?' active':''}" onclick="switchSub('${s}',this)">${icons[s]||'+'} ${labels[s]||s}</button>`).join('');
+  const pr=sel('presetsRow');
+  if(cfg.presets.length===0){pr.style.display='none';}
+  else{pr.style.display='flex';pr.innerHTML=`<span class="presets-label">Presets:</span>`+cfg.presets.map(p=>`<button class="preset-pill" onclick='applyPreset(${JSON.stringify(p.data)})'>${p.label}</button>`).join('');}
+  buildSubContent();
+}
+
+function buildSubContent(){
+  const c=sel('tabContent');
+  if(currentSub==='properties')c.innerHTML=buildPropertiesHTML();
+  else if(currentSub==='attributes')c.innerHTML=buildAttributesHTML();
+  else if(currentSub==='skills')c.innerHTML=buildSkillsHTML();
+  else if(currentSub==='spellbook')c.innerHTML=buildSpellbookHTML();
+  else if(currentSub==='bodyparts')c.innerHTML=buildBodyPartsHTML();
+  else if(currentSub==='emotes')c.innerHTML=`<div class="section"><div class="section-header"><div class="section-title">Emotes</div><div class="section-line"></div></div><p style="color:var(--ink-dim);font-style:italic;font-size:13px">Use the AI Forge bar below to generate emote chains. Describe the quest logic and Claude will produce the full emote SQL.</p></div>`;
+  c.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',regenerateSQL));
+  regenerateSQL();
+}
+
+function buildPropertiesHTML(){
+  const t=currentType;let html='';
+  if(t==='creature'||t==='npc'){
+    html+=`<div class="section"><div class="section-header"><div class="section-title">Identity</div><div class="section-line"></div></div>
+    <div class="field-grid fg-3">
+      <div class="field-group"><div class="field-label">Creature Type <span class="field-code">I-2</span></div><select id="cType">${CREATURE_TYPES.map(([v,l])=>`<option value="${v}"${v===31?' selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="field-group"><div class="field-label">Default Scale <span class="field-code">F-39</span></div><input type="text" id="fScale" value="1.0"></div>
+      <div class="field-group"><div class="field-label">Palette <span class="field-code">I-3</span></div><select id="fPalette">${opt(PALETTE_TEMPLATES)}</select></div>
+    </div></div>`;
+    if(t==='creature'){
+      html+=`<div class="section"><div class="section-header"><div class="section-title">Combat</div><div class="section-line"></div></div>
+      <div class="field-grid fg-3">
+        <div class="field-group"><div class="field-label">Damage <span class="field-code">I-44</span></div><input type="number" id="fDmg" value="80"></div>
+        <div class="field-group"><div class="field-label">Damage Type <span class="field-code">I-45</span></div><select id="fDmgType">${opt(DAMAGE_TYPES)}</select></div>
+        <div class="field-group"><div class="field-label">Weapon Skill <span class="field-code">I-48</span></div><select id="fWepSkill">${opt(WEAPON_SKILLS)}</select></div>
+        <div class="field-group"><div class="field-label">Combat Style <span class="field-code">I-101</span></div><select id="fCombatStyle">${opt(COMBAT_STYLES)}</select></div>
+        <div class="field-group"><div class="field-label">Attack Type <span class="field-code">I-47</span></div><select id="fAttackType">${opt(ATTACK_TYPES)}</select></div>
+        <div class="field-group"><div class="field-label">Death Treasure <span class="field-code">DID-35</span></div><input type="number" id="fTreasureTier" value="3100"></div>
+      </div></div>
+      <div class="section"><div class="section-header"><div class="section-title">Resistances</div><div class="section-line"></div></div>
+      <div class="resist-grid">
+        ${[['Slash','fResSlash','1.0'],['Pierce','fResPierce','1.0'],['Bludge','fResBludge','1.0'],['Cold','fResCold','1.0'],['Fire','fResFire','1.0'],['Acid','fResAcid','1.0'],['Elec','fResElec','1.0'],['Nether','fResNether','1.0']].map(([l,id,def])=>`<div class="resist-cell"><div class="field-label">${l} <span class="field-code">F</span></div><input type="text" id="${id}" value="${def}"></div>`).join('')}
+      </div></div>
+      <div class="section"><div class="section-header"><div class="section-title">AI & Rewards</div><div class="section-line"></div></div>
+      <div class="field-grid fg-3">
+        <div class="field-group"><div class="field-label">Luminance Award <span class="field-code">I-332</span></div><input type="number" id="fLum" value="5000"></div>
+        <div class="field-group"><div class="field-label">Aggro Range <span class="field-code">F-31</span></div><input type="text" id="fAggroRange" value="16.0"></div>
+        <div class="field-group"><div class="field-label">Max Health <span class="field-code">V-1</span></div><input type="number" id="fHP" value="2000"></div>
+        <div class="field-group"><div class="field-label">Max Stamina <span class="field-code">V-3</span></div><input type="number" id="fStam" value="2000"></div>
+        <div class="field-group"><div class="field-label">Max Mana <span class="field-code">V-5</span></div><input type="number" id="fMana" value="800"></div>
+        <div class="field-group"><div class="field-label">Casts Magic <span class="field-code">B-6</span></div><select id="fUsesMana"><option value="0">No</option><option value="1">Yes</option></select></div>
+      </div></div>`;
+    }
+    if(t==='npc'){
+      html+=`<div class="section"><div class="section-header"><div class="section-title">NPC Settings</div><div class="section-line"></div></div>
+      <div class="field-grid fg-2">
+        <div class="field-group"><div class="field-label">Use Radius <span class="field-code">F-54</span></div><input type="text" id="fUseRadius" value="3.0"></div>
+        <div class="field-group"><div class="field-label">Radar Color <span class="field-code">I-95</span></div><select id="fRadarColor"><option value="8">8 · Yellow (NPC)</option><option value="1">1 · Blue</option><option value="2">2 · Gold</option><option value="3">3 · White</option><option value="5">5 · Red</option><option value="7">7 · Green</option></select></div>
+        <div class="field-group" style="grid-column:span 2"><div class="field-label">Short Description <span class="field-code">S-15</span></div><input type="text" id="fShortDesc" value="A mysterious figure."></div>
+      </div></div>`;
+    }
+  }
+  if(t==='item'||t==='quest'){
+    html+=`<div class="section"><div class="section-header"><div class="section-title">Item Properties</div><div class="section-line"></div></div>
+    <div class="field-grid fg-3">
+      <div class="field-group"><div class="field-label">Value (pyreals) <span class="field-code">I-19</span></div><input type="number" id="fValue" value="100"></div>
+      <div class="field-group"><div class="field-label">Encumbrance <span class="field-code">I-5</span></div><input type="number" id="fEncumb" value="10"></div>
+      <div class="field-group"><div class="field-label">Max Stack Size <span class="field-code">I-11</span></div><input type="number" id="fMaxStack" value="1"></div>
+      <div class="field-group"><div class="field-label">Item Useable <span class="field-code">I-16</span></div><select id="fItemUseable">${opt(ITEM_USEABLE)}</select></div>
+      <div class="field-group"><div class="field-label">Bonded <span class="field-code">I-33</span></div><select id="fBonded">${BONDED_STATUS.map(([v,l])=>`<option value="${v}"${v===1?' selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="field-group"><div class="field-label">Attuned <span class="field-code">I-114</span></div><select id="fAttuned">${opt(ATTUNED_STATUS)}</select></div>
+      <div class="field-group"><div class="field-label">Palette <span class="field-code">I-3</span></div><select id="fPalette">${opt(PALETTE_TEMPLATES)}</select></div>
+      <div class="field-group" style="grid-column:span 2"><div class="field-label">Short Desc <span class="field-code">S-15</span></div><input type="text" id="fShortDesc" value=""></div>
+      <div class="field-group" style="grid-column:span 3"><div class="field-label">Use Message <span class="field-code">S-14</span></div><input type="text" id="fUseMsg" value=""></div>
+    </div></div>`;
+  }
+  if(t==='weapon'){
+    html+=`<div class="section"><div class="section-header"><div class="section-title">Weapon Properties</div><div class="section-line"></div></div>
+    <div class="field-grid fg-3">
+      <div class="field-group"><div class="field-label">Damage <span class="field-code">I-44</span></div><input type="number" id="fDmg" value="80"></div>
+      <div class="field-group"><div class="field-label">Damage Type <span class="field-code">I-45</span></div><select id="fDmgType">${opt(DAMAGE_TYPES)}</select></div>
+      <div class="field-group"><div class="field-label">Weapon Skill <span class="field-code">I-48</span></div><select id="fWepSkill">${opt(WEAPON_SKILLS)}</select></div>
+      <div class="field-group"><div class="field-label">Weapon Time <span class="field-code">I-49</span></div><input type="number" id="fWepTime" value="45"></div>
+      <div class="field-group"><div class="field-label">Damage Variance <span class="field-code">F-22</span></div><input type="text" id="fDmgVar" value="0.4"></div>
+      <div class="field-group"><div class="field-label">Attack Type <span class="field-code">I-47</span></div><select id="fAttackType">${opt(ATTACK_TYPES)}</select></div>
+      <div class="field-group"><div class="field-label">Defense Mod <span class="field-code">F-29</span></div><input type="text" id="fWepDef" value="1.0"></div>
+      <div class="field-group"><div class="field-label">Offense Mod <span class="field-code">F-62</span></div><input type="text" id="fWepOff" value="1.0"></div>
+      <div class="field-group"><div class="field-label">Wield Difficulty <span class="field-code">I-160</span></div><input type="number" id="fWieldDiff" value="290"></div>
+      <div class="field-group"><div class="field-label">Value <span class="field-code">I-19</span></div><input type="number" id="fValue" value="5000"></div>
+      <div class="field-group"><div class="field-label">Encumbrance <span class="field-code">I-5</span></div><input type="number" id="fEncumb" value="400"></div>
+      <div class="field-group"><div class="field-label">Palette <span class="field-code">I-3</span></div><select id="fPalette">${opt(PALETTE_TEMPLATES)}</select></div>
+    </div></div>`;
+  }
+  if(t==='armor'){
+    html+=`<div class="section"><div class="section-header"><div class="section-title">Armor Properties</div><div class="section-line"></div></div>
+    <div class="field-grid fg-3">
+      <div class="field-group"><div class="field-label">Armor Level <span class="field-code">I-28</span></div><input type="number" id="fArmorLevel" value="100"></div>
+      <div class="field-group"><div class="field-label">Armor Type <span class="field-code">I-27</span></div><select id="fArmorType">${opt(ARMOR_TYPES)}</select></div>
+      <div class="field-group"><div class="field-label">Valid Location (Slot) <span class="field-code">I-9</span></div><select id="fValidLoc">${opt(ARMOR_SLOTS)}</select></div>
+      <div class="field-group"><div class="field-label">Value <span class="field-code">I-19</span></div><input type="number" id="fValue" value="3000"></div>
+      <div class="field-group"><div class="field-label">Encumbrance <span class="field-code">I-5</span></div><input type="number" id="fEncumb" value="300"></div>
+      <div class="field-group"><div class="field-label">Palette <span class="field-code">I-3</span></div><select id="fPalette">${opt(PALETTE_TEMPLATES)}</select></div>
+    </div>
+    <div class="section-header" style="margin-top:12px"><div class="section-title">Elemental Modifiers</div><div class="section-line"></div></div>
+    <div class="resist-grid">
+      ${[['Slash','fModSlash'],['Pierce','fModPierce'],['Bludge','fModBludge'],['Cold','fModCold'],['Fire','fModFire'],['Acid','fModAcid'],['Elec','fModElec'],['Nether','fModNether']].map(([l,id])=>`<div class="resist-cell"><div class="field-label">${l} <span class="field-code">F</span></div><input type="text" id="${id}" value="1.0"></div>`).join('')}
+    </div></div>`;
+  }
+  return html;
+}
+
+function buildAttributesHTML(){
+  const attrs=[[1,'Strength'],[2,'Endurance'],[3,'Quickness'],[4,'Coordination'],[5,'Focus'],[6,'Self']];
+  const vitals=[[1,'MaxHealth',2000],[3,'MaxStamina',2000],[5,'MaxMana',800]];
+  return `<div class="section">
+    <div class="section-header"><div class="section-title">Attributes</div><div class="section-line"></div></div>
+    <div class="field-grid fg-3">${attrs.map(([t,n])=>`<div class="field-group"><div class="field-label">${n} <span class="field-code">A-${t}</span></div><input type="number" id="attr_${t}" value="260"></div>`).join('')}</div>
+    <div class="section-header" style="margin-top:12px"><div class="section-title">Vitals</div><div class="section-line"></div></div>
+    <div class="field-grid fg-3">${vitals.map(([t,n,d])=>`<div class="field-group"><div class="field-label">${n} <span class="field-code">V-${t}</span></div><input type="number" id="vital_${t}" value="${d}"></div>`).join('')}</div>
+  </div>`;
+}
+
+function buildSkillsHTML(){
+  return `<div class="section">
+    <div class="section-header"><div class="section-title">Skills</div><div class="section-line"></div></div>
+    <p class="warn-text">⚠ Retired skill types 1–5 and 8–13 are never valid — do not use them.</p>
+    ${ALL_SKILLS.map(([id,name])=>`
+      <div style="display:grid;grid-template-columns:160px 140px 90px;gap:8px;align-items:end;margin-bottom:8px">
+        <div class="field-label" style="align-self:center">${name} <span class="field-code">SK-${id}</span></div>
+        <select id="sk_sac_${id}" onchange="regenerateSQL()">${SKILL_SAC.map(([v,l])=>`<option value="${v}"${v===2?' selected':''}>${l}</option>`).join('')}</select>
+        <input type="number" id="sk_init_${id}" value="0" placeholder="Init Level">
+      </div>`).join('')}
+  </div>`;
+}
+
+function buildSpellbookHTML(){
+  const rows=spells.map((sp,i)=>`
+    <div class="spell-row">
+      <div class="field-group"><div class="field-label">Spell ID</div><input type="number" id="sp_id_${i}" value="${sp.id}" oninput="updateSpell(${i},'id',this.value)"></div>
+      <div class="field-group"><div class="field-label">Name (reference)</div><input type="text" id="sp_name_${i}" value="${sp.name}" oninput="updateSpell(${i},'name',this.value)"></div>
+      <div class="field-group"><div class="field-label">Probability</div><input type="text" id="sp_prob_${i}" value="${sp.prob}" oninput="updateSpell(${i},'prob',this.value)"></div>
+      <button class="del-btn" onclick="removeSpell(${i})">✕</button>
+    </div>`).join('');
+  return `<div class="section">
+    <div class="section-header"><div class="section-title">Spell Book</div><div class="section-line"></div></div>
+    <p style="font-size:12px;color:var(--ink-dim);font-style:italic;margin-bottom:10px">Probability: ≤2.0 → actual%=value/100 &nbsp;·&nbsp; >2.0 → actual%=value−2.0 &nbsp;&nbsp;<em>e.g. 2.20 = 20% cast chance</em></p>
+    <div id="spellRows">${rows}</div>
+    <button class="add-btn" onclick="addSpell()">+ Add Spell</button>
+  </div>`;
+}
+
+function buildBodyPartsHTML(){
+  const rows=bodyParts.map((bp,i)=>`<tr>
+    <td style="font-family:'Cinzel',serif;font-size:9px;color:var(--ink-mid);white-space:nowrap">${bp.name}</td>
+    <td><select id="bp_dtype_${i}" style="font-size:10px" onchange="regenerateSQL()">${opt(DAMAGE_TYPES)}</select></td>
+    <td><input type="number" id="bp_dval_${i}" value="${bp.dVal}" oninput="regenerateSQL()"></td>
+    <td><input type="number" id="bp_al_${i}" value="${bp.baseAL}" oninput="regenerateSQL()"></td>
+    <td><input type="number" id="bp_slash_${i}" value="${bp.slash}" oninput="regenerateSQL()"></td>
+    <td><input type="number" id="bp_pierce_${i}" value="${bp.pierce}" oninput="regenerateSQL()"></td>
+    <td><input type="number" id="bp_bludge_${i}" value="${bp.bludge}" oninput="regenerateSQL()"></td>
+    <td><input type="number" id="bp_cold_${i}" value="${bp.cold}" oninput="regenerateSQL()"></td>
+    <td><input type="number" id="bp_fire_${i}" value="${bp.fire}" oninput="regenerateSQL()"></td>
+    <td><input type="number" id="bp_acid_${i}" value="${bp.acid}" oninput="regenerateSQL()"></td>
+    <td><input type="number" id="bp_elec_${i}" value="${bp.elec}" oninput="regenerateSQL()"></td>
+  </tr>`).join('');
+  return `<div class="section" style="overflow-x:auto">
+    <div class="section-header"><div class="section-title">Body Parts</div><div class="section-line"></div></div>
+    <table class="bp-table"><thead><tr><th>Part</th><th>DmgType</th><th>DVal</th><th>Base AL</th><th>Slash</th><th>Pierce</th><th>Bludge</th><th>Cold</th><th>Fire</th><th>Acid</th><th>Elec</th></tr></thead><tbody>${rows}</tbody></table>
+  </div>`;
+}
+
+function updateSpell(i,f,v){spells[i][f]=v;regenerateSQL();}
+function addSpell(){spells.push({id:1788,name:'Eye of the Storm',prob:'1.04'});buildSubContent();}
+function removeSpell(i){spells.splice(i,1);buildSubContent();}
+function applyPreset(data){Object.entries(data).forEach(([id,v])=>{const e=sel(id);if(e)e.value=v;});regenerateSQL();}
+
+function kw(s){return`<span class="sql-kw">${s}</span>`}
+function str(s){return`<span class="sql-str">'${s}'</span>`}
+function num(n){return`<span class="sql-num">${n}</span>`}
+function cmt(s){return`<span class="sql-cmt">${s}</span>`}
+function pad(s,n){const t=s.replace(/<[^>]+>/g,'');return s+' '.repeat(Math.max(0,n-t.length))}
+
+function regenerateSQL(){
+  const wcid=gi('fWcid',850000);
+  const name=g('fName','New Creature');
+  const wType=gi('fWeenieType',10);
+  const className=name.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const now=new Date().toISOString().replace('T',' ').slice(0,19);
+  const typeNames={2:'Clothing',3:'MissileLauncher',6:'MeleeWeapon',10:'Creature',12:'Vendor',18:'Food',34:'Scroll',35:'Caster',38:'Gem',51:'Stackable'};
+  const typeName=typeNames[wType]||'Generic';
+
+  let p=[];
+  p.push(cmt(`/* ===== FILE: ${wcid} ${name}.sql ===== */`));p.push('');
+  p.push(kw('DELETE FROM')+' `weenie` '+kw('WHERE')+' `class_Id` = '+num(wcid)+';');p.push('');
+  p.push(kw('INSERT INTO')+' `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)');
+  p.push(kw('VALUES')+' ('+num(wcid)+', '+str(className)+', '+num(wType)+', '+str(now)+') '+cmt(`/* ${typeName} - SD custom content */`)+';');p.push('');
+
+  let intRows=[];
+  if(currentType==='creature'||currentType==='npc'){
+    intRows.push([1,16,'ItemType - Creature']);
+    const ct=gi('cType',31);intRows.push([2,ct,'CreatureType - '+(CREATURE_TYPES.find(([v])=>v==ct)||[])[1]?.split(' · ')[1]||ct]);
+    const pal=gi('fPalette',9);intRows.push([3,pal,'PaletteTemplate']);
+    intRows.push([6,-1,'ItemsCapacity'],[7,-1,'ContainersCapacity']);
+    intRows.push([16,currentType==='npc'?32:1,'ItemUseable']);
+    intRows.push([25,gi('fLevel',100),'Level']);
+    if(currentType==='creature'){
+      intRows.push([40,2,'CombatMode - Melee']);
+      intRows.push([44,gi('fDmg',80),'Damage']);
+      const dt=gi('fDmgType',1);intRows.push([45,dt,'DamageType - '+(DAMAGE_TYPES.find(([v])=>v==dt)||[])[1]?.split(' · ')[1]||dt]);
+      const at=gi('fAttackType',4);intRows.push([47,at,'AttackType']);
+      const ws=gi('fWepSkill',44);intRows.push([48,ws,'WeaponSkill - '+(WEAPON_SKILLS.find(([v])=>v==ws)||[])[1]?.split(' · ')[1]||ws]);
+      const cs=gi('fCombatStyle',2);intRows.push([101,cs,'AiAllowedCombatStyle']);
+      intRows.push([133,4,'ShowableOnRadar - Always']);
+      intRows.push([146,gi('fXp',50000),'XpOverride']);
+      intRows.push([332,gi('fLum',5000),'LuminanceAward']);
+    }
+    if(currentType==='npc'){
+      const rc=gi('fRadarColor',8);intRows.push([95,rc,'RadarBlipColor']);
+      intRows.push([133,4,'ShowableOnRadar - Always']);
+      intRows.push([134,16,'PlayerKillerStatus - RubberGlue']);
+      intRows.push([146,0,'XpOverride - 0']);
+    }
+  } else if(currentType==='item'||currentType==='quest'){
+    intRows.push([1,2048,'ItemType - Gem']);
+    const pal=gi('fPalette',39);intRows.push([3,pal,'PaletteTemplate']);
+    const enc=gi('fEncumb',10);intRows.push([5,enc,'EncumbranceVal']);
+    const ms=gi('fMaxStack',1);intRows.push([11,ms,'MaxStackSize'],[12,1,'StackSize'],[13,enc,'StackUnitEncumbrance']);
+    intRows.push([16,gi('fItemUseable',1),'ItemUseable']);
+    intRows.push([19,gi('fValue',100),'Value']);
+    intRows.push([33,gi('fBonded',1),'Bonded']);
+    intRows.push([93,1044,'PhysicsState']);
+    intRows.push([114,gi('fAttuned',1),'Attuned']);
+  } else if(currentType==='weapon'){
+    intRows.push([1,1,'ItemType - MeleeWeapon']);
+    const enc=gi('fEncumb',400);intRows.push([5,enc,'EncumbranceVal']);
+    intRows.push([19,gi('fValue',5000),'Value']);
+    const at=gi('fAttackType',4);intRows.push([47,at,'AttackType']);
+    intRows.push([44,gi('fDmg',80),'Damage']);
+    const dt=gi('fDmgType',1);intRows.push([45,dt,'DamageType - '+(DAMAGE_TYPES.find(([v])=>v==dt)||[])[1]?.split(' · ')[1]||dt]);
+    intRows.push([49,gi('fWepTime',45),'WeaponTime']);
+    const ws=gi('fWepSkill',44);intRows.push([48,ws,'WeaponSkill - '+(WEAPON_SKILLS.find(([v])=>v==ws)||[])[1]?.split(' · ')[1]||ws]);
+    intRows.push([158,1,'WieldRequirements - Skill'],[159,ws,'WieldSkilltype'],[160,gi('fWieldDiff',290),'WieldDifficulty']);
+    intRows.push([93,1044,'PhysicsState']);
+  } else if(currentType==='armor'){
+    intRows.push([1,2,'ItemType - Armor/Clothing']);
+    const enc=gi('fEncumb',300);intRows.push([5,enc,'EncumbranceVal']);
+    intRows.push([19,gi('fValue',3000),'Value']);
+    const al=gi('fArmorLevel',100);intRows.push([28,al,'ArmorLevel']);
+    const at=gi('fArmorType',11);intRows.push([27,at,'ArmorType - '+(ARMOR_TYPES.find(([v])=>v==at)||[])[1]?.split(' · ')[1]||at]);
+    const vl=gi('fValidLoc',512);intRows.push([9,vl,'ValidLocations'],[4,vl,'ClothingPriority']);
+    intRows.push([93,1044,'PhysicsState']);
+  }
+
+  if(intRows.length){
+    p.push(kw('INSERT INTO')+' `weenie_properties_int` (`object_Id`, `type`, `value`)');
+    p.push(...intRows.map((r,i)=>{const[t,v,c]=r;const row=`(${num(wcid)}, ${pad(num(t),5)}, ${pad(num(v),13)}) `+cmt(`/* ${c} */`);return i===0?kw('VALUES')+' '+row:'     , '+row;}));
+    p.push(';');p.push('');
+  }
+
+  if(currentType==='creature'){
+    const bools=[[1,'True','Stuck'],[6,gi('fUsesMana',0)?'True':'False','AiUsesMana'],[12,'True','ReportCollisions'],[13,'False','Ethereal'],[14,'True','GravityStatus'],[15,'True','LightsStatus'],[19,'True','Attackable'],[120,'False','TreasureCorpse']];
+    p.push(kw('INSERT INTO')+' `weenie_properties_bool` (`object_Id`, `type`, `value`)');
+    p.push(...bools.map((r,i)=>{const[t,v,c]=r;const row=`(${num(wcid)}, ${pad(num(t),5)}, ${v.padEnd(6)}) `+cmt(`/* ${c} */`);return i===0?kw('VALUES')+' '+row:'     , '+row;}));
+    p.push(';');p.push('');
+
+    const rs=gf('fResSlash',1),rp=gf('fResPierce',1),rb=gf('fResBludge',1),rc=gf('fResCold',1),rf=gf('fResFire',1),ra=gf('fResAcid',1),re=gf('fResElec',1),rn=gf('fResNether',1);
+    const ar=gf('fAggroRange',16);const sc=gf('fScale',1);
+    const floats=[[1,5,'HeartbeatInterval'],[3,0.5,'HealthRate'],[4,0.4,'StaminaRate'],[5,1.5,'ManaRate'],[12,1.0,'Shade'],[13,rs,'ArmorModVsSlash'],[14,rp,'ArmorModVsPierce'],[15,rb,'ArmorModVsBludgeon'],[16,rc,'ArmorModVsCold'],[17,rf,'ArmorModVsFire'],[18,ra,'ArmorModVsAcid'],[19,re,'ArmorModVsElectric'],[31,ar,'VisualAwarenessRange'],[39,sc,'DefaultScale'],[64,rs,'ResistSlash'],[65,rp,'ResistPierce'],[66,rb,'ResistBludgeon'],[67,rf,'ResistFire'],[68,rc,'ResistCold'],[69,ra,'ResistAcid'],[70,re,'ResistElectric'],[165,rn,'ArmorModVsNether'],[166,rn,'ResistNether']];
+    p.push(kw('INSERT INTO')+' `weenie_properties_float` (`object_Id`, `type`, `value`)');
+    p.push(...floats.map((r,i)=>{const[t,v,c]=r;const row=`(${num(wcid)}, ${pad(num(t),5)}, ${String(v).padEnd(9)}) `+cmt(`/* ${c} */`);return i===0?kw('VALUES')+' '+row:'     , '+row;}));
+    p.push(';');p.push('');
+  }
+
+  if(currentType==='weapon'){
+    const floats=[[22,gf('fDmgVar',0.4),'DamageVariance'],[29,gf('fWepDef',1.0),'WeaponDefense'],[39,1.0,'DefaultScale'],[62,gf('fWepOff',1.0),'WeaponOffense']];
+    p.push(kw('INSERT INTO')+' `weenie_properties_float` (`object_Id`, `type`, `value`)');
+    p.push(...floats.map((r,i)=>{const[t,v,c]=r;const row=`(${num(wcid)}, ${pad(num(t),5)}, ${String(v).padEnd(9)}) `+cmt(`/* ${c} */`);return i===0?kw('VALUES')+' '+row:'     , '+row;}));
+    p.push(';');p.push('');
+  }
+
+  if(currentType==='armor'){
+    const ids=['fModSlash','fModPierce','fModBludge','fModCold','fModFire','fModAcid','fModElec','fModNether'];
+    const names=['ArmorModVsSlash','ArmorModVsPierce','ArmorModVsBludgeon','ArmorModVsCold','ArmorModVsFire','ArmorModVsAcid','ArmorModVsElectric','ArmorModVsNether'];
+    const fts=[13,14,15,16,17,18,19,165];
+    const floats=ids.map((id,i)=>[fts[i],gf(id,1.0),names[i]]);floats.push([39,1.0,'DefaultScale']);
+    p.push(kw('INSERT INTO')+' `weenie_properties_float` (`object_Id`, `type`, `value`)');
+    p.push(...floats.map((r,i)=>{const[t,v,c]=r;const row=`(${num(wcid)}, ${pad(num(t),5)}, ${String(v).padEnd(9)}) `+cmt(`/* ${c} */`);return i===0?kw('VALUES')+' '+row:'     , '+row;}));
+    p.push(';');p.push('');
+  }
+
+  const strRows=[[1,name,'Name']];
+  const sd=g('fShortDesc','');if(sd)strRows.push([15,sd,'ShortDesc']);
+  const um=g('fUseMsg','');if(um)strRows.push([14,um,'Use']);
+  p.push(kw('INSERT INTO')+' `weenie_properties_string` (`object_Id`, `type`, `value`)');
+  p.push(...strRows.map((r,i)=>{const[t,v,c]=r;const row=`(${num(wcid)}, ${pad(num(t),5)}, ${str(v)}) `+cmt(`/* ${c} */`);return i===0?kw('VALUES')+' '+row:'     , '+row;}));
+  p.push(';');p.push('');
+
+  const didRows=[[1,'0x02000178','Setup'],[2,'0x09000008','MotionTable'],[3,'0x20000008','SoundTable'],[8,'0x06001036','Icon'],[22,'0x34000026','PhysicsEffectTable']];
+  if(currentType==='creature'){const tr=gi('fTreasureTier',3100);if(tr)didRows.push([35,tr,'DeathTreasureType']);}
+  p.push(kw('INSERT INTO')+' `weenie_properties_d_i_d` (`object_Id`, `type`, `value`)');
+  p.push(...didRows.map((r,i)=>{const[t,v,c]=r;const row=`(${num(wcid)}, ${pad(num(t),5)}, ${typeof v==='number'?num(v):v.padEnd(14)}) `+cmt(`/* ${c} */`);return i===0?kw('VALUES')+' '+row:'     , '+row;}));
+  p.push(';');p.push('');
+
+  if(currentSub==='attributes'&&(currentType==='creature'||currentType==='npc')){
+    const attrs=[[1,'Strength'],[2,'Endurance'],[3,'Quickness'],[4,'Coordination'],[5,'Focus'],[6,'Self']];
+    p.push(kw('INSERT INTO')+' `weenie_properties_attribute` (`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`)');
+    p.push(...attrs.map(([t,n],i)=>{const v=gi(`attr_${t}`,260);const row=`(${num(wcid)}, ${num(t)}, ${num(v)}, 0, 0) `+cmt(`/* ${n} */`);return i===0?kw('VALUES')+' '+row:'     , '+row;}));
+    p.push(';');p.push('');
+    const vitals=[[1,'MaxHealth',gi('fHP',2000)||gi('vital_1',2000)],[3,'MaxStamina',gi('fStam',2000)||gi('vital_3',2000)],[5,'MaxMana',gi('fMana',800)||gi('vital_5',800)]];
+    p.push(kw('INSERT INTO')+' `weenie_properties_attribute_2nd` (`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`, `current_Level`)');
+    p.push(...vitals.map(([t,n,v],i)=>{const row=`(${num(wcid)}, ${num(t)}, ${num(v)}, 0, 0, ${num(v)}) `+cmt(`/* ${n} */`);return i===0?kw('VALUES')+' '+row:'     , '+row;}));
+    p.push(';');p.push('');
+  }
+
+  if(currentSub==='spellbook'&&spells.length){
+    p.push(kw('INSERT INTO')+' `weenie_properties_spell_book` (`object_Id`, `spell`, `probability`)');
+    p.push(...spells.map((sp,i)=>{const row=`(${num(wcid)}, ${pad(num(sp.id),7)}, ${sp.prob}) `+cmt(`/* ${sp.name} */`);return i===0?kw('VALUES')+' '+row:'     , '+row;}));
+    p.push(';');p.push('');
+  }
+
+  if(currentSub==='bodyparts'){
+    p.push(kw('INSERT INTO')+' `weenie_properties_body_part`');
+    p.push('  (`object_Id`, `key`, `d_Type`, `d_Val`, `d_Var`, `base_Armor`,');
+    p.push('   `armor_Vs_Slash`, `armor_Vs_Pierce`, `armor_Vs_Bludgeon`, `armor_Vs_Cold`,');
+    p.push('   `armor_Vs_Fire`, `armor_Vs_Acid`, `armor_Vs_Electric`, `armor_Vs_Nether`,');
+    p.push('   `b_h`, `h_l_f`, `m_l_f`, `l_l_f`, `h_r_f`, `m_r_f`, `l_r_f`,');
+    p.push('   `h_l_b`, `m_l_b`, `l_l_b`, `h_r_b`, `m_r_b`, `l_r_b`)');
+    p.push(...bodyParts.map((bp,i)=>{
+      const dt=gi(`bp_dtype_${i}`,4),dv=gi(`bp_dval_${i}`,0),al=gi(`bp_al_${i}`,80);
+      const sl=gi(`bp_slash_${i}`,bp.slash),pi=gi(`bp_pierce_${i}`,bp.pierce),bl=gi(`bp_bludge_${i}`,bp.bludge);
+      const co=gi(`bp_cold_${i}`,bp.cold),fi=gi(`bp_fire_${i}`,bp.fire),ac=gi(`bp_acid_${i}`,bp.acid),el=gi(`bp_elec_${i}`,bp.elec);
+      const row=`(${num(wcid)}, ${num(bp.key)}, ${num(dt)}, ${num(dv)}, 0, ${num(al)}, ${num(sl)}, ${num(pi)}, ${num(bl)}, ${num(co)}, ${num(fi)}, ${num(ac)}, ${num(el)}, 0, 1, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0) `+cmt(`/* ${bp.name} */`);
+      return i===0?kw('VALUES')+' '+row:'     , '+row;
+    }));
+    p.push(';');
+  }
+
+  sel('sqlOutput').innerHTML=p.join('\n');
+}
+
+function getPlainSQL(){return sel('sqlOutput').innerText||sel('sqlOutput').textContent;}
+
+function copySQL(){
+  navigator.clipboard.writeText(getPlainSQL()).then(()=>{
+    const btn=document.querySelectorAll('.sql-btn')[0];
+    const o=btn.innerHTML;btn.innerHTML='✓ Copied!';btn.style.color='#80c080';
+    setTimeout(()=>{btn.innerHTML=o;btn.style.color='';},2000);
+  });
+}
+
+function downloadSQL(){
+  const name=g('fName','weenie').toLowerCase().replace(/[^a-z0-9]/g,'_');
+  const wcid=gi('fWcid',850000);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([getPlainSQL()],{type:'text/plain'}));
+  a.download=`${wcid}_${name}.sql`;a.click();
+}
+
+function saveSQL(){
+  if(window.pywebview){
+    window.pywebview.api.save_sql(getPlainSQL(),gi('fWcid',850000),g('fName','weenie'));
+  } else {
+    downloadSQL();
+  }
+}
+
+function resetAll(){
+  const cfg=TYPE_CONFIG[currentType];
+  sel('fName').value='New '+cfg.label;
+  sel('fWcid').value=cfg.wcidFrom;
+  if(sel('fLevel'))sel('fLevel').value='100';
+  if(sel('fXp'))sel('fXp').value='50000';
+  spells=[];bodyParts=BODY_PARTS.map(b=>({...b,dType:4,dVal:0,dVar:0,baseAL:80,slash:64,pierce:56,bludge:120,cold:40,fire:120,acid:80,elec:80,nether:24}));
+  buildSubContent();
+}
+
+function onForge(){
+  const prompt=sel('forgeInput').value.trim();
+  if(!prompt)return;
+  if(window.pywebview){
+    window.pywebview.api.forge(prompt,currentType);
+  }
+}
+
+buildForm();
+</script>
+</body>
+</html>
