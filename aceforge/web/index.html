@@ -1714,9 +1714,11 @@ function buildInnerTabs(){
     {k:'quest',    icon:'◇', label:'QUEST'},
     {k:'generator',icon:'⟙', label:'GENERATOR'},
   ];
-  el.innerHTML=types.map(t=>
-    '<button class="itab'+(t.k===curType?' active':'')+' " data-type="'+t.k+'" onclick="switchType(\"'+t.k+'\",this)"><span style="margin-right:4px">'+t.icon+'</span>'+t.label+'</button>'
-  ).join('');
+  const parts=types.map(function(t){
+    const active=t.k===curType?' active':'';
+    return '<button class="itab'+active+'" data-type="'+t.k+'" onclick="switchType(this.dataset.type,this)"><span style="margin-right:4px">'+t.icon+'</span>'+t.label+'</button>';
+  });
+  el.innerHTML=parts.join('');
 }
 
 
