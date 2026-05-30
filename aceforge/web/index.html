@@ -1481,6 +1481,199 @@ function buildGeneratorProps(){
 const CREATURE_BODY_MAP={31:'biped',10:'biped',1:'biped',2:'biped',3:'biped',4:'biped',5:'biped',6:'biped',7:'biped',8:'biped',9:'biped',13:'biped',14:'biped',15:'biped',16:'biped',17:'biped',18:'biped',19:'biped',20:'biped',22:'biped',23:'biped',28:'biped',29:'biped',30:'biped',32:'biped',38:'biped',39:'biped',44:'biped',46:'biped',48:'biped',60:'biped',61:'biped',75:'biped',99:'biped',100:'biped',101:'biped'};
 
 
+
+function getBodyParts(cType){
+  // Returns biped body parts for all creature types
+  return BODY_PARTS_BIPED.map(b=>({...b,
+    dType:4, dVal:0, dVar:0.25,
+    baseAL:0, sl:0, pi:0, bl:0, co:0, fi:0, ac:0, el:0, nt:0
+  }));
+}
+
+function buildSubContent(){
+  const fc=document.getElementById('formContent');
+  if(!fc) return;
+  const c=TYPE_CFG[curType];
+  if(!c) return;
+  const builders={
+    properties: buildProps,
+    attributes: buildAttrs,
+    skills:     buildSkills,
+    spellbook:  buildSpellbook,
+    bodyparts:  buildBodyPartsTab,
+    emotes:     buildEmotesTab,
+    advanced:   buildAdvanced
+  };
+  if(curType==='generator') builders.properties=buildGeneratorProps;
+  fc.innerHTML=c.subTabs.map(sub=>{
+    const active=sub===curSub?'active':'';
+    const fn=builders[sub]||buildProps;
+    let html='';
+    try{ html=fn(); }catch(e){ html='<p style="color:red;padding:10px">Error in '+sub+': '+e.message+'</p>'; }
+    return '<div class="sub-panel '+active+'" data-sub="'+sub+'">'+html+'</div>';
+  }).join('');
+  fc.querySelectorAll('input,select,textarea').forEach(e=>e.addEventListener('input',onFieldInput));
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.sdrop-wrap'))
+      document.querySelectorAll('.sdrop-box.open').forEach(d=>d.classList.remove('open'));
+  });
+  regen();
+}
+
+function buildForm(){
+  const c=TYPE_CFG[curType];
+  if(!c) return;
+  // Top status bar
+  const wbTitle=document.getElementById('wbTitle');
+  const wbDesc=document.getElementById('wbDesc');
+  const topType=document.getElementById('topType');
+  const topRange=document.getElementById('topRange');
+  if(wbTitle) wbTitle.innerHTML=c.icon+' <span style="font-weight:700">'+c.label+'</span><span style="font-weight:400"> · Workbench</span>';
+  if(wbDesc)  wbDesc.textContent=c.desc;
+  if(topType) topType.textContent=c.label;
+  if(topRange)topRange.textContent=c.wcidRange||'';
+  const wf=document.getElementById('wcidFrom');
+  const wt=document.getElementById('wcidTo');
+  if(wf) wf.value=c.wcidFrom||'';
+  if(wt) wt.value=c.wcidTo||'';
+  // ID row
+  const idRow=document.getElementById('idRow');
+  if(idRow){
+    const wTypeOpts=c.wTypes?c.wTypes.map(w=>'<option value="'+w[0]+'"'+'>'+w[0]+' · '+w[1]+'</option>').join(''):'';
+    idRow.innerHTML=
+      '<div class="fg" style="max-width:90px"><div class="fl">WCID <span class="fc">key</span></div>'+
+      '<input type="number" id="fWcid" value="'+c.wcidFrom+'" oninput="regen()"></div>'+
+      (c.wTypes?'<div class="fg" style="max-width:200px"><div class="fl">Weenie Type <span class="fc">S-1</span></div>'+
+      '<select id="fWeenieType" oninput="regen()">'+wTypeOpts+'</select></div>':'')+
+      '<div class="fg"><div class="fl">Name</div><input type="text" id="fName" value="" placeholder="e.g. shadowfiend" oninput="regen()"></div>';
+  }
+  // Sub-tabs
+  const stabs=document.getElementById('subTabs');
+  if(stabs){
+    stabs.innerHTML=c.subTabs.map((s,i)=>{
+      const label=s.charAt(0).toUpperCase()+s.slice(1);
+      const active=s===curSub?'active':'';
+      return `<button class="ctab ${active}" data-sub="${s}" onclick="switchSub('${s}',this)">${label}</button>`;
+    }).join('');
+  }
+  // Presets row
+  const prow=document.getElementById('presetsRow');
+  if(prow && c.presets && c.presets.length){
+    prow.innerHTML='<div style="display:flex;gap:6px;flex-wrap:wrap;padding:6px 0">'+
+      c.presets.map(p=>'<button class="preset-btn" onclick="applyPreset('+JSON.stringify(p)+')" title="'+p.desc+'">'+p.name+'</button>').join('')+
+      '<button class="preset-btn" onclick="openPresetModal()" style="border-style:dashed">+ Save Current</button>'+
+      '</div>';
+  } else if(prow){
+    prow.innerHTML='';
+  }
+  buildSubContent();
+}
+
+
+const TYPE_CFG={
+  creature:{label:'Creature',icon:'\u2720',desc:'Hostile creatures with combat, loot, and behavior.',
+    wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 \u2013 859,999',
+    wTypes:[[10,'Creature']],
+    subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes','advanced'],
+    presets:[
+      {l:'Rift Drudge (T6)',d:{fName:'Rift Drudge',fLevel:'180',fXp:'800000',fDmg:'95',fDmgType:'1',fResSlash:'1.0',fResPierce:'1.0',fResBludge:'1.5',fResCold:'0.5',fResFire:'1.8',fResAcid:'0.8',fResElec:'1.0',fResNether:'1.0',fHP:'3200',fStam:'3000',fMana:'500',fLum:'15000',cType:'3'}},
+      {l:'Fire Elemental',d:{fName:'Fire Elemental',fLevel:'200',fXp:'1200000',fDmg:'110',fDmgType:'16',fResSlash:'0.6',fResPierce:'0.6',fResBludge:'1.2',fResCold:'2.0',fResFire:'0.1',fResAcid:'1.0',fResElec:'1.0',fResNether:'0.5',fHP:'4000',fStam:'4000',fMana:'800',fLum:'20000',cType:'38'}},
+      {l:'Frost Skeleton',d:{fName:'Frost Tomb Sentinel',fLevel:'150',fXp:'400000',fDmg:'75',fDmgType:'1',fResSlash:'0.8',fResPierce:'0.7',fResBludge:'1.5',fResCold:'0.2',fResFire:'1.5',fResAcid:'1.0',fResElec:'1.0',fResNether:'0.3',fHP:'2200',fStam:'2000',fMana:'500',fLum:'8000',cType:'30'}},
+      {l:'Acid Olthoi',d:{fName:'Acid Olthoi',fLevel:'220',fXp:'1800000',fDmg:'130',fDmgType:'32',fResSlash:'0.8',fResPierce:'1.2',fResBludge:'1.0',fResCold:'1.0',fResFire:'1.0',fResAcid:'0.1',fResElec:'1.2',fResNether:'1.0',fHP:'5000',fStam:'4000',fMana:'500',fLum:'25000',cType:'1'}},
+    ]},
+  npc:{label:'NPC',icon:'\u25c6',desc:'Quest givers, merchants, and interactive characters.',
+    wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 \u2013 859,999',
+    wTypes:[[10,'Creature (NPC)'],[12,'Vendor']],
+    subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes','advanced'],
+    presets:[
+      {l:'Generic NPC',d:{fName:'New NPC',fLevel:'275',fShortDesc:'A mysterious figure.'}},
+      {l:'Quest Giver',d:{fName:'Quest Giver',fLevel:'275',fShortDesc:'A weathered figure with knowing eyes.',fUseRadius:'3.0'}},
+      {l:'Vendor',d:{fName:'Traveling Merchant',fLevel:'275',fShortDesc:'A merchant of rare goods.',fUseRadius:'5.0',fWType:'12',fBuyRate:'1.0',fSellRate:'1.1'}},
+    ]},
+  item:{label:'Item',icon:'\u25c8',desc:'Quest tokens, gems, stackables, consumables, and containers.',
+    wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
+    wTypes:[[38,'Gem'],[51,'Stackable'],[18,'Food'],[34,'Scroll'],[22,'Key'],[20,'Chest'],[21,'Container'],[8,'Book'],[29,'LightSource'],[9,'Coin'],[28,'Healer'],[37,'ManaStone'],[32,'SpellComponent']],
+    subTabs:['properties','emotes','advanced'],
+    presets:[
+      {l:'Quest Token',d:{fName:'Quest Seal',fValue:'100',fEncumb:'5',fMaxStack:'1',fItemUse:'1',fBonded:'1',fAttuned:'1',fScale:'1.0'}},
+      {l:'Stackable Drop',d:{fName:'Crafting Fragment',fValue:'50',fEncumb:'10',fMaxStack:'25',fItemUse:'8',fBonded:'0',fAttuned:'0',fScale:'1.0'}},
+      {l:'Consumable',d:{fName:'Health Philtre',fValue:'300',fEncumb:'15',fMaxStack:'10',fItemUse:'2',fBonded:'0',fAttuned:'0'}},
+      {l:'Container',d:{fName:'Bag of Holding',fValue:'500',fEncumb:'50',fMaxStack:'1',fItemUse:'4',fBonded:'1',fAttuned:'0',fWType:'21'}},
+    ]},
+  weapon:{label:'Weapon',icon:'\u2694',desc:'Melee weapons, missile launchers, and casters.',
+    wcidFrom:'870000',wcidTo:'879999',wcidRange:'870,000 \u2013 879,999',
+    wTypes:[[6,'MeleeWeapon'],[3,'MissileLauncher'],[35,'Caster'],[4,'Missile']],
+    subTabs:['properties','advanced'],
+    presets:[
+      {l:'Heavy Sword',d:{fName:'Enchanted Longsword',fDmg:'85',fDmgType:'1',fWepTime:'45',fDmgVar:'0.4',fWepSkill:'44',fWepDef:'1.02',fWepOff:'1.03',fWieldDiff:'290',fValue:'12000',fEncumb:'450',fScale:'1.0'}},
+      {l:'Light Spear',d:{fName:'Swift Spear',fDmg:'60',fDmgType:'2',fWepTime:'35',fDmgVar:'0.3',fWepSkill:'45',fWepDef:'1.04',fWepOff:'1.02',fWieldDiff:'250',fValue:'9000',fEncumb:'300',fScale:'1.0'}},
+      {l:'Finesse Dagger',d:{fName:'Venom Dagger',fDmg:'45',fDmgType:'2',fWepTime:'28',fDmgVar:'0.2',fWepSkill:'46',fWepDef:'1.06',fWepOff:'1.05',fWieldDiff:'240',fValue:'8000',fEncumb:'200',fScale:'1.0'}},
+      {l:'War Staff',d:{fName:'Staff of War',fDmg:'0',fDmgType:'0',fWepTime:'0',fDmgVar:'0',fWepSkill:'34',fWepDef:'1.05',fWepOff:'1.0',fWieldDiff:'300',fValue:'15000',fEncumb:'250',fScale:'1.0',fWType:'35'}},
+    ]},
+  armor:{label:'Armor/Clothing',icon:'\u26e8',desc:'Clothing and armor for all body slots.',
+    wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
+    wTypes:[[2,'Clothing/Armor']],
+    subTabs:['properties','advanced'],
+    presets:[
+      {l:'Plate Chest',d:{fName:'Platemail Cuirass',fArmorLevel:'200',fArmorType:'11',fValidLoc:'512',fValue:'8000',fEncumb:'600',fScale:'1.0'}},
+      {l:'Leather Cap',d:{fName:'Leather Cap',fArmorLevel:'60',fArmorType:'2',fValidLoc:'1',fValue:'800',fEncumb:'80',fScale:'1.0'}},
+      {l:'Amuli Coat',d:{fName:'Amuli Coat',fArmorLevel:'160',fArmorType:'7',fValidLoc:'2',fValue:'5000',fEncumb:'350',fScale:'1.0'}},
+      {l:'Covenant Gauntlets',d:{fName:'Covenant Gauntlets',fArmorLevel:'400',fArmorType:'15',fValidLoc:'32',fValue:'25000',fEncumb:'200',fScale:'1.0'}},
+      {l:'Cloth Robe',d:{fName:'Cloth Robe',fArmorLevel:'0',fArmorType:'1',fValidLoc:'2',fValue:'100',fEncumb:'80',fScale:'1.0'}},
+    ]},
+  jewelry:{label:'Jewelry',icon:'\u25ce',desc:'Rings, necklaces, bracelets, and wristlets.',
+    wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
+    wTypes:[[38,'Gem (Jewelry)']],
+    subTabs:['properties','advanced'],
+    presets:[
+      {l:'Ring',d:{fName:'Ring of Vigor',fValue:'1000',fEncumb:'5',fBonded:'0',fAttuned:'0',fArmorType:'1',fValidLoc:'134217728',fScale:'1.0'}},
+      {l:'Necklace',d:{fName:'Amulet of Warding',fValue:'2000',fEncumb:'8',fBonded:'0',fAttuned:'0',fArmorType:'1',fValidLoc:'1048576',fScale:'1.0'}},
+    ]},
+  recipe:{label:'Recipe',icon:'\u2697',desc:'Crafting recipes and material combinations.',
+    wcidFrom:'600000',wcidTo:'609999',wcidRange:'600,000 \u2013 609,999',
+    wTypes:[[38,'Gem (Recipe)']],
+    subTabs:['properties'],
+    presets:[]},
+  quest:{label:'Quest',icon:'\u25c7',desc:'Quest flags, kill tasks, and progression timers.',
+    wcidFrom:'860000',wcidTo:'869999',wcidRange:'860,000 \u2013 869,999',
+    wTypes:[[38,'Gem (Quest Flag)']],
+    subTabs:['properties'],
+    presets:[
+      {l:'Completion Flag',d:{fName:'NewQuestCompleted',fMinDelta:'0',fMaxSolves:'1',fMsg:'NewQuestCompleted'}},
+      {l:'Kill Timer',d:{fName:'NewQuestKTTimer',fMinDelta:'72000',fMaxSolves:'-1',fMsg:'NewQuestKTTimer'}},
+      {l:'Daily Timer',d:{fName:'NewQuestTimer',fMinDelta:'86400',fMaxSolves:'-1',fMsg:'NewQuestTimer'}},
+    ]},
+  generator:{label:'Generator',icon:'⧙',desc:'Spawn generators with placement coordinates.',
+    wcidFrom:'1800000',wcidTo:'1899999',wcidRange:'1,800,000+',
+    wTypes:[[7,'7 · Generator'],[1,'1 · Generic']],
+    subTabs:['properties'],
+    presets:[
+      {name:'Creature Respawn',desc:'Standard 5min respawn',data:{fGenWeenieType:'7',fGenTimeType:'1',fGenRespawn:'300',fGenInit:'1',fGenMax:'1',fGenWhen:'1',fGenWhere:'2',fGenProb:'-1',fGenStackSize:'-1'}},
+      {name:'Boss (Rare)',desc:'1hr boss respawn',data:{fGenWeenieType:'7',fGenTimeType:'1',fGenRespawn:'3600',fGenInit:'1',fGenMax:'1',fGenWhen:'1',fGenWhere:'2',fGenProb:'-1',fGenStackSize:'-1'}},
+      {name:'Event Spawn',desc:'Event-driven add generator',data:{fGenWeenieType:'1',fGenTimeType:'3',fGenRespawn:'60',fGenInit:'5',fGenMax:'5',fGenWhen:'1',fGenWhere:'2',fGenProb:'-1',fGenRegenInterval:'5',fGenRadius:'5',fGenInitDelay:'3'}},
+    ]}
+}
+function extractInsertValues(sql, tableName){
+  const re=new RegExp('INSERT INTO `'+tableName+'`[^;]+;','gs');
+  const matches=[...sql.matchAll(re)];
+  const result={};
+  for(const m of matches){
+    const valRe=/\(([^)]+)\)/g;
+    const vals=[...m[0].matchAll(valRe)].map(v=>v[1].trim());
+    if(vals.length>=2){
+      const cols=vals[0].split(',').map(c=>c.trim().replace(/`/g,''));
+      const rows=vals.slice(1);
+      for(const row of rows){
+        const parts=row.split(',').map(p=>p.trim());
+        const obj={};
+        cols.forEach((c,i)=>{ obj[c]=parts[i]; });
+        result[obj.type||obj.object_Id]={...obj};
+      }
+    }
+  }
+  return result;
+}
+
 const EMOTE_CAT_COLORS = {
   1: '#8a3a3a',   // Refuse
   2: '#3a5a8a',   // Vendor
@@ -1515,6 +1708,7 @@ const EMOTE_CAT_COLORS = {
   33:'#4a6a5a',   // NumFellowsSuccess
   34:'#6a5a4a',   // NumFellowsFailure
 };
+
 
 function _buildActionFields(fdefs, a, i, j, aType){
   // Special handlers that override the generic field list
@@ -1587,82 +1781,80 @@ function _buildActionFields(fdefs, a, i, j, aType){
 }
 
 function buildEmoteBlock(em,i){
-  const catVal    = parseInt(em.category)||7;
-  const catName   = lookupName(EMOTE_CATS,catVal);
-  const isVendor  = catVal===2;
-  const isRefuse  = catVal===1;
-  const catColor  = EMOTE_CAT_COLORS[catVal]||'#4a4a4a';
-  const summary   = (em.questFilter?` · quest: ${em.questFilter}`:'') + ((em.wcidFilter&&em.wcidFilter!=='')?' · item: '+em.wcidFilter:'');
+  const catVal=parseInt(em.category)||7;
+  const catName=lookupName(EMOTE_CATS,catVal);
+  const isVendor=catVal===2;
+  const isRefuse=catVal===1;
+  const catColor=EMOTE_CAT_COLORS[catVal]||'#4a4a4a';
+  const summary=(em.questFilter?' · quest: '+em.questFilter:'')+
+    ((em.wcidFilter&&em.wcidFilter!==''&&em.wcidFilter!=='0')?' · item: '+em.wcidFilter:'');
 
-  // ── Trigger settings row ───────────────────────────────────────────────────
-  const triggerSettings = `
-    <div class="grid g3" style="margin-bottom:10px">
-      <div class="fg"><div class="fl">Category</div>
-        <select onchange="emotes[${i}].category=parseInt(this.value);rebuildPanel('emotes')">${opt(EMOTE_CATS,catVal)}</select></div>
-      <div class="fg"><div class="fl">Probability <span class="fc">0.0 – 1.0 · multiple rows with same quest+cat = lottery</span></div>
-        <input type="text" value="${em.prob!=null?em.prob:1}" oninput="emotes[${i}].prob=this.value;regen()"></div>
-      <div class="fg"><div class="fl">${isRefuse?'Item WCID <span class="fc">fires for this item</span>':'Item WCID Filter <span class="fc">blank = any</span>'}</div>
-        <input type="number" value="${em.wcidFilter||''}" placeholder="${isRefuse?'required':'0 = any'}" oninput="emotes[${i}].wcidFilter=this.value;regen()"></div>
-      <div class="fg" style="grid-column:span ${isVendor?2:3}">
-        <div class="fl">Quest Filter <span class="fc">blank = none · add @N to check flag ≥ N</span></div>
-        <input type="text" value="${em.questFilter||''}" placeholder="e.g. FreddieFlowerQuest@2  or  OwnsItem-810063_check" oninput="emotes[${i}].questFilter=this.value;regen()"></div>
-      ${isVendor?`<div class="fg"><div class="fl">Vendor Type</div>
-        <select onchange="emotes[${i}].vendorType=this.value;regen()">${opt([[1,'Open'],[2,'Close'],[3,'Sell'],[4,'Buy'],[5,'No Buy']],em.vendorType||1)}</select></div>`:''}
-    </div>`;
+  // Trigger settings
+  let ps='<div class="grid g3" style="margin-bottom:10px">';
+  ps+='<div class="fg"><div class="fl">Category</div>';
+  ps+='<select onchange="emotes['+i+'].category=parseInt(this.value);rebuildPanel(\'emotes\')">'+opt(EMOTE_CATS,catVal)+'</select></div>';
+  ps+='<div class="fg"><div class="fl">Probability <span class="fc">0.0 – 1.0</span></div>';
+  ps+='<input type="text" value="'+(em.prob!=null?em.prob:1)+'" oninput="emotes['+i+'].prob=this.value;regen()"></div>';
+  ps+='<div class="fg"><div class="fl">'+(isRefuse?'Item WCID <span class="fc">fires for this item</span>':'Item WCID Filter <span class="fc">blank = any</span>')+'</div>';
+  ps+='<input type="number" value="'+(em.wcidFilter||'')+'" placeholder="'+(isRefuse?'required':'0 = any')+'" oninput="emotes['+i+'].wcidFilter=this.value;regen()"></div>';
+  ps+='<div class="fg" style="grid-column:span '+(isVendor?2:3)+'">';
+  ps+='<div class="fl">Quest Filter <span class="fc">blank = none · add @N to check flag ≥ N</span></div>';
+  ps+='<input type="text" value="'+(em.questFilter||'')+'" placeholder="e.g. FreddieFlowerQuest@2" oninput="emotes['+i+'].questFilter=this.value;regen()"></div>';
+  if(isVendor){
+    ps+='<div class="fg"><div class="fl">Vendor Type</div>';
+    ps+='<select onchange="emotes['+i+'].vendorType=this.value;regen()">'+opt([[1,'Open'],[2,'Close'],[3,'Sell'],[4,'Buy'],[5,'No Buy']],em.vendorType||1)+'</select></div>';
+  }
+  ps+='</div>';
 
-  // ── Response rows ──────────────────────────────────────────────────────────
-  const responses = (em.actions||[]).map((a,j)=>{
-    const aType   = parseInt(a.type)||10;
-    const aName   = lookupName(EMOTE_TYPES,aType);
-    const hint    = EA_HINTS[aType]||'';
-    const fdefs = EA_FIELDS[aType]||EA_DEFAULT;
-    const fhtml = _buildActionFields(fdefs, a, i, j, aType);
-    const delayFld = `<div class="fg" style="max-width:80px"><div class="fl">Delay s</div>
-      <input type="text" value="${a.delay||0}" oninput="emotes[${i}].actions[${j}].delay=this.value;regen()"></div>`;
-    return `
-      <div style="display:flex;gap:0;margin-bottom:6px">
-        <div style="display:flex;align-items:center;justify-content:center;min-width:28px;font-family:'Source Code Pro',monospace;font-size:9px;font-weight:700;color:var(--ink-faint);background:var(--parch-dk);border:1px solid var(--border-lt);border-right:none;padding:4px 0">${j}</div>
-        <div style="flex:1;border:1px solid var(--border-lt);padding:10px 12px;background:rgba(200,184,152,.04)">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-            <div class="fg" style="max-width:180px">
-              <div class="fl">Response Type</div>
-              <select onchange="emotes[${i}].actions[${j}].type=parseInt(this.value);rebuildPanel('emotes')">
-              ${EMOTE_TYPES.filter(([v])=>{
-                if(EMOTE_NPC_ONLY_TYPES.has(v)&&curType!=='npc') return false;
-                if(EMOTE_EXCLUDE_ITEM_TYPES.has(v)&&['item','weapon','armor','jewelry'].includes(curType)) return false;
-                return true;
-              }).map(([v,l])=>`<option value="${v}"${v===aType?' selected':''}>${v} · ${l}</option>`).join('')}
-            </select>
-            </div>
-            <div style="font-family:'IM Fell English',serif;font-style:italic;font-size:11px;color:var(--ink-dim);flex:1;padding-top:18px">${hint}</div>
-            ${j>0?`<button onclick="const a=emotes[${i}].actions;[a[${j}],a[${j-1}]]=[a[${j-1}],a[${j}]];rebuildPanel('emotes')" style="background:none;border:1px solid var(--border);color:var(--ink-dim);cursor:pointer;padding:2px 6px;font-size:11px;margin-top:14px" title="Move up">↑</button>`:''}
-            <button class="del" onclick="emotes[${i}].actions.splice(${j},1);rebuildPanel('emotes')" style="margin-top:14px">✕</button>
-          </div>
-          <div class="grid g3">${fhtml}${delayFld}</div>
-        </div>
-      </div>`;
-  }).join('');
+  // Response rows
+  let rs='';
+  (em.actions||[]).forEach(function(a,j){
+    const aType=parseInt(a.type)||10;
+    const aName=lookupName(EMOTE_TYPES,aType);
+    const hint=EA_HINTS[aType]||'';
+    const fdefs=EA_FIELDS[aType]||EA_DEFAULT;
+    const fhtml=_buildActionFields(fdefs,a,i,j,aType);
+    const delayFld='<div class="fg" style="max-width:80px"><div class="fl">Delay s</div>'+
+      '<input type="text" value="'+(a.delay||0)+'" oninput="emotes['+i+'].actions['+j+'].delay=this.value;regen()"></div>';
+    const upBtn=j>0?'<button onclick="var a=emotes['+i+'].actions;var t=a['+j+'];a['+j+']=a['+(j-1)+'];a['+(j-1)+']=t;rebuildPanel(\'emotes\')" style="background:none;border:1px solid var(--border);color:var(--ink-dim);cursor:pointer;padding:2px 6px;font-size:11px;margin-top:14px" title="Move up">\u2191</button>':'';
+    const typeOptHtml=EMOTE_TYPES.filter(function(v2){
+      if(EMOTE_NPC_ONLY_TYPES.has(v2[0])&&curType!=='npc') return false;
+      if(EMOTE_EXCLUDE_ITEM_TYPES.has(v2[0])&&['item','weapon','armor','jewelry'].includes(curType)) return false;
+      return true;
+    }).map(function(v2){ return '<option value="'+v2[0]+'"'+(v2[0]===aType?' selected':'')+'>'+v2[0]+' \xb7 '+v2[1]+'</option>'; }).join('');
+    rs+='<div style="display:flex;gap:0;margin-bottom:6px">';
+    rs+='<div style="display:flex;align-items:center;justify-content:center;min-width:28px;font-family:monospace;font-size:9px;font-weight:700;color:var(--ink-faint);background:var(--parch-dk);border:1px solid var(--border-lt);border-right:none;padding:4px 0">'+j+'</div>';
+    rs+='<div style="flex:1;border:1px solid var(--border-lt);padding:10px 12px;background:rgba(200,184,152,.04)">';
+    rs+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+    rs+='<div class="fg" style="max-width:180px"><div class="fl">Response Type</div>';
+    rs+='<select onchange="emotes['+i+'].actions['+j+'].type=parseInt(this.value);rebuildPanel(\'emotes\')">'+typeOptHtml+'</select></div>';
+    rs+='<div style="font-family:\'IM Fell English\',serif;font-style:italic;font-size:11px;color:var(--ink-dim);flex:1">'+hint+'</div>';
+    rs+=upBtn;
+    rs+='<button class="del" onclick="emotes['+i+'].actions.splice('+j+',1);rebuildPanel(\'emotes\')" style="margin-top:14px">\u2715</button>';
+    rs+='</div>';
+    rs+='<div class="grid g3">'+fhtml+delayFld+'</div>';
+    rs+='</div></div>';
+  });
 
-  return `
-    <div class="emote-block" style="margin-bottom:14px">
-      <div class="emote-hdr" onclick="toggleEmote(${i})" style="border-left:4px solid ${catColor}">
-        <span style="font-size:11px;color:var(--ink-faint)" id="et_${i}">▼</span>
-        <span style="background:${catColor};color:#fff;font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;padding:2px 8px;border-radius:2px;text-transform:uppercase">${catName}</span>
-        <span style="font-family:'IM Fell English',serif;font-style:italic;font-size:12px;color:var(--ink-dim);flex:1">${summary||'— no filters'}</span>
-        <span style="font-family:monospace;font-size:10px;color:var(--ink-faint)">${(em.actions||[]).length} response${(em.actions||[]).length!==1?'s':''}</span>
-        <button class="del" onclick="event.stopPropagation();emotes.splice(${i},1);rebuildPanel('emotes')" style="margin-left:8px">✕ Remove</button>
-      </div>
-      <div class="emote-body open" id="eb_${i}" style="padding:14px;border:1px solid var(--border-lt);border-top:none">
-        <div class="sh" style="margin-bottom:10px"><div class="st" style="font-size:9px">Trigger Settings</div><div class="sl"></div></div>
-        ${triggerSettings}
-        <div class="sh" style="margin-bottom:8px;margin-top:14px">
-          <div class="st" style="font-size:9px">Responses <span style="font-family:'IM Fell English',serif;font-style:italic;font-weight:400;font-size:10px;color:var(--ink-dim);letter-spacing:0;text-transform:none">— execute in order when this trigger fires</span></div>
-          <div class="sl"></div>
-        </div>
-        ${responses||'<p style="font-family:\'IM Fell English\',serif;font-style:italic;font-size:12px;color:var(--ink-faint);margin:0 0 8px">No responses yet. Click Add Response below.</p>'}
-        <button class="add-btn" style="margin-top:4px" onclick="emotes[${i}].actions.push({type:10,message:'',delay:0,wcid:'',stackSize:'',testString:'',percent:'',heroXP64:'',amount64:'',spellId:'',motion:'',min:'',max:''});rebuildPanel('emotes')">+ Add Response</button>
-      </div>
-    </div>`;
+  // Build full block
+  let h='<div class="emote-block" style="margin-bottom:14px">';
+  h+='<div class="emote-hdr" onclick="toggleEmote('+i+')" style="border-left:4px solid '+catColor+'">';
+  h+='<span style="font-size:11px;color:var(--ink-faint)" id="et_'+i+'">\u25bc</span>';
+  h+='<span style="background:'+catColor+';color:#fff;font-family:\'Cinzel\',serif;font-size:9px;font-weight:700;letter-spacing:.08em;padding:2px 8px;border-radius:2px;text-transform:uppercase">'+catName+'</span>';
+  h+='<span style="font-family:\'IM Fell English\',serif;font-style:italic;font-size:12px;color:var(--ink-dim);flex:1">'+(summary||'\u2014 no filters')+'</span>';
+  h+='<span style="font-family:monospace;font-size:10px;color:var(--ink-faint)">'+((em.actions||[]).length)+' response'+((em.actions||[]).length!==1?'s':'')+'</span>';
+  h+='<button class="del" onclick="event.stopPropagation();emotes.splice('+i+',1);rebuildPanel(\'emotes\')" style="margin-left:8px">\u2715 Remove</button>';
+  h+='</div>';
+  h+='<div class="emote-body open" id="eb_'+i+'" style="padding:14px;border:1px solid var(--border-lt);border-top:none">';
+  h+='<div class="sh" style="margin-bottom:10px"><div class="st" style="font-size:9px">Trigger Settings</div><div class="sl"></div></div>';
+  h+=ps;
+  h+='<div class="sh" style="margin-bottom:8px;margin-top:14px">';
+  h+='<div class="st" style="font-size:9px">Responses <span style="font-family:\'IM Fell English\',serif;font-style:italic;font-weight:400;font-size:10px;color:var(--ink-dim);letter-spacing:0;text-transform:none">\u2014 execute in order when this trigger fires</span></div>';
+  h+='<div class="sl"></div></div>';
+  h+=rs||'<p style="font-family:\'IM Fell English\',serif;font-style:italic;font-size:12px;color:var(--ink-faint);margin:0 0 8px">No responses yet. Click Add Response below.</p>';
+  h+='<button class="add-btn" style="margin-top:4px" onclick="emotes['+i+'].actions.push({type:10,message:\'\',delay:0,wcid:\'\',stackSize:\'\',testString:\'\',percent:\'\',heroXP64:\'\',amount64:\'\',spellId:\'\',motion:\'\',min:\'\',max:\'\',stat:\'\',cell:\'\',ox:\'\',oy:\'\',oz:\'\',aw:\'\',ax:\'\',ay:\'\',az:\'\',loc:\'\'});rebuildPanel(\'emotes\')">+ Add Response</button>';
+  h+='</div></div>';
+  return h;
 }
 
 
