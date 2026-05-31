@@ -5,6 +5,7 @@ Called from JS as: window.pywebview.api.method_name(args)
 """
 
 import queue
+from aceforge.lore_api import LoreMixin
 import threading
 import json
 import os
@@ -17,7 +18,7 @@ from .api_client import APIClient, KNOWN_ENDPOINTS, DEFAULT_MODELS
 from .sql_parser import parse_and_save_files
 
 
-class AppAPI:
+class AppAPI(LoreMixin):
     def __init__(self, config: Config):
         self.config = config
         self.skill_loader = SkillLoader()
@@ -877,6 +878,7 @@ class AppAPI:
         if not self._generating:
             return
         self._chunk_queue.put({"type": "chunk", "text": text})
+        print(f"[API] chunk queued: {len(text)} chars, queue size ~{self._chunk_queue.qsize()}", flush=True)
 
     def _on_done(self, text: str):
         self._generating = False
@@ -885,10 +887,12 @@ class AppAPI:
             stripped.endswith(s) for s in (";", "*/", "---", "```")
         )
         self._chunk_queue.put({"type": "done", "truncated": looks_truncated})
+        print(f"[API] done queued, total chars: {len(text)}", flush=True)
 
     def _on_error(self, message: str):
         self._generating = False
         self._chunk_queue.put({"type": "error", "message": message})
+        print(f"[API] error queued: {message}", flush=True)
 
     def poll_generation(self) -> dict:
         """Called by JS every 100ms — drains the queue and returns all pending items."""
@@ -898,8 +902,14 @@ class AppAPI:
                 items.append(self._chunk_queue.get_nowait())
         except queue.Empty:
             pass
+        if items:
+            print(f"[API] poll returning {len(items)} items", flush=True)
         return {"items": items, "generating": self._generating}
 
 
     def get_version(self) -> str:
-        return "1.0.0"
+        return "2.1.polling"
+
+    def ping(self) -> dict:
+        """Connectivity test — confirms new code is loaded."""
+        return {"ok": True, "version": "2.1.polling", "queue_ready": hasattr(self, "_chunk_queue")}

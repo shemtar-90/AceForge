@@ -25,7 +25,7 @@ html,body{height:100%;overflow:hidden;font-family:'Crimson Text',serif;backgroun
 .mode-tab{font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:13px 22px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--ink-dim);background:none;border-top:none;border-left:none;border-right:none;display:flex;align-items:center;gap:7px;transition:all .15s}
 .mode-tab:hover{color:var(--ink)}
 .mode-tab.active{color:var(--crimson);border-bottom-color:var(--crimson)}
-.app{display:flex;flex-direction:column;height:100vh}
+.app{display:flex;flex-direction:column;height:100vh;padding-bottom:44px;box-sizing:border-box}
 .workspace{flex:1;overflow:hidden;display:none;flex-direction:row}
 .workspace.active{display:flex}
 .form-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--parch-lt);min-width:0}
@@ -116,7 +116,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 .sql-btns{display:flex;gap:5px}
 .sql-btn{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:1px solid #3a3020;background:transparent;color:#8a7a58;padding:5px 10px;cursor:pointer;transition:all .15s}
 .sql-btn:hover{border-color:var(--gold);color:var(--gold)}
-.sql-out{flex:1;overflow-y:auto;overflow-x:auto;padding:14px 16px;font-family:'Source Code Pro',monospace;font-size:12px;line-height:1.8;color:#c8b898;white-space:pre}
+.sql-out{flex:1;overflow-y:auto;overflow-x:auto;padding:14px 16px 54px 16px;font-family:'Source Code Pro',monospace;font-size:12px;line-height:1.8;color:#c8b898;white-space:pre}
 .sql-out::-webkit-scrollbar{width:6px;height:6px}
 .sql-out::-webkit-scrollbar-thumb{background:#3a3020;border-radius:3px}
 .sql-out::-webkit-scrollbar-track{background:#0a0800}
@@ -200,6 +200,64 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
   .dl.err .dm{color:#f05050}
   .dl.info .dm{color:#50b0f0}
 
+
+/* Preset buttons */
+.preset-btn{font-family:'Cinzel',serif;font-size:8px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;padding:3px 10px;border:1px solid var(--border);
+  background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:2px;
+  transition:all .15s;white-space:nowrap}
+.preset-btn:hover{border-color:var(--crimson);color:var(--crimson);background:rgba(120,20,20,.06)}
+
+.preset-btn{font-family:'Cinzel',serif;font-size:8px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 10px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:2px;transition:all .15s;white-space:nowrap}
+.preset-btn:hover{border-color:var(--crimson);color:var(--crimson);background:rgba(120,20,20,.06)}
+
+/* ── LOREFORGE ─────────────────────────────────────────────────────────────*/
+#loreWS{display:none;flex-direction:row;flex:1;overflow:hidden}
+#loreWS.active{display:flex}
+.lore-sidebar{width:220px;flex-shrink:0;background:var(--parch-dk);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.lore-sidebar-hdr{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;flex-shrink:0}
+.lore-sidebar-title{font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--crimson);flex:1}
+.lore-new-btn{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.06em;border:1px solid var(--border);background:transparent;color:var(--ink-dim);padding:3px 8px;cursor:pointer;border-radius:2px;white-space:nowrap}
+.lore-new-btn:hover{border-color:var(--crimson);color:var(--crimson)}
+.lore-convo-list{flex:1;overflow-y:auto;padding:6px 0}
+.lore-convo-item{padding:8px 12px;cursor:pointer;border-left:3px solid transparent;transition:all .12s;display:flex;align-items:center;gap:6px}
+.lore-convo-item:hover{background:rgba(100,20,20,.08);border-left-color:var(--border)}
+.lore-convo-item.active{background:rgba(100,20,20,.14);border-left-color:var(--crimson)}
+.lore-convo-name{font-family:'IM Fell English',serif;font-size:13px;color:var(--ink);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lore-convo-count{font-family:monospace;font-size:9px;color:var(--ink-faint);flex-shrink:0}
+.lore-convo-del{background:none;border:none;color:var(--ink-faint);cursor:pointer;font-size:11px;padding:0 2px;opacity:0;transition:opacity .12s}
+.lore-convo-item:hover .lore-convo-del{opacity:1}
+.lore-convo-del:hover{color:var(--crimson)}
+.lore-main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--parch-lt)}
+.lore-chat-hdr{padding:10px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--parch)}
+.lore-chat-title{font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--ink-mid);flex:1}
+.lore-chat-title:focus{outline:none;border-bottom:1px solid var(--crimson)}
+.lore-messages{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px}
+.lore-msg{display:flex;gap:10px;max-width:88%;animation:fadeIn .2s ease}
+.lore-msg.user{align-self:flex-end;flex-direction:row-reverse}
+.lore-msg.assistant{align-self:flex-start}
+.lore-bubble{padding:11px 15px;border-radius:6px;font-size:14px;line-height:1.65;white-space:pre-wrap;word-break:break-word}
+.lore-msg.user .lore-bubble{background:var(--crimson);color:#f5ede0;border-radius:6px 0 6px 6px}
+.lore-msg.assistant .lore-bubble{background:var(--parch-dk);color:var(--ink);border:1px solid var(--border-lt);border-radius:0 6px 6px 6px}
+.lore-avatar{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;background:var(--parch);border:1px solid var(--border)}
+.lore-typing{display:flex;gap:4px;align-items:center;padding:8px 0}
+.lore-dot{width:6px;height:6px;border-radius:50%;background:var(--ink-dim);animation:loreDot 1.2s infinite ease-in-out}
+.lore-dot:nth-child(2){animation-delay:.2s}
+.lore-dot:nth-child(3){animation-delay:.4s}
+@keyframes loreDot{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.lore-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--ink-faint);text-align:center;padding:40px}
+.lore-empty-icon{font-size:40px;opacity:.4}
+.lore-empty-title{font-family:'Cinzel',serif;font-size:13px;font-weight:700;letter-spacing:.1em;color:var(--ink-dim)}
+.lore-empty-sub{font-family:'IM Fell English',serif;font-style:italic;font-size:13px}
+.lore-input-wrap{padding:12px 16px;border-top:1px solid var(--border);background:var(--parch);display:flex;gap:8px;align-items:flex-end;flex-shrink:0}
+.lore-input{flex:1;padding:10px 14px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink);font-family:'Crimson Text',serif;font-size:15px;line-height:1.5;resize:none;border-radius:4px;min-height:42px;max-height:160px;overflow-y:auto}
+.lore-input:focus{outline:none;border-color:var(--crimson)}
+.lore-send-btn{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em;background:var(--crimson);color:#f5ede0;border:none;padding:10px 16px;cursor:pointer;border-radius:4px;flex-shrink:0;transition:opacity .15s;height:42px}
+.lore-send-btn:hover{opacity:.85}
+.lore-send-btn:disabled{opacity:.4;cursor:not-allowed}
+.lore-no-sel{flex:1;display:flex;align-items:center;justify-content:center;color:var(--ink-faint);font-family:'IM Fell English',serif;font-style:italic;font-size:15px}
+
 </style>
 </head>
 <body>
@@ -223,6 +281,38 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 <div class="mode-tabs">
   <button class="mode-tab active" onclick="switchMode('manual',this)">✏ Manual</button>
   <button class="mode-tab" onclick="switchMode('ai',this)">✨ AI Mode</button>
+  <button class="mode-tab" onclick="switchMode('lore',this)">&#x1F4D6; LoreForge</button>
+</div>
+
+
+<!-- LOREFORGE WORKSPACE -->
+<div class="workspace" id="loreWS">
+  <div class="lore-sidebar">
+    <div class="lore-sidebar-hdr">
+      <span class="lore-sidebar-title">LOREFORGE</span>
+      <button class="lore-new-btn" onclick="loreNewConvo()">+ New</button>
+    </div>
+    <div class="lore-convo-list" id="loreConvoList">
+      <div style="padding:20px 12px;text-align:center;font-family:'IM Fell English',serif;font-style:italic;font-size:12px;color:var(--ink-faint)">No conversations yet</div>
+    </div>
+  </div>
+  <div class="lore-main">
+    <div class="lore-no-sel" id="loreNoSel">Select or create a conversation to begin</div>
+    <div id="loreChat" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+      <div class="lore-chat-hdr">
+        <span class="lore-chat-title" id="loreChatTitle" contenteditable="true"
+          onblur="loreRenameConvo(this.textContent)">Conversation</span>
+        <span style="font-family:'IM Fell English',serif;font-style:italic;font-size:11px;color:var(--ink-faint)" id="loreStatus"></span>
+      </div>
+      <div class="lore-messages" id="loreMessages"></div>
+      <div class="lore-input-wrap">
+        <textarea class="lore-input" id="loreInput" placeholder="Ask about lore, quest design, NPC dialogue, server ideas..." rows="1"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();loreSend()}"
+          oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,160)+'px'"></textarea>
+        <button class="lore-send-btn" id="loreSendBtn" onclick="loreSend()">SEND</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- MANUAL WORKSPACE -->
@@ -514,6 +604,8 @@ let recipeMods    = [];
 let cookbookEntries=[];
 let aiGenerating  = false;
 let aiFullText    = '';
+let curAIType     = 'creature';
+let curAISub      = 'npc';
 // ── DATA LOADING ─────────────────────────────────────────────────────────────
 let SPELLS=[], WEAPONS=[], ARMOR=[];
 async function loadData(){
@@ -915,6 +1007,23 @@ const BODY_PARTS_BIPED=[
   {k:6,name:'UpperLeg'},{k:7,name:'LowerLeg'},{k:8,name:'Foot'}
 ];
 
+const BODY_PARTS_QUADRUPED=[
+  {k:0,name:'Head'},{k:1,name:'Front (Chest)'},{k:2,name:'Abdomen'},
+  {k:3,name:'Upper Front Leg'},{k:4,name:'Lower Front Leg'},{k:5,name:'Front Foot'},
+  {k:6,name:'Upper Hind Leg'},{k:7,name:'Lower Hind Leg'},{k:8,name:'Hind Foot'}
+];
+const BODY_PARTS_INSECT=[
+  {k:0,name:'Head'},{k:1,name:'Thorax'},{k:2,name:'Abdomen'},
+  {k:3,name:'Front Left Leg'},{k:4,name:'Front Right Leg'},
+  {k:5,name:'Mid Left Leg'},{k:6,name:'Mid Right Leg'},
+  {k:7,name:'Rear Left Leg'},{k:8,name:'Rear Right Leg'}
+];
+const BODY_PARTS_FLOATING=[
+  {k:0,name:'Body (Upper)'},{k:1,name:'Body (Lower)'},{k:2,name:'Appendage 1'},
+  {k:3,name:'Appendage 2'},{k:4,name:'Appendage 3'},{k:5,name:'Appendage 4'},
+  {k:6,name:'Tendril 1'},{k:7,name:'Tendril 2'},{k:8,name:'Core'}
+];
+
 function buildProps(){
   const t=curType;
   if(t==='quest') return buildQuestProps();
@@ -1194,7 +1303,7 @@ function setQField(id,v){const e=$(id);if(e){e.value=v;regen();}}
 function onCTypeChange(){
   bodyParts=getBodyParts(gi('cType',31));
   // Rebuild only the body parts panel in-place
-  const bpPanel=document.querySelector('[data-sub=\"bodyparts\"]');
+  const bpPanel=document.querySelector('.sub-panel[data-sub="bodyparts"]');
   if(bpPanel){
     bpPanel.innerHTML=buildBodyPartsTab();
     bpPanel.querySelectorAll('input,select').forEach(e=>e.addEventListener('input',onFieldInput));
@@ -1449,7 +1558,7 @@ function buildBodyPartsTab(){
   const cType=gi('cType',31);
   const setName=CREATURE_BODY_MAP[cType]||'biped';
   const rows=bodyParts.map((bp,i)=>`<tr>
-    <td style=\"font-family:'Cinzel',serif;font-size:9px;font-weight:700;color:var(--ink-mid);white-space:nowrap\">${bp.n}</td>
+    <td style=\"font-family:'Cinzel',serif;font-size:9px;font-weight:700;color:var(--ink-mid);white-space:nowrap\">${bp.name}</td>
     <td><select id=\"bp_dt_${i}\" style=\"font-size:11px\">${opt(DMG_TYPES,4)}</select></td>
     <td><input type=\"number\" id=\"bp_dv_${i}\" value=\"${bp.dVal||0}\"></td>
     <td><input type=\"number\" id=\"bp_al_${i}\" value=\"${bp.baseAL||80}\"></td>
@@ -1487,7 +1596,7 @@ function switchType(type,btn){
   curType=type; curSub=TYPE_CFG[type].subTabs[0];
   spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
   recipeReqs=[];recipeReqsBool=[];recipeReqsFloat=[];recipeReqsStr=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];
-  bodyParts=getBodyParts(31);
+  bodyParts=getBodyParts(31); // re-init on cType change via onCTypeChange
   document.querySelectorAll('.itab').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
   try{ buildForm(); }catch(e){
@@ -1593,16 +1702,14 @@ function buildGeneratorProps(){
     </div></div>`;
 }
 
-const CREATURE_BODY_MAP={31:'biped',10:'biped',1:'biped',2:'biped',3:'biped',4:'biped',5:'biped',6:'biped',7:'biped',8:'biped',9:'biped',13:'biped',14:'biped',15:'biped',16:'biped',17:'biped',18:'biped',19:'biped',20:'biped',22:'biped',23:'biped',28:'biped',29:'biped',30:'biped',32:'biped',38:'biped',39:'biped',44:'biped',46:'biped',48:'biped',60:'biped',61:'biped',75:'biped',99:'biped',100:'biped',101:'biped'};
+const CREATURE_BODY_MAP={31:'biped',2:'biped',3:'biped',4:'biped',5:'biped',6:'biped',7:'biped',13:'biped',14:'biped',18:'biped',28:'biped',30:'biped',39:'biped',44:'biped',48:'biped',75:'biped',99:'biped',100:'biped',101:'biped',8:'quadruped',15:'quadruped',16:'quadruped',17:'quadruped',23:'quadruped',32:'quadruped',46:'quadruped',1:'insect',38:'biped',60:'biped',61:'biped',19:'floating',20:'floating',22:'floating',29:'floating'};
 
 
 
 function getBodyParts(cType){
-  // Returns biped body parts for all creature types
-  return BODY_PARTS_BIPED.map(b=>({...b,
-    dType:4, dVal:0, dVar:0.25,
-    baseAL:0, sl:0, pi:0, bl:0, co:0, fi:0, ac:0, el:0, nt:0
-  }));
+  const layout=CREATURE_BODY_MAP[cType]||'biped';
+  const tpl={biped:BODY_PARTS_BIPED,quadruped:BODY_PARTS_QUADRUPED,insect:BODY_PARTS_INSECT,floating:BODY_PARTS_FLOATING}[layout]||BODY_PARTS_BIPED;
+  return tpl.map(b=>({...b,dType:4,dVal:0,dVar:0.25,baseAL:0,sl:0,pi:0,bl:0,co:0,fi:0,ac:0,el:0,nt:0}));
 }
 
 function buildSubContent(){
@@ -1717,17 +1824,17 @@ const TYPE_CFG={
     presets:[]},
   jewelry:{label:'Jewelry',icon:'\u25ce',desc:'Rings, necklaces, bracelets, and wristlets.',
     wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
-    wTypes:[[38,'Gem (Jewelry)']],
+    wTypes:[[1,'Generic'],[35,'Jewelry'],[38,'Gem (Jewelry)'],[40,'TinkerTool']],
     subTabs:['properties'],
     presets:[]},
   recipe:{label:'Recipe',icon:'\u2697',desc:'Crafting recipes and material combinations.',
     wcidFrom:'600000',wcidTo:'609999',wcidRange:'600,000 \u2013 609,999',
-    wTypes:[[38,'Gem (Recipe)']],
+    wTypes:null,
     subTabs:['properties'],
     presets:[]},
   quest:{label:'Quest',icon:'\u25c7',desc:'Quest flags, kill tasks, and progression timers.',
     wcidFrom:'860000',wcidTo:'869999',wcidRange:'860,000 \u2013 869,999',
-    wTypes:[[38,'Gem (Quest Flag)']],
+    wTypes:null,
     subTabs:['properties'],
     presets:[
       {l:'Completion Flag',d:{fName:'NewQuestCompleted',fMinDelta:'0',fMaxSolves:'1',fMsg:'NewQuestCompleted'}},
@@ -1793,6 +1900,9 @@ function switchMode(mode,btn){
   document.getElementById('manualWS').classList.toggle('active', mode==='manual');
   const aiWS=document.getElementById('aiWS');
   if(aiWS) aiWS.classList.toggle('active', mode==='ai');
+  const loreWS=document.getElementById('loreWS');
+  if(loreWS) loreWS.classList.toggle('active', mode==='lore');
+  if(mode==='lore') loreInit();
 }
 
 
@@ -2256,7 +2366,21 @@ function searchJewelryFn(q){
 }
 
 // ── PRESETS ───────────────────────────────────────────────────────────────────
-function applyPreset(p){const d=(p&&typeof p==='object'&&(p.data||p.d))||p;if(!d)return;Object.entries(d).forEach(([id,v])=>{const e=$(id);if(e)e.value=v;});regen();}
+function applyPreset(p){
+  const d=(p&&typeof p==='object'&&(p.data||p.d))||p;
+  if(!d) return;
+  // Switch to Properties sub-tab so all fields are in DOM
+  switchSub('properties', document.querySelector('.ctab[data-sub="properties"]'));
+  // Allow DOM to update then apply values
+  setTimeout(function(){
+    Object.entries(d).forEach(function(entry){
+      const e=$(entry[0]);
+      if(e) e.value=entry[1];
+    });
+    regen();
+    toast('Preset applied');
+  }, 50);
+}
 function openPresetModal(){$('presetModal').classList.add('open');setV('presetNameInp',g('fName','Preset'));}
 function closePresetModal(){$('presetModal').classList.remove('open');}
 function confirmSavePreset(){
@@ -2933,7 +3057,7 @@ function buildSQL(){
       const co=gi('bp_co_'+i,40), fi=gi('bp_fi_'+i,120), ac=gi('bp_ac_'+i,80);
       const el=gi('bp_el_'+i,80), nt=gi('bp_nt_'+i,0);
       const prefix=i===0?'VALUES ':'     , ';
-      lines.push(`${prefix}(${wcid}, ${bp.k}, ${dt}, ${dv}, 0, ${al}, ${sl}, ${pi}, ${bl}, ${co}, ${fi}, ${ac}, ${el}, ${nt}, 1, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0)${i===bodyParts.length-1?';':''} /* ${bp.n} */`);
+      lines.push(`${prefix}(${wcid}, ${bp.k}, ${dt}, ${dv}, 0, ${al}, ${sl}, ${pi}, ${bl}, ${co}, ${fi}, ${ac}, ${el}, ${nt}, 1, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0)${i===bodyParts.length-1?';':''} /* ${bp.name||bp.k} */`);
     });
     lines.push('');
   }
@@ -3404,7 +3528,7 @@ function startGeneration(){
   $('aiStatus').textContent='● Generating…';$('aiStatus').className='ai-status generating';
   if(window.pywebview){
     window.pywebview.api.start_generation(prompt,curAIType||'creature')
-      .then(r=>{ if(r&&!r.success){ setAIError(r.error||'Generation failed.'); } else { _startAIPoll(); } })
+      .then(r=>{ console.log('[AI] start_generation returned:',JSON.stringify(r)); if(r&&!r.success){ setAIError(r.error||'Generation failed.'); } else { _startAIPoll(); } })
       .catch(e=>setAIError('Bridge error: '+e));
   } else {setAIError('Run as desktop app to use AI Mode.');}
 }
@@ -3435,10 +3559,12 @@ window.addEventListener('lib_progress',e=>{
 let _aiPollTimer=null;
 function _startAIPoll(){
   if(_aiPollTimer) return;
+  console.log('[AI] poll started');
   _aiPollTimer=setInterval(function(){
     if(!window.pywebview) return;
     window.pywebview.api.poll_generation().then(function(r){
-      if(!r) return;
+      if(!r){ console.warn('[AI] poll returned null'); return; }
+      console.log('[AI] poll: items='+( r.items?r.items.length:0)+' generating='+r.generating);
       (r.items||[]).forEach(function(item){
         if(item.type==='chunk'){
           aiFullText+=item.text;
@@ -3477,8 +3603,20 @@ function _stopAIPoll(){
   if(_aiPollTimer){ clearInterval(_aiPollTimer); _aiPollTimer=null; }
 }
 function saveAIFiles(){
-  if(!aiFullText)return;
-  if(window.pywebview){window.pywebview.api.save_ai_files(aiFullText,curAIType).then(r=>{if(r.success){toast(`Saved ${r.count} file(s)`);$('aiFileList').innerHTML=`<div style="color:var(--gold);font-family:'Cinzel',serif;font-size:9px;font-weight:700;margin-bottom:8px;word-break:break-all">${r.folder}</div>`+r.files.map(f=>`<div style="color:#c8b898;margin-bottom:5px;font-size:12px;font-weight:600">📄 ${f}</div>`).join('');}else toast('Error: '+r.error);});}
+  console.log('[SAVE] aiFullText length='+aiFullText.length);
+  if(!aiFullText){console.warn('[SAVE] empty');return;}
+  if(window.pywebview){
+    window.pywebview.api.save_ai_files(aiFullText,curAIType||'creature')
+      .then(function(r){
+        console.log('[SAVE] result:',JSON.stringify(r));
+        if(r.success){
+          toast('Saved '+r.count+' file(s)');
+          var el=$('aiFileList');
+          if(el) el.innerHTML='<div style="color:var(--gold);font-size:9px;font-weight:700;margin-bottom:8px">'+r.folder+'</div>'+
+            r.files.map(function(f){return '<div style="color:#c8b898;margin-bottom:5px">&#x1F4C4; '+f+'</div>';}).join('');
+        } else { toast('Save error: '+r.error); }
+      }).catch(function(e){toast('Save failed: '+e);});
+  }
 }
 function clearAI(){aiFullText='';aiGenerating=false;$('aiOut').textContent='';$('aiStatus').textContent='';$('aiStatus').className='ai-status';$('aiSaveBtn').disabled=true;$('aiGenBtn').disabled=false;$('aiStopBtn').style.display='none';$('aiFileList').innerHTML='<div style="color:#8a7a58;font-style:italic">Files appear here after saving.</div>';}
 
@@ -3728,6 +3866,9 @@ function saveSettings(){
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function init(){
+  if(window.pywebview){
+    window.pywebview.api.ping().then(r=>console.log('[BOOT] ping:',JSON.stringify(r))).catch(e=>console.warn('[BOOT] ping failed:',e));
+  }
   try{ await loadData(); }catch(e){ console.warn('loadData:',e); }
   try{ buildInnerTabs(); }catch(e){ console.warn('buildInnerTabs:',e); }
   try{ buildAITabs(); }catch(e){ console.warn('buildAITabs:',e); }
@@ -3777,6 +3918,183 @@ async function init(){
   } else {
     updateAIButtonState();
   }
+}
+
+
+// ── LOREFORGE ────────────────────────────────────────────────────────────────
+let _loreConvos=[], _loreActiveId=null, _loreMessages=[], _lorePollTimer=null;
+let _loreGenerating=false, _loreCurrentText='';
+
+function loreInit(){
+  if(!window.pywebview) return;
+  window.pywebview.api.list_conversations().then(function(r){
+    if(r.success){ _loreConvos=r.conversations; loreRenderList(); }
+  }).catch(function(e){ console.error('[LORE] list:',e); });
+}
+
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function loreRenderList(){
+  const el=document.getElementById('loreConvoList');
+  if(!el) return;
+  if(!_loreConvos.length){
+    el.innerHTML='<div style="padding:20px 12px;text-align:center;font-family:\'IM Fell English\',serif;font-style:italic;font-size:12px;color:var(--ink-faint)">No conversations yet.<br>Click + New to start.</div>';
+    return;
+  }
+  el.innerHTML=_loreConvos.map(function(c){
+    const active=c.id===_loreActiveId?' active':'';
+    return '<div class="lore-convo-item'+active+'" onclick="loreLoadConvo(\''+c.id+'\')">'
+      +'<span class="lore-convo-name">'+escHtml(c.name)+'</span>'
+      +'<span class="lore-convo-count">'+c.count+'</span>'
+      +'<button class="lore-convo-del" onclick="event.stopPropagation();loreDeleteConvo(\''+c.id+'\',\''+escHtml(c.name)+'\')">&#x2715;</button>'
+      +'</div>';
+  }).join('');
+}
+
+function loreNewConvo(){
+  if(!window.pywebview) return;
+  const name=prompt('Conversation name:','New Conversation');
+  if(!name) return;
+  window.pywebview.api.new_conversation(name).then(function(r){
+    if(r.success){
+      _loreConvos.unshift({id:r.conversation.id,name:r.conversation.name,updated:r.conversation.updated,count:0});
+      loreRenderList();
+      loreLoadConvo(r.conversation.id);
+    }
+  });
+}
+
+function loreLoadConvo(id){
+  if(!window.pywebview) return;
+  _loreActiveId=id;
+  loreRenderList();
+  window.pywebview.api.load_conversation(id).then(function(r){
+    if(r.success){
+      _loreMessages=r.conversation.messages||[];
+      document.getElementById('loreChatTitle').textContent=r.conversation.name;
+      loreRenderMessages();
+      document.getElementById('loreNoSel').style.display='none';
+      const chat=document.getElementById('loreChat');
+      if(chat){chat.style.display='flex';chat.style.flexDirection='column';}
+    }
+  });
+}
+
+function loreDeleteConvo(id,name){
+  if(!confirm('Delete "'+name+'"?')) return;
+  if(!window.pywebview) return;
+  window.pywebview.api.delete_conversation(id).then(function(r){
+    if(r.success){
+      _loreConvos=_loreConvos.filter(function(c){return c.id!==id;});
+      if(_loreActiveId===id){
+        _loreActiveId=null; _loreMessages=[];
+        document.getElementById('loreNoSel').style.display='flex';
+        const chat=document.getElementById('loreChat');
+        if(chat) chat.style.display='none';
+      }
+      loreRenderList();
+    }
+  });
+}
+
+function loreRenameConvo(name){
+  if(!_loreActiveId||!window.pywebview) return;
+  window.pywebview.api.rename_conversation(_loreActiveId,name).then(function(r){
+    if(r.success){
+      const c=_loreConvos.find(function(x){return x.id===_loreActiveId;});
+      if(c) c.name=name;
+      loreRenderList();
+    }
+  });
+}
+
+function loreRenderMessages(){
+  const el=document.getElementById('loreMessages');
+  if(!el) return;
+  if(!_loreMessages.length){
+    el.innerHTML='<div class="lore-empty"><div class="lore-empty-icon">&#x1F4DD;</div>'
+      +'<div class="lore-empty-title">START YOUR STORY</div>'
+      +'<div class="lore-empty-sub">Ask about lore, plan a quest, design an NPC,<br>or brainstorm your server\'s unique identity.</div></div>';
+    return;
+  }
+  el.innerHTML=_loreMessages.map(function(m){
+    const avatar=m.role==='user'?'&#x2692;':'&#x2726;';
+    return '<div class="lore-msg '+m.role+'"><div class="lore-avatar">'+avatar+'</div>'
+      +'<div class="lore-bubble">'+escHtml(m.content)+'</div></div>';
+  }).join('');
+  el.scrollTop=el.scrollHeight;
+}
+
+function loreSend(){
+  const inp=document.getElementById('loreInput');
+  if(!inp||!inp.value.trim()||_loreGenerating) return;
+  if(!_loreActiveId){toast('Select or create a conversation first.');return;}
+  const text=inp.value.trim();
+  inp.value=''; inp.style.height='auto';
+  _loreMessages.push({role:'user',content:text});
+  loreRenderMessages();
+  const el=document.getElementById('loreMessages');
+  const typing=document.createElement('div');
+  typing.id='loreTyping'; typing.className='lore-msg assistant';
+  typing.innerHTML='<div class="lore-avatar">&#x2726;</div>'
+    +'<div class="lore-bubble"><div class="lore-typing">'
+    +'<div class="lore-dot"></div><div class="lore-dot"></div><div class="lore-dot"></div>'
+    +'</div></div>';
+  el.appendChild(typing); el.scrollTop=el.scrollHeight;
+  document.getElementById('loreSendBtn').disabled=true;
+  document.getElementById('loreStatus').textContent='Thinking...';
+  _loreGenerating=true; _loreCurrentText='';
+  if(window.pywebview){
+    window.pywebview.api.lore_chat(_loreActiveId,_loreMessages)
+      .then(function(r){
+        if(r&&!r.success) loreError(r.error||'Failed');
+        else _lorePollTimer=setInterval(lorePoll,120);
+      }).catch(function(e){ loreError('Bridge error: '+e); });
+  }
+}
+
+function lorePoll(){
+  if(!window.pywebview) return;
+  window.pywebview.api.poll_lore().then(function(r){
+    if(!r) return;
+    (r.items||[]).forEach(function(item){
+      if(item.type==='chunk'){
+        _loreCurrentText+=item.text;
+        const typing=document.getElementById('loreTyping');
+        if(typing){
+          typing.querySelector('.lore-bubble').textContent=_loreCurrentText;
+          const el=document.getElementById('loreMessages');
+          if(el) el.scrollTop=el.scrollHeight;
+        }
+      } else if(item.type==='done'){
+        clearInterval(_lorePollTimer); _lorePollTimer=null; _loreGenerating=false;
+        const typing=document.getElementById('loreTyping');
+        if(typing) typing.remove();
+        _loreMessages.push({role:'assistant',content:_loreCurrentText});
+        loreRenderMessages();
+        document.getElementById('loreSendBtn').disabled=false;
+        document.getElementById('loreStatus').textContent='';
+        if(window.pywebview)
+          window.pywebview.api.save_conversation_messages(_loreActiveId,_loreMessages);
+        const c=_loreConvos.find(function(x){return x.id===_loreActiveId;});
+        if(c){ c.count=_loreMessages.length; loreRenderList(); }
+      } else if(item.type==='error'){
+        clearInterval(_lorePollTimer); _lorePollTimer=null;
+        loreError(item.message||'Error');
+      }
+    });
+  }).catch(function(e){ console.error('[LORE] poll:',e); });
+}
+
+function loreError(msg){
+  _loreGenerating=false;
+  if(_lorePollTimer){ clearInterval(_lorePollTimer); _lorePollTimer=null; }
+  const typing=document.getElementById('loreTyping');
+  if(typing) typing.remove();
+  document.getElementById('loreSendBtn').disabled=false;
+  document.getElementById('loreStatus').textContent='Error: '+msg;
 }
 
 window.addEventListener('pywebviewready',init);

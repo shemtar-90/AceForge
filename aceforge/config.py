@@ -121,6 +121,12 @@ class Config:
     def output_dir(self) -> str:
         return self._data.get("output_dir", str(Path.home() / "Documents" / "ACEForge" / "output"))
 
+    @property
+    def lore_dir(self) -> Path:
+        d = Path(self._path).parent / "conversations"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
     @output_dir.setter
     def output_dir(self, value: str):
         self._data["output_dir"] = value
