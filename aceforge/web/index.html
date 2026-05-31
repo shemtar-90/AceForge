@@ -3404,11 +3404,12 @@ function startGeneration(){
   $('aiStatus').textContent='● Generating…';$('aiStatus').className='ai-status generating';
   if(window.pywebview){
     window.pywebview.api.start_generation(prompt,curAIType||'creature')
-      .then(r=>{ if(r&&!r.success) setAIError(r.error||'Generation failed.'); })
+      .then(r=>{ if(r&&!r.success){ setAIError(r.error||'Generation failed.'); } else { _startAIPoll(); } })
       .catch(e=>setAIError('Bridge error: '+e));
   } else {setAIError('Run as desktop app to use AI Mode.');}
 }
 function stopGeneration(){
+  _stopAIPoll();
   aiGenerating=false;if(window.pywebview)window.pywebview.api.stop_generation();
   $('aiGenBtn').disabled=false;$('aiStopBtn').style.display='none';
   $('aiStatus').textContent='⏹ Stopped';$('aiStatus').className='ai-status';
@@ -3430,30 +3431,51 @@ window.addEventListener('lib_progress',e=>{
   if(bar && d.total>0) bar.style.width=Math.round((d.current/d.total)*100)+'%';
   if(cnt && d.total>0) cnt.textContent=`${d.current.toLocaleString()} / ${d.total.toLocaleString()}`;
 });
-window.addEventListener('ai_chunk',e=>{if(!aiGenerating)return;aiFullText+=e.detail;$('aiOut').textContent=aiFullText;$('aiOut').scrollTop=$('aiOut').scrollHeight;});
-window.addEventListener('ai_done',e=>{
-  // e.detail may be {text, truncated} object or legacy plain string
-  const payload=e.detail;
-  const isTruncated=payload&&typeof payload==='object'&&payload.truncated;
-  // Use accumulated aiFullText from chunks (most reliable) — ai_done just signals completion
-  aiGenerating=false;
-  $('aiGenBtn').disabled=false;
-  $('aiStopBtn').style.display='none';
-  $('aiSaveBtn').disabled=false;
-  const c=(aiFullText.match(/FILE:/g)||[]).length;
-  $('aiStatus').textContent=`✓ Done — ${c} file${c!==1?'s':''} ready`;
-  $('aiStatus').className='ai-status done';
-  $('aiOut').scrollTop=0;
-  // Show truncation warning if flagged
-  if(isTruncated){
-    const warn=document.createElement('div');
-    warn.style.cssText='background:#3a1a00;border:1px solid #c87137;border-radius:3px;padding:8px 12px;margin:8px 0;font-family:Cinzel,serif;font-size:10px;color:#c87137;letter-spacing:.05em';
-    warn.textContent='⚠  Output may be incomplete — generation was cut short. Try regenerating or use a local LLM with a larger context window.';
-    const out=$('aiOut');
-    if(out&&out.parentNode) out.parentNode.insertBefore(warn,out);
-  }
-});
-window.addEventListener('ai_error',e=>setAIError(e.detail));
+// AI generation polling (replaces evaluate_js push which fails from bg threads)
+let _aiPollTimer=null;
+function _startAIPoll(){
+  if(_aiPollTimer) return;
+  _aiPollTimer=setInterval(function(){
+    if(!window.pywebview) return;
+    window.pywebview.api.poll_generation().then(function(r){
+      if(!r) return;
+      (r.items||[]).forEach(function(item){
+        if(item.type==='chunk'){
+          aiFullText+=item.text;
+          const out=$('aiOut');
+          if(out){out.textContent=aiFullText;out.scrollTop=out.scrollHeight;}
+        } else if(item.type==='done'){
+          _stopAIPoll();
+          aiGenerating=false;
+          $('aiGenBtn').disabled=false;
+          $('aiStopBtn').style.display='none';
+          $('aiSaveBtn').disabled=false;
+          const c=(aiFullText.match(/FILE:/g)||[]).length;
+          $('aiStatus').textContent='✓ Done — '+c+' file'+(c!==1?'s':'')+' ready';
+          $('aiStatus').className='ai-status done';
+          const out=$('aiOut'); if(out) out.scrollTop=0;
+          if(item.truncated){
+            const warn=document.createElement('div');
+            warn.style.cssText='background:#3a1a00;border:1px solid #c87137;border-radius:3px;padding:8px 12px;margin:8px 0;font-family:Cinzel,serif;font-size:10px;color:#c87137';
+            warn.textContent='⚠ Output may be incomplete. Try regenerating.';
+            const o=$('aiOut'); if(o&&o.parentNode) o.parentNode.insertBefore(warn,o);
+          }
+        } else if(item.type==='error'){
+          _stopAIPoll();
+          setAIError(item.message||'Unknown error');
+        }
+      });
+      // Safety: if not generating and queue empty, stop poll
+      if(!r.generating && (!r.items||r.items.length===0)){
+        _stopAIPoll();
+        if(aiGenerating){ aiGenerating=false; $('aiGenBtn').disabled=false; $('aiStopBtn').style.display='none'; }
+      }
+    }).catch(function(e){ console.error('poll_generation error:',e); });
+  }, 120);
+}
+function _stopAIPoll(){
+  if(_aiPollTimer){ clearInterval(_aiPollTimer); _aiPollTimer=null; }
+}
 function saveAIFiles(){
   if(!aiFullText)return;
   if(window.pywebview){window.pywebview.api.save_ai_files(aiFullText,curAIType).then(r=>{if(r.success){toast(`Saved ${r.count} file(s)`);$('aiFileList').innerHTML=`<div style="color:var(--gold);font-family:'Cinzel',serif;font-size:9px;font-weight:700;margin-bottom:8px;word-break:break-all">${r.folder}</div>`+r.files.map(f=>`<div style="color:#c8b898;margin-bottom:5px;font-size:12px;font-weight:600">📄 ${f}</div>`).join('');}else toast('Error: '+r.error);});}

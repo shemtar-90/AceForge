@@ -4,6 +4,7 @@ Python methods exposed to the JavaScript frontend via pywebview's js_api.
 Called from JS as: window.pywebview.api.method_name(args)
 """
 
+import queue
 import threading
 import json
 import os
@@ -28,6 +29,7 @@ class AppAPI:
         )
         self._window = None
         self._generating = False
+        self._chunk_queue = queue.Queue()
 
     def set_window(self, window):
         self._window = window
@@ -529,7 +531,7 @@ class AppAPI:
 
             # Restart
             self._ollama_event("download_done", "Update installed! Restarting…", 100, 100)
-            import threading, time
+            import threading
             def _restart():
                 time.sleep(1.5)
                 os.execl(sys.executable, sys.executable, *sys.argv)
@@ -565,6 +567,10 @@ class AppAPI:
             return {"success": False, "error": "No API key configured. Open Settings and add your API key."}
 
         self._generating = True
+        # Clear any stale chunks from previous run
+        while not self._chunk_queue.empty():
+            try: self._chunk_queue.get_nowait()
+            except: break
         self.api_client.update_credentials(
             api_key=self.config.api_key,
             model=self.config.model,
@@ -870,30 +876,30 @@ class AppAPI:
     def _on_chunk(self, text: str):
         if not self._generating:
             return
-        if self._window:
-            self._window.evaluate_js(
-                f"window.dispatchEvent(new CustomEvent('ai_chunk',{{detail:{json.dumps(text)}}}))"
-            )
+        self._chunk_queue.put({"type": "chunk", "text": text})
 
     def _on_done(self, text: str):
         self._generating = False
-        if self._window:
-            # Check if output appears truncated (no closing ; near the end)
-            stripped = text.rstrip()
-            looks_truncated = bool(stripped) and not any(
-                stripped.endswith(s) for s in (";", "*/", "---", "```")
-            )
-            payload = json.dumps({"text": text, "truncated": looks_truncated})
-            self._window.evaluate_js(
-                f"window.dispatchEvent(new CustomEvent('ai_done',{{detail:{payload}}}))"
-            )
+        stripped = text.rstrip()
+        looks_truncated = bool(stripped) and not any(
+            stripped.endswith(s) for s in (";", "*/", "---", "```")
+        )
+        self._chunk_queue.put({"type": "done", "truncated": looks_truncated})
 
     def _on_error(self, message: str):
         self._generating = False
-        if self._window:
-            self._window.evaluate_js(
-                f"window.dispatchEvent(new CustomEvent('ai_error',{{detail:{json.dumps(message)}}}))"
-            )
+        self._chunk_queue.put({"type": "error", "message": message})
+
+    def poll_generation(self) -> dict:
+        """Called by JS every 100ms — drains the queue and returns all pending items."""
+        items = []
+        try:
+            while True:
+                items.append(self._chunk_queue.get_nowait())
+        except queue.Empty:
+            pass
+        return {"items": items, "generating": self._generating}
+
 
     def get_version(self) -> str:
         return "1.0.0"
