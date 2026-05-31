@@ -1690,60 +1690,36 @@ const TYPE_CFG={
     wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 \u2013 859,999',
     wTypes:[[10,'Creature']],
     subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes'],
-    presets:[
-      {l:'Rift Drudge (T6)',d:{fName:'Rift Drudge',fLevel:'180',fXp:'800000',fDmg:'95',fDmgType:'1',fResSlash:'1.0',fResPierce:'1.0',fResBludge:'1.5',fResCold:'0.5',fResFire:'1.8',fResAcid:'0.8',fResElec:'1.0',fResNether:'1.0',fHP:'3200',fStam:'3000',fMana:'500',fLum:'15000',cType:'3'}},
-      {l:'Fire Elemental',d:{fName:'Fire Elemental',fLevel:'200',fXp:'1200000',fDmg:'110',fDmgType:'16',fResSlash:'0.6',fResPierce:'0.6',fResBludge:'1.2',fResCold:'2.0',fResFire:'0.1',fResAcid:'1.0',fResElec:'1.0',fResNether:'0.5',fHP:'4000',fStam:'4000',fMana:'800',fLum:'20000',cType:'38'}},
-      {l:'Frost Skeleton',d:{fName:'Frost Tomb Sentinel',fLevel:'150',fXp:'400000',fDmg:'75',fDmgType:'1',fResSlash:'0.8',fResPierce:'0.7',fResBludge:'1.5',fResCold:'0.2',fResFire:'1.5',fResAcid:'1.0',fResElec:'1.0',fResNether:'0.3',fHP:'2200',fStam:'2000',fMana:'500',fLum:'8000',cType:'30'}},
-      {l:'Acid Olthoi',d:{fName:'Acid Olthoi',fLevel:'220',fXp:'1800000',fDmg:'130',fDmgType:'32',fResSlash:'0.8',fResPierce:'1.2',fResBludge:'1.0',fResCold:'1.0',fResFire:'1.0',fResAcid:'0.1',fResElec:'1.2',fResNether:'1.0',fHP:'5000',fStam:'4000',fMana:'500',fLum:'25000',cType:'1'}},
-    ]},
+    presets:[]},
   npc:{label:'NPC',icon:'\u25c6',desc:'Quest givers, merchants, and interactive characters.',
     wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 \u2013 859,999',
     wTypes:[[10,'Creature (NPC)'],[12,'Vendor']],
     subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes'],
     presets:[
-      {l:'Generic NPC',d:{fName:'New NPC',fLevel:'275',fShortDesc:'A mysterious figure.'}},
-      {l:'Quest Giver',d:{fName:'Quest Giver',fLevel:'275',fShortDesc:'A weathered figure with knowing eyes.',fUseRadius:'3.0'}},
-      {l:'Vendor',d:{fName:'Traveling Merchant',fLevel:'275',fShortDesc:'A merchant of rare goods.',fUseRadius:'5.0',fWType:'12',fBuyRate:'1.0',fSellRate:'1.1'}},
+      {l:'General NPC',d:{fName:'',fLevel:'100',fMaxHealth:'1000',fMaxStamina:'1000',fMaxMana:'500',fDmg:'0',fXp:'0'}},
+      {l:'Quest Giver',d:{fName:'',fLevel:'100',fMaxHealth:'2000',fMaxStamina:'2000',fMaxMana:'1000',fDmg:'0',fXp:'0'}},
+      {l:'Vendor',d:{fName:'',fLevel:'100',fMaxHealth:'2000',fMaxStamina:'2000',fMaxMana:'1000',fDmg:'0',fXp:'0'}}
     ]},
   item:{label:'Item',icon:'\u25c8',desc:'Quest tokens, gems, stackables, consumables, and containers.',
     wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
     wTypes:[[38,'Gem'],[51,'Stackable'],[18,'Food'],[34,'Scroll'],[22,'Key'],[20,'Chest'],[21,'Container'],[8,'Book'],[29,'LightSource'],[9,'Coin'],[28,'Healer'],[37,'ManaStone'],[32,'SpellComponent']],
     subTabs:['properties','emotes'],
-    presets:[
-      {l:'Quest Token',d:{fName:'Quest Seal',fValue:'100',fEncumb:'5',fMaxStack:'1',fItemUse:'1',fBonded:'1',fAttuned:'1',fScale:'1.0'}},
-      {l:'Stackable Drop',d:{fName:'Crafting Fragment',fValue:'50',fEncumb:'10',fMaxStack:'25',fItemUse:'8',fBonded:'0',fAttuned:'0',fScale:'1.0'}},
-      {l:'Consumable',d:{fName:'Health Philtre',fValue:'300',fEncumb:'15',fMaxStack:'10',fItemUse:'2',fBonded:'0',fAttuned:'0'}},
-      {l:'Container',d:{fName:'Bag of Holding',fValue:'500',fEncumb:'50',fMaxStack:'1',fItemUse:'4',fBonded:'1',fAttuned:'0',fWType:'21'}},
-    ]},
+    presets:[]},
   weapon:{label:'Weapon',icon:'\u2694',desc:'Melee weapons, missile launchers, and casters.',
     wcidFrom:'870000',wcidTo:'879999',wcidRange:'870,000 \u2013 879,999',
     wTypes:[[6,'MeleeWeapon'],[3,'MissileLauncher'],[35,'Caster'],[4,'Missile']],
     subTabs:['properties'],
-    presets:[
-      {l:'Heavy Sword',d:{fName:'Enchanted Longsword',fDmg:'85',fDmgType:'1',fWepTime:'45',fDmgVar:'0.4',fWepSkill:'44',fWepDef:'1.02',fWepOff:'1.03',fWieldDiff:'290',fValue:'12000',fEncumb:'450',fScale:'1.0'}},
-      {l:'Light Spear',d:{fName:'Swift Spear',fDmg:'60',fDmgType:'2',fWepTime:'35',fDmgVar:'0.3',fWepSkill:'45',fWepDef:'1.04',fWepOff:'1.02',fWieldDiff:'250',fValue:'9000',fEncumb:'300',fScale:'1.0'}},
-      {l:'Finesse Dagger',d:{fName:'Venom Dagger',fDmg:'45',fDmgType:'2',fWepTime:'28',fDmgVar:'0.2',fWepSkill:'46',fWepDef:'1.06',fWepOff:'1.05',fWieldDiff:'240',fValue:'8000',fEncumb:'200',fScale:'1.0'}},
-      {l:'War Staff',d:{fName:'Staff of War',fDmg:'0',fDmgType:'0',fWepTime:'0',fDmgVar:'0',fWepSkill:'34',fWepDef:'1.05',fWepOff:'1.0',fWieldDiff:'300',fValue:'15000',fEncumb:'250',fScale:'1.0',fWType:'35'}},
-    ]},
+    presets:[]},
   armor:{label:'Armor/Clothing',icon:'\u26e8',desc:'Clothing and armor for all body slots.',
     wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
     wTypes:[[2,'Clothing/Armor']],
     subTabs:['properties'],
-    presets:[
-      {l:'Plate Chest',d:{fName:'Platemail Cuirass',fArmorLevel:'200',fArmorType:'11',fValidLoc:'512',fValue:'8000',fEncumb:'600',fScale:'1.0'}},
-      {l:'Leather Cap',d:{fName:'Leather Cap',fArmorLevel:'60',fArmorType:'2',fValidLoc:'1',fValue:'800',fEncumb:'80',fScale:'1.0'}},
-      {l:'Amuli Coat',d:{fName:'Amuli Coat',fArmorLevel:'160',fArmorType:'7',fValidLoc:'2',fValue:'5000',fEncumb:'350',fScale:'1.0'}},
-      {l:'Covenant Gauntlets',d:{fName:'Covenant Gauntlets',fArmorLevel:'400',fArmorType:'15',fValidLoc:'32',fValue:'25000',fEncumb:'200',fScale:'1.0'}},
-      {l:'Cloth Robe',d:{fName:'Cloth Robe',fArmorLevel:'0',fArmorType:'1',fValidLoc:'2',fValue:'100',fEncumb:'80',fScale:'1.0'}},
-    ]},
+    presets:[]},
   jewelry:{label:'Jewelry',icon:'\u25ce',desc:'Rings, necklaces, bracelets, and wristlets.',
     wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
     wTypes:[[38,'Gem (Jewelry)']],
     subTabs:['properties'],
-    presets:[
-      {l:'Ring',d:{fName:'Ring of Vigor',fValue:'1000',fEncumb:'5',fBonded:'0',fAttuned:'0',fArmorType:'1',fValidLoc:'134217728',fScale:'1.0'}},
-      {l:'Necklace',d:{fName:'Amulet of Warding',fValue:'2000',fEncumb:'8',fBonded:'0',fAttuned:'0',fArmorType:'1',fValidLoc:'1048576',fScale:'1.0'}},
-    ]},
+    presets:[]},
   recipe:{label:'Recipe',icon:'\u2697',desc:'Crafting recipes and material combinations.',
     wcidFrom:'600000',wcidTo:'609999',wcidRange:'600,000 \u2013 609,999',
     wTypes:[[38,'Gem (Recipe)']],
@@ -3665,6 +3641,31 @@ function openSettings(){
 function closeSettings(){$('settingsOverlay').classList.remove('open');}
 // Settings overlay: close only on mousedown directly on backdrop (not on text-select drag)
 (function(){
+  const handle=document.getElementById('sqlResize');
+  const sqlPanel=document.getElementById('sqlPanel');
+  if(!handle||!sqlPanel) return;
+  let startX=0, startW=0, dragging=false;
+  handle.style.cursor='col-resize';
+  handle.addEventListener('mousedown',function(e){
+    dragging=true;
+    startX=e.clientX;
+    startW=sqlPanel.offsetWidth;
+    document.body.style.userSelect='none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove',function(e){
+    if(!dragging) return;
+    const delta=startX-e.clientX;
+    const newW=Math.max(240,Math.min(900,startW+delta));
+    sqlPanel.style.width=newW+'px';
+    sqlPanel.style.flex='none';
+  });
+  document.addEventListener('mouseup',function(){
+    if(dragging){ dragging=false; document.body.style.userSelect=''; }
+  });
+})();
+
+(function(){
   const so=$('settingsOverlay');
   if(!so) return;
   let downOnOverlay=false;
@@ -3687,17 +3688,18 @@ function saveSettings(){
     ranges[key]={...(appConfig.wcid_ranges?.[key]||{}),start,next};
   });
   if(Object.keys(ranges).length)data.wcid_ranges=ranges;
+  closeSettings();
   if(window.pywebview){
     window.pywebview.api.save_config(data).then(r=>{
       if(r.success){
-        toast('Settings saved.');closeSettings();
+        toast('Settings saved.');
         appConfig.api_key_set=appConfig.api_key_set||!!data.api_key;
         appConfig.server_name=data.server_name;
         updateAIButtonState();
       }
-      else toast('Error: '+r.error);
+      else toast('Error saving settings: '+r.error);
     });
-  } else {closeSettings();toast('Settings saved (browser mode).');}
+  } else {toast('Settings saved (browser mode.');}
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
