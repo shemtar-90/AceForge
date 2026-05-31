@@ -749,6 +749,8 @@ function filterSelectOpts(selId, q){
 }
 
 // Emote action field definitions — per action type
+const EA_DEFAULT=[{f:'message',l:'Message',ph:'Private message to the player'}];
+
 const EA_FIELDS={
   // Basic
   10:[{f:'message',l:'Message',ph:'Private message to the player'}],
@@ -1618,7 +1620,7 @@ function buildSubContent(){
     advanced:   buildAdvanced
   };
   if(curType==='generator') builders.properties=buildGeneratorProps;
-  fc.innerHTML=c.subTabs.map(sub=>{
+  fc.innerHTML='';fc.innerHTML=c.subTabs.map(sub=>{
     const active=sub===curSub?'active':'';
     const fn=builders[sub]||buildProps;
     let html='';
