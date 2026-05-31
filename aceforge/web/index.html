@@ -116,7 +116,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 .sql-btns{display:flex;gap:5px}
 .sql-btn{font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:1px solid #3a3020;background:transparent;color:#8a7a58;padding:5px 10px;cursor:pointer;transition:all .15s}
 .sql-btn:hover{border-color:var(--gold);color:var(--gold)}
-.sql-out{flex:1;overflow-y:auto;overflow-x:auto;padding:14px 16px 54px 16px;font-family:'Source Code Pro',monospace;font-size:12px;line-height:1.8;color:#c8b898;white-space:pre}
+.sql-out{flex:1;overflow-y:auto;overflow-x:auto;padding:14px 16px 54px 16px;cursor:default;user-select:text;font-family:'Source Code Pro',monospace;font-size:12px;line-height:1.8;color:#c8b898;white-space:pre}
 .sql-out::-webkit-scrollbar{width:6px;height:6px}
 .sql-out::-webkit-scrollbar-thumb{background:#3a3020;border-radius:3px}
 .sql-out::-webkit-scrollbar-track{background:#0a0800}
@@ -258,6 +258,20 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 .lore-send-btn:disabled{opacity:.4;cursor:not-allowed}
 .lore-no-sel{flex:1;display:flex;align-items:center;justify-content:center;color:var(--ink-faint);font-family:'IM Fell English',serif;font-style:italic;font-size:15px}
 
+
+/* ── Property sub-sub tabs ────────────────────────────────────────────────*/
+.prop-subtab-bar{display:flex;gap:2px;margin:12px 0 0;border-bottom:2px solid var(--border);flex-wrap:wrap}
+.prop-stab{font-family:'Cinzel',serif;font-size:8px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;padding:5px 14px;border:1px solid transparent;border-bottom:none;
+  background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:3px 3px 0 0;
+  transition:color .12s,background .12s;white-space:nowrap}
+.prop-stab:hover{color:var(--ink);background:rgba(200,184,152,.12)}
+.prop-stab.active{background:var(--parch-dk);border-color:var(--border);
+  border-bottom-color:var(--parch-dk);color:var(--crimson);position:relative;bottom:-2px}
+.prop-stab-panel{display:none;padding:12px 0 4px}
+.prop-stab-panel.active{display:block}
+.prop-adv-sec{margin-top:18px}
+
 </style>
 </head>
 <body>
@@ -347,14 +361,9 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
         <button class="sql-btn" onclick="saveSQL()">+ Save</button>
       </div>
     </div>
-    <div id="sqlDirtyBanner" style="display:none;align-items:center;gap:8px;padding:6px 14px;background:#2a1800;border-bottom:1px solid #5a3000;flex-shrink:0">
-      <span style="color:var(--gold);font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.1em">⚠ MANUAL EDIT MODE</span>
-      <span style="color:#a08050;font-family:'Cinzel',serif;font-size:9px;flex:1">Values changed in SQL that could not sync to form fields.</span>
-      <button onclick="discardSQLEdit()" style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:1px solid #5a3000;background:transparent;color:#a08050;padding:3px 10px;cursor:pointer" onmouseover="this.style.borderColor='var(--crimson)';this.style.color='var(--crimson-lt)'" onmouseout="this.style.borderColor='#5a3000';this.style.color='#a08050'">↺ Discard &amp; Regen</button>
-    </div>
+    <!-- SQL dirty banner removed -->
     <div style="flex:1;overflow-x:auto;overflow-y:hidden;display:flex;flex-direction:column;min-height:0">
-    <textarea class="sql-out" id="sqlOut" spellcheck="false"
-      oninput="onSQLEdit()"
+    <textarea class="sql-out" id="sqlOut" spellcheck="false" readonly
       style="font-family:'Source Code Pro',monospace;font-size:12px;line-height:1.8;color:#c8b898;background:transparent;border:none;outline:none;resize:none;white-space:pre;overflow-wrap:normal;flex:1;min-height:0;overflow-y:auto;overflow-x:auto;padding:14px 16px;width:max-content;min-width:100%"
     ></textarea>
     </div>
@@ -396,8 +405,8 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 
 <!-- FORGE BAR -->
 <div class="forge-bar" id="forgeBar">
-  <span class="forge-inp">Switch to AI Mode tab to generate content with AI</span>
-  <button class="forge-btn" onclick="switchMode('ai',document.querySelectorAll('.mode-tab')[1])">Switch to AI Mode →</button>
+  <span class="forge-inp" id="forgeHint">Select a tab and fill in the fields to generate SQL.</span>
+  
 </div>
 
 <!-- SETTINGS -->
@@ -1001,6 +1010,61 @@ const EA_HINTS={
 
 
 
+// ── Body Part Key Reference ──────────────────────────────────────────────────
+// Keys match weenie_properties_body_part.key in ACE DB
+const BP_KEY_NAMES={
+  0:'Head',1:'Chest',2:'Abdomen',3:'Upper Arm',4:'Lower Arm',5:'Hand',
+  6:'Upper Leg',7:'Lower Leg',8:'Foot',9:'Horn',10:'Front Leg',11:'Front Foot',
+  12:'Rear Leg',13:'Rear Foot',14:'Torso',15:'Tail',16:'Arm',17:'Leg',
+  18:'Claw',19:'Wings',20:'Breath',21:'Tentacle',22:'Upper Tentacle',
+  23:'Lower Tentacle',24:'Cloak'
+};
+
+// Primary body part setup per CreatureType ID (from ACE World DB, 8313 weenies)
+const CREATURE_BP_MAP={
+  0:  [0,1,2,3,4,5,6,7,8],              // None/Default → full humanoid
+  1:  [0,9,14,16,17,18,20],             // Olthoi: Head,Horn,Torso,Arm,Leg,Claw,Breath
+  2:  [0,1,2,3,4,5,6,7,8,9],            // Banderling: humanoid + Horn
+  3:  [0,1,2,3,4,5,6,7,8,9],            // Drudge: humanoid + Horn
+  4:  [0,1,2,3,4,5,6,7,8,9],            // Mosswart: humanoid + Horn
+  5:  [0,1,2,3,4,5,6,7,8],              // Lugian: full humanoid
+  6:  [0,1,2,3,4,5,6,7,8,9],            // Tumerok: humanoid + Horn
+  7:  [0,1,2,3,4,5,6,7,8],              // Mite: full humanoid
+  8:  [0,1,2,3,4,5,6,7,8,9],            // Tusker: humanoid + Horn
+  13: [0,1,2,3,4,5,6,7,8,9],            // Golem: humanoid + Horn
+  14: [0,1,2,3,4,5,6,7,8,9],            // Undead: humanoid + Horn
+  15: [0,1,2,3,4,5,6,7,8,9,20],         // Gromnie: humanoid + Horn + Breath
+  16: [0,9,10,12,14],                    // Reedshark: Head,Horn,FrontLeg,RearLeg,Torso
+  17: [0,9,14,15,17],                    // Armoredillo: Head,Horn,Torso,Tail,Leg
+  18: [0,1,2,3,4,5,6,7,8],              // Fae: full humanoid
+  19: [0,1,2,3,4,5,9,15],               // Virindi: Head,Chest,Abdomen,UpperArm,LowerArm,Hand,Horn,Tail
+  20: [0,9,14,15,19],                    // Wisp: Head,Horn,Torso,Tail,Wings
+  22: [0,1,2,3,4,5,6,7,8,9],            // Shadow: humanoid + Horn
+  23: [0,9,10,12,14],                    // Mattekar: Head,Horn,FrontLeg,RearLeg,Torso
+  28: [0,1,2,3,4,5,6,7,8,9],            // Monouga: humanoid + Horn
+  29: [0,9,14,15,19],                    // Zefir: Head,Horn,Torso,Tail,Wings
+  30: [0,1,2,3,4,5,6,7,8,9],            // Skeleton: humanoid + Horn
+  31: [0,1,2,3,4,5,6,7,8],              // Human: full humanoid
+  32: [0,1,2,3,4,5,6,7,8,9],            // Shreth: humanoid + Horn
+  38: [0,1,2,3,4,5,6,7,8],              // FireElemental: full humanoid
+  39: [0,1,2,3,4,5,6,7,8],              // Snowman: full humanoid
+  44: [0,9,14,16,17,18,20],             // Grievver: Head,Horn,Torso,Arm,Leg,Claw,Breath
+  46: [0,9,10,12,14],                    // Ursuin: Head,Horn,FrontLeg,RearLeg,Torso
+  48: [0,1,2,3,4,5,9,15],               // HollowMinion: Head,Chest,Abdomen,UpperArm,LowerArm,Hand,Horn,Tail
+  60: [0,1,2,3,4,5,6,7,8],              // AcidElemental: full humanoid
+  61: [0,1,2,3,4,5,6,7,8],              // FrostElemental: full humanoid
+  75: [0,1,2,3,4,5,6,7,8,9,18],         // Burun: humanoid + Horn + Claw
+  99: [0,1,2,3,4,5,6,7,8,9,10],         // GearKnight: humanoid + Horn + FrontLeg
+  100:[0,1,2,3,4,5,6,7,8,9],            // Gurog: humanoid + Horn
+  101:[0,1,2,3,4,5,6,7,8,9],            // Anekshay: humanoid + Horn
+};
+
+// Layout label for each creature type (used in Body Parts tab header)
+const CREATURE_LAYOUT_LABEL={
+  1:'Olthoi',16:'Quadruped',17:'Armoredillo',19:'Virindi',20:'Wisp/Elemental',
+  23:'Quadruped',29:'Wisp/Elemental',44:'Grievver',46:'Quadruped',48:'HollowMinion',
+};
+
 const BODY_PARTS_BIPED=[
   {k:0,name:'Head'},{k:1,name:'Chest'},{k:2,name:'Abdomen'},
   {k:3,name:'UpperArm'},{k:4,name:'LowerArm'},{k:5,name:'Hand'},
@@ -1028,7 +1092,9 @@ function buildProps(){
   const t=curType;
   if(t==='quest') return buildQuestProps();
   if(t==='recipe') return buildRecipeProps();
-  if(t==='jewelry') return buildJewelryProps();
+  return buildAdvanced();
+  // Legacy form code below kept for reference but no longer rendered:
+  if(false&&t==='jewelry') return buildJewelryProps();
   const isCreature=t==='creature'||t==='npc';
   let h='';
   if(isCreature){
@@ -1201,6 +1267,8 @@ function buildProps(){
         <input type=\"number\" id=\"${id}\" value=\"0\" style=\"width:100px;text-align:right;border-bottom:1px solid var(--border)\">
       </div>`).join('')}    </div>`;
   }
+  // Sub-sub tabs: Int/Bool/Float/String/DID
+  if(curType!=='recipe'&&curType!=='quest') h+=buildAdvanced();
   return h;
 }
 
@@ -1301,12 +1369,14 @@ function buildJewelryProps(){
 
 function setQField(id,v){const e=$(id);if(e){e.value=v;regen();}}
 function onCTypeChange(){
-  bodyParts=getBodyParts(gi('cType',31));
-  // Rebuild only the body parts panel in-place
-  const bpPanel=document.querySelector('.sub-panel[data-sub="bodyparts"]');
+  // Read CreatureType from extraInt (type 2) — form fields no longer exist
+  var ctEntry=extraInt.find(function(r){return parseInt(r.type)===2;});
+  var cType=ctEntry?parseInt(ctEntry.value):31;
+  bodyParts=getBodyParts(cType);
+  var bpPanel=document.querySelector('.sub-panel[data-sub="bodyparts"]');
   if(bpPanel){
     bpPanel.innerHTML=buildBodyPartsTab();
-    bpPanel.querySelectorAll('input,select').forEach(e=>e.addEventListener('input',onFieldInput));
+    bpPanel.querySelectorAll('input,select').forEach(function(e){e.addEventListener('input',onFieldInput);});
   }
   regen();
 }
@@ -1417,7 +1487,7 @@ function buildSkills(){
       <div style=\"flex:1;font-family:'Cinzel',serif;font-size:11px;font-weight:700;color:var(--ink-mid)\">${name} <span class=\"fc\">SK-${sk.id}</span></div>
       <select id=\"sk_sac_x_${i}\" style=\"width:150px\" onchange=\"extraSkills[${i}].sac=parseInt(this.value);regen()\">${opt(SKILL_SAC,sk.sac||2)}</select>
       <input type=\"number\" id=\"sk_init_x_${i}\" value=\"${sk.init||base}\" style=\"width:90px\" oninput=\"extraSkills[${i}].init=parseInt(this.value);regen()\">
-      <button class=\"del\" onclick=\"extraSkills.splice(${i},1);rebuildPanel('skills')\"></button>
+      <button class=\"del\" onclick=\"extraSkills.splice(${i},1);rebuildPanel('skills');regen()\">&#x2715;</button>
     </div>`;
   }).join('');
   return `<div class=\"sec\">
@@ -1556,7 +1626,7 @@ function selectSpell(idx,id,name){
 //  BODY PARTS 
 function buildBodyPartsTab(){
   const cType=gi('cType',31);
-  const setName=CREATURE_BODY_MAP[cType]||'biped';
+  const setName=CREATURE_LAYOUT_LABEL[cType]||'Humanoid';
   const rows=bodyParts.map((bp,i)=>`<tr>
     <td style=\"font-family:'Cinzel',serif;font-size:9px;font-weight:700;color:var(--ink-mid);white-space:nowrap\">${bp.name}</td>
     <td><select id=\"bp_dt_${i}\" style=\"font-size:11px\">${opt(DMG_TYPES,4)}</select></td>
@@ -1580,9 +1650,27 @@ function buildBodyPartsTab(){
   </div>`;
 }
 
-function onFieldInput(){regen();}
+function onFieldInput(e){
+  regen();
+  // Sync Name field to extraStr type 1
+  var tgt=e&&e.target?e.target:document.activeElement;
+  if(tgt&&tgt.id==='fName'){
+    var nv=tgt.value||'';
+    var ei=extraStr.findIndex(function(r){return String(r.type)==='1';});
+    if(ei>=0) extraStr[ei].value=nv;
+    else if(nv) extraStr.push({type:'1',value:nv});
+    if(_curPropType==='str'){
+      var asd=document.getElementById('adv_str');
+      if(asd) asd.innerHTML=extraRows('extraStr',PROP_STRING)||'<i style="color:var(--ink-faint)">No string properties.</i>';
+    }
+  }
+}
 
 function switchSub(sub,btn){
+  // Auto-sync property arrays when switching to properties tab if empty
+  if(sub==='properties' && !extraInt.length && !extraBool.length && curType!=='quest' && curType!=='recipe'){
+    setTimeout(function(){ syncAdvancedFromSQL(true); }, 50);
+  }
   curSub=sub;
   document.querySelectorAll('.ctab').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
@@ -1592,11 +1680,12 @@ function switchSub(sub,btn){
 }
 
 function switchType(type,btn){
+  console.log('[SWITCH] switchType called with type='+type+' curType was='+curType);
   if(!TYPE_CFG[type]) return;
   curType=type; curSub=TYPE_CFG[type].subTabs[0];
-  spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
+  spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];console.log('[SWITCH] arrays cleared, curType now='+curType);
   recipeReqs=[];recipeReqsBool=[];recipeReqsFloat=[];recipeReqsStr=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];
-  bodyParts=getBodyParts(31); // re-init on cType change via onCTypeChange
+  bodyParts=getBodyParts(parseInt(gi('cType',31)));
   document.querySelectorAll('.itab').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
   try{ buildForm(); }catch(e){
@@ -1707,9 +1796,11 @@ const CREATURE_BODY_MAP={31:'biped',2:'biped',3:'biped',4:'biped',5:'biped',6:'b
 
 
 function getBodyParts(cType){
-  const layout=CREATURE_BODY_MAP[cType]||'biped';
-  const tpl={biped:BODY_PARTS_BIPED,quadruped:BODY_PARTS_QUADRUPED,insect:BODY_PARTS_INSECT,floating:BODY_PARTS_FLOATING}[layout]||BODY_PARTS_BIPED;
-  return tpl.map(b=>({...b,dType:4,dVal:0,dVar:0.25,baseAL:0,sl:0,pi:0,bl:0,co:0,fi:0,ac:0,el:0,nt:0}));
+  const keys=CREATURE_BP_MAP[cType]||CREATURE_BP_MAP[31];
+  return keys.map(function(k){
+    return {k:k, name:BP_KEY_NAMES[k]||('Part '+k),
+      dType:4, dVal:0, dVar:0.25, baseAL:0, sl:0, pi:0, bl:0, co:0, fi:0, ac:0, el:0, nt:0};
+  });
 }
 
 function buildSubContent(){
@@ -1815,18 +1906,27 @@ const TYPE_CFG={
   weapon:{label:'Weapon',icon:'\u2694',desc:'Melee weapons, missile launchers, and casters.',
     wcidFrom:'870000',wcidTo:'879999',wcidRange:'870,000 \u2013 879,999',
     wTypes:[[6,'MeleeWeapon'],[3,'MissileLauncher'],[35,'Caster'],[4,'Missile']],
-    subTabs:['properties'],
+    subTabs:['properties','spellbook','emotes'],
     presets:[]},
   armor:{label:'Armor/Clothing',icon:'\u26e8',desc:'Clothing and armor for all body slots.',
     wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
     wTypes:[[2,'Clothing/Armor']],
-    subTabs:['properties'],
+    subTabs:['properties','spellbook','emotes'],
     presets:[]},
   jewelry:{label:'Jewelry',icon:'\u25ce',desc:'Rings, necklaces, bracelets, and wristlets.',
     wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
     wTypes:[[1,'Generic'],[35,'Jewelry'],[38,'Gem (Jewelry)'],[40,'TinkerTool']],
-    subTabs:['properties'],
+    subTabs:['properties','emotes'],
     presets:[]},
+  generator:{label:'Generator',icon:'⧙',desc:'Spawn generators with placement coordinates.',
+    wcidFrom:'1800000',wcidTo:'1899999',wcidRange:'1,800,000+',
+    wTypes:[[7,'7 · Generator'],[1,'1 · Generic']],
+    subTabs:['properties'],
+    presets:[
+      {name:'Creature Respawn',desc:'Standard 5min respawn',data:{fGenWeenieType:'7',fGenTimeType:'1',fGenRespawn:'300',fGenInit:'1',fGenMax:'1',fGenWhen:'1',fGenWhere:'2',fGenProb:'-1',fGenStackSize:'-1'}},
+      {name:'Boss (Rare)',desc:'1hr boss respawn',data:{fGenWeenieType:'7',fGenTimeType:'1',fGenRespawn:'3600',fGenInit:'1',fGenMax:'1',fGenWhen:'1',fGenWhere:'2',fGenProb:'-1',fGenStackSize:'-1'}},
+      {name:'Event Spawn',desc:'Event-driven add generator',data:{fGenWeenieType:'1',fGenTimeType:'3',fGenRespawn:'60',fGenInit:'5',fGenMax:'5',fGenWhen:'1',fGenWhere:'2',fGenProb:'-1',fGenRegenInterval:'5',fGenRadius:'5',fGenInitDelay:'3'}},
+    ]},
   recipe:{label:'Recipe',icon:'\u2697',desc:'Crafting recipes and material combinations.',
     wcidFrom:'600000',wcidTo:'609999',wcidRange:'600,000 \u2013 609,999',
     wTypes:null,
@@ -1841,16 +1941,8 @@ const TYPE_CFG={
       {l:'Kill Timer',d:{fName:'NewQuestKTTimer',fMinDelta:'72000',fMaxSolves:'-1',fMsg:'NewQuestKTTimer'}},
       {l:'Daily Timer',d:{fName:'NewQuestTimer',fMinDelta:'86400',fMaxSolves:'-1',fMsg:'NewQuestTimer'}},
     ]},
-  generator:{label:'Generator',icon:'⧙',desc:'Spawn generators with placement coordinates.',
-    wcidFrom:'1800000',wcidTo:'1899999',wcidRange:'1,800,000+',
-    wTypes:[[7,'7 · Generator'],[1,'1 · Generic']],
-    subTabs:['properties'],
-    presets:[
-      {name:'Creature Respawn',desc:'Standard 5min respawn',data:{fGenWeenieType:'7',fGenTimeType:'1',fGenRespawn:'300',fGenInit:'1',fGenMax:'1',fGenWhen:'1',fGenWhere:'2',fGenProb:'-1',fGenStackSize:'-1'}},
-      {name:'Boss (Rare)',desc:'1hr boss respawn',data:{fGenWeenieType:'7',fGenTimeType:'1',fGenRespawn:'3600',fGenInit:'1',fGenMax:'1',fGenWhen:'1',fGenWhere:'2',fGenProb:'-1',fGenStackSize:'-1'}},
-      {name:'Event Spawn',desc:'Event-driven add generator',data:{fGenWeenieType:'1',fGenTimeType:'3',fGenRespawn:'60',fGenInit:'5',fGenMax:'5',fGenWhen:'1',fGenWhere:'2',fGenProb:'-1',fGenRegenInterval:'5',fGenRadius:'5',fGenInitDelay:'3'}},
-    ]}
-}
+};
+
 function extractInsertValues(sql, tableName){
   const re=new RegExp('INSERT INTO `'+tableName+'`[^;]+;','gs');
   const matches=[...sql.matchAll(re)];
@@ -1882,9 +1974,9 @@ function buildInnerTabs(){
     {k:'weapon',   icon:'⚔', label:'WEAPON'},
     {k:'armor',    icon:'⛨', label:'ARMOR'},
     {k:'jewelry',  icon:'◎', label:'JEWELRY'},
+    {k:'generator',icon:'⟙', label:'GENERATOR'},
     {k:'recipe',   icon:'⚗', label:'RECIPE'},
     {k:'quest',    icon:'◇', label:'QUEST'},
-    {k:'generator',icon:'⟙', label:'GENERATOR'},
   ];
   const parts=types.map(function(t){
     const active=t.k===curType?' active':'';
@@ -2138,6 +2230,8 @@ function buildEmoteBlock(em,i){
   h+=rs||'<p style="font-family:\'IM Fell English\',serif;font-style:italic;font-size:12px;color:var(--ink-faint);margin:0 0 8px">No responses yet. Click Add Response below.</p>';
   h+='<button class="add-btn" style="margin-top:4px" onclick="emotes['+i+'].actions.push({type:10,message:\'\',delay:0,wcid:\'\',stackSize:\'\',testString:\'\',percent:\'\',heroXP64:\'\',amount64:\'\',spellId:\'\',motion:\'\',min:\'\',max:\'\',stat:\'\',cell:\'\',ox:\'\',oy:\'\',oz:\'\',aw:\'\',ax:\'\',ay:\'\',az:\'\',loc:\'\'});rebuildPanel(\'emotes\')">+ Add Response</button>';
   h+='</div></div>';
+  // Append property sub-sub tabs for all types that reach here
+  if(curType!=='recipe'&&curType!=='quest') h+=buildAdvanced();
   return h;
 }
 
@@ -2152,7 +2246,9 @@ function buildAdvanced(){
 
   // Read-only rows for properties managed by form fields (shown grayed-out)
   function managedRows(arr, propNames, skipSet){
-    return (arr||[]).filter(r=>skipSet.has(parseInt(r.type))).map(r=>{
+    // arr may be an object {id:{type,value}} from extractInsertValues, or null/undefined
+    const rows=Array.isArray(arr)?arr:(arr&&typeof arr==='object'?Object.values(arr):[]);
+    return rows.filter(r=>skipSet.has(parseInt(r.type))).map(r=>{
       const name=propNames[r.type]||'custom';
       return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;opacity:0.55">
         <div style="min-width:220px;font-family:'Cinzel',serif;font-size:10px;font-weight:700;color:var(--ink-dim)">${r.type} · ${name}</div>
@@ -2163,17 +2259,25 @@ function buildAdvanced(){
   }
 
   // Editable rows from the extra arrays
-  function extraRows(arrRef, propNames, skipSet){
-    const arr=window[arrRef]||[];
-    return arr.map((r,i)=>{
-      const name=propNames[r.type]||'custom';
-      const isManaged=skipSet.has(parseInt(r.type));
-      const style=isManaged?'opacity:0.6':'';
-      return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border-lt);${style}">
-        <div style="min-width:220px;font-family:'Cinzel',serif;font-size:10px;font-weight:700;color:var(--ink-mid)">${r.type} · ${name}</div>
-        <input type="text" value="${String(r.value||'').replace(/"/g,'&quot;')}" oninput="window.${arrRef}[${i}].value=this.value;regen()" style="flex:1;font-family:'Source Code Pro',monospace;font-size:12px;font-weight:600;border-bottom:1px solid var(--border)">
-        <button class="del" onclick="window.${arrRef}.splice(${i},1);rebuildPanel('advanced');regen()">✕</button>
-      </div>`;
+  function extraRows(arrRef, propNames){
+    var arr=_getExtraArr(arrRef);
+    if(!arr||!arr.length) return '';
+    return arr.map(function(r,i){
+      var name=propNames[parseInt(r.type)]||propNames[String(r.type)]||'custom';
+      var isCreatureType=arrRef==='extraInt'&&parseInt(r.type)===2;
+      var valCtrl;
+      if(isCreatureType){
+        var opts=CREATURE_TYPES.map(function(ct){return '<option value="'+ct[0]+'"'+(parseInt(r.value)===ct[0]?' selected':'')+'>'+ct[0]+' · '+ct[1]+'</option>';}).join('');
+        valCtrl='<select onchange="updateExtraProp(\'extraInt\','+i+',this.value);onCTypeChange()" style="flex-shrink:0;font-family:\'Source Code Pro\',monospace;font-size:11px;border-bottom:1px solid var(--border);background:transparent;color:var(--ink)">'+opts+'</select>';
+      } else {
+        valCtrl='<input type="text" value="'+String(r.value||'').replace(/"/g,'&quot;')+'" oninput="updateExtraProp(\''+arrRef+'\','+i+',this.value)" style="width:110px;text-align:right;font-family:\'Source Code Pro\',monospace;font-size:12px;font-weight:600;border-bottom:1px solid var(--border);flex-shrink:0">';
+      }
+      return '<div style="display:flex;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-lt)">'
+        +'<div style="width:36px;font-family:\'Source Code Pro\',monospace;font-size:10px;color:var(--ink-faint);flex-shrink:0">'+r.type+'</div>'
+        +'<div style="flex:1;font-family:\'Cinzel\',serif;font-size:9px;font-weight:700;color:var(--ink-mid);text-transform:uppercase;letter-spacing:.04em">'+name+'</div>'
+        +valCtrl
+        +'<button class="del" style="flex-shrink:0;opacity:.5" onclick="removeExtraProp(\''+arrRef+'\','+i+')">&#x2715;</button>'
+        +'</div>';
     }).join('');
   }
 
@@ -2193,48 +2297,38 @@ function buildAdvanced(){
     </div>`;
   }
 
-  // Build display rows combining managed (read-only) + extras (editable)
-  // Managed rows come from lastSQLProps (populated by regen)
-  const lp=window._lastSQLProps||{};
-  const intManaged=managedRows(lp.int,PROP_INT,SKIP_INT);
-  const boolManaged=managedRows(lp.bool,PROP_BOOL,SKIP_BOOL);
-  const floatManaged=managedRows(lp.float,PROP_FLOAT,SKIP_FLOAT);
-  const strManaged=managedRows(lp.str,PROP_STRING,SKIP_STR);
-  const didManaged=managedRows(lp.did,PROP_DID,SKIP_DID);
+  // Extra property arrays are the single source of truth
 
-  const intExtra=extraRows('extraInt',PROP_INT,SKIP_INT);
-  const boolExtra=extraRows('extraBool',PROP_BOOL,SKIP_BOOL);
-  const floatExtra=extraRows('extraFloat',PROP_FLOAT,SKIP_FLOAT);
-  const strExtra=extraRows('extraStr',PROP_STRING,SKIP_STR);
-  const didExtra=extraRows('extraDID',PROP_DID,SKIP_DID);
-
-  const none='<div style="color:var(--ink-faint);font-style:italic;font-size:13px;padding:4px 0">None</div>';
-
-  return `<div class="sec">
-    <div class="sh"><div class="st">≡ Properties</div><div class="sl"></div>
-      <button class="top-btn" onclick="syncAdvancedFromSQL()" style="padding:5px 12px;font-size:9px">↺ Refresh</button>
+  const none='<div style="color:var(--ink-faint);font-style:italic;font-size:12px;padding:8px 0">No properties yet — click Sync or add manually.</div>';
+  return `<div class="sec prop-adv-sec">
+    <div class="sh">
+      <div class="st">&#x2261; Properties</div>
+      <div class="sl"></div>
+      <button class="top-btn" onclick="showPropDebug()" style="padding:5px 10px;font-size:9px;opacity:.7" title="Debug properties state">&#x1F50D;</button>
     </div>
-    <p class="note" style="margin-bottom:14px">Grayed rows are managed by the Form Fields tab. Editable rows are additional properties. Use the Add controls to insert new ones.</p>
-
-    <div class="sh"><div class="st">Int Properties</div><div class="sl"></div></div>
-    <div id="adv_int">${intManaged}${intExtra||(!intManaged?none:'')}</div>
-    ${addRowUI('extraInt',PROP_INT,'0','int')}
-
-    <div class="sh" style="margin-top:16px"><div class="st">Bool Properties</div><div class="sl"></div></div>
-    <div id="adv_bool">${boolManaged}${boolExtra||(!boolManaged?none:'')}</div>
-    ${addRowUI('extraBool',PROP_BOOL,'True','bool')}
-
-    <div class="sh" style="margin-top:16px"><div class="st">Float Properties</div><div class="sl"></div></div>
-    <div id="adv_float">${floatManaged}${floatExtra||(!floatManaged?none:'')}</div>
-    ${addRowUI('extraFloat',PROP_FLOAT,'0.0','float')}
-
-    <div class="sh" style="margin-top:16px"><div class="st">String Properties</div><div class="sl"></div></div>
-    <div id="adv_str">${strManaged}${strExtra||(!strManaged?none:'')}</div>
-    ${addRowUI('extraStr',PROP_STRING,'','str')}
-
-    <div class="sh" style="margin-top:16px"><div class="st">DID Properties</div><div class="sl"></div></div>
-    <div id="adv_did">${didManaged}${didExtra||(!didManaged?none:'')}</div>
-    ${addRowUI('extraDID',PROP_DID,'0x00000000','did')}
+    <div class="prop-subtab-bar">
+      ${['int','bool','float','str','did'].map(function(t){return '<button class="prop-stab'+(_curPropType===t?' active':'')+'" onclick="switchPropType(\''+t+'\',this)">'+{int:'INT',bool:'BOOL',float:'FLOAT',str:'STRING',did:'DID'}[t]+'</button>';}).join('')}
+    </div>
+    ${`<div class="prop-stab-panel${_curPropType==='int'?' active':''}" id="pst_int">`}
+      <div id="adv_int">${extraRows('extraInt',PROP_INT)||none}</div>
+      ${addRowUI('extraInt',PROP_INT,'0','int')}
+    </div>
+    ${`<div class="prop-stab-panel${_curPropType==='bool'?' active':''}" id="pst_bool">`}
+      <div id="adv_bool">${extraRows('extraBool',PROP_BOOL)||none}</div>
+      ${addRowUI('extraBool',PROP_BOOL,'True','bool')}
+    </div>
+    ${`<div class="prop-stab-panel${_curPropType==='float'?' active':''}" id="pst_float">`}
+      <div id="adv_float">${extraRows('extraFloat',PROP_FLOAT)||none}</div>
+      ${addRowUI('extraFloat',PROP_FLOAT,'0.0','float')}
+    </div>
+    ${`<div class="prop-stab-panel${_curPropType==='str'?' active':''}" id="pst_str">`}
+      <div id="adv_str">${extraRows('extraStr',PROP_STRING)||none}</div>
+      ${addRowUI('extraStr',PROP_STRING,'','str')}
+    </div>
+    ${`<div class="prop-stab-panel${_curPropType==='did'?' active':''}" id="pst_did">`}
+      <div id="adv_did">${extraRows('extraDID',PROP_DID)||none}</div>
+      ${addRowUI('extraDID',PROP_DID,'0x00000000','did')}
+    </div>
   </div>`;
 }
 
@@ -2245,37 +2339,78 @@ function addExtraProperty(arrRef, sectionId){
   const type=String(typeEl.value);
   const value=valEl.value.trim()||'';
   if(!type)return;
-  const arr=window[arrRef];
+  const arr=_getExtraArr(arrRef);
   // Replace if already exists, otherwise add
   const existing=arr.findIndex(r=>String(r.type)===type);
   if(existing>=0) arr[existing].value=value;
   else arr.push({type, value});
   arr.sort((a,b)=>parseInt(a.type)-parseInt(b.type));
   regen();
-  rebuildPanel('advanced');
+  rebuildPanel('properties');
   toast('Added '+type+' = '+value);
 }
 
 function syncAdvancedFromSQL(silent=false){
-  // Refresh the _lastSQLProps snapshot and rebuild the panel
-  // This does NOT load anything into extraInt/Bool/etc — those stay as-is
-  // (extras are only changed by Add/Remove actions or manual value editing)
-  const sql=getPlainSQL();
-  if(!sql.trim()){ if(!silent) toast('No SQL to sync from.'); return; }
-
-  // Parse the current SQL to show the read-only "managed" rows
-  window._lastSQLProps={
+  if(curType==='quest'||curType==='recipe'){
+    if(!silent) toast('Quest and Recipe use their own form — no sub-sub tabs to sync.');
+    return;
+  }
+  console.log('[SYNC] called silent='+silent+' curType='+curType);
+  // Try _lastSQLProps first (set by regen)
+  // Always parse from current SQL text (captures manual edits to Live Preview)
+  var sql=getPlainSQL();
+  if(!sql.trim()){
+    if(!silent) toast('No SQL yet — generate content first.');
+    return;
+  }
+  var lsp={
     int:   extractInsertValues(sql,'weenie_properties_int'),
     bool:  extractInsertValues(sql,'weenie_properties_bool'),
     float: extractInsertValues(sql,'weenie_properties_float'),
     str:   extractInsertValues(sql,'weenie_properties_string'),
     did:   extractInsertValues(sql,'weenie_properties_d_i_d'),
   };
-
-  rebuildPanel('advanced');
+  window._lastSQLProps=lsp;
+  console.log('[SYNC] parsed from SQL: int='+Object.keys(lsp.int||{}).length+' bool='+Object.keys(lsp.bool||{}).length+' float='+Object.keys(lsp.float||{}).length+' str='+Object.keys(lsp.str||{}).length+' did='+Object.keys(lsp.did||{}).length);
+  function mergeInto(arr, src, stripQuotes){
+    var count=0;
+    Object.values(src||{}).forEach(function(row){
+      var t=String(row.type||'');
+      var v=String(row.value||'');
+      if(stripQuotes){v=v.trim();if(v.startsWith("'")&&v.endsWith("'"))v=v.slice(1,-1).replace(/''/g,"'");}
+      if(!t) return;
+      var ei=arr.findIndex(function(r){return String(r.type)===t;});
+      if(ei>=0){arr[ei].value=v;}else{arr.push({type:t,value:v});count++;}
+    });
+    arr.sort(function(a,b){return parseInt(a.type)-parseInt(b.type);});
+    return count;
+  }
+  var ai=mergeInto(extraInt,   lsp.int);
+  var ab=mergeInto(extraBool,  lsp.bool);
+  var af=mergeInto(extraFloat, lsp.float);
+  var as=mergeInto(extraStr,   lsp.str, true);
+  var ad=mergeInto(extraDID,   lsp.did);
+  console.log('[SYNC] merged: int='+extraInt.length+'(+'+ai+') bool='+extraBool.length+'(+'+ab+') float='+extraFloat.length+'(+'+af+') str='+extraStr.length+'(+'+as+') did='+extraDID.length+'(+'+ad+')');
+  // Re-render the Properties panel directly
+  var _pp=document.querySelector('.sub-panel[data-sub="properties"]');
+  console.log('[SYNC] Properties panel found:', !!_pp, _pp?_pp.className:'none');
+  if(_pp){
+    try{
+      var html=buildProps();
+      console.log('[SYNC] buildProps returned '+html.length+' chars');
+      _pp.innerHTML=html;
+      _pp.querySelectorAll('input,select,textarea').forEach(function(e){e.addEventListener('input',onFieldInput);});
+      console.log('[SYNC] panel updated OK');
+    }catch(e){
+      console.error('[SYNC] buildProps error:',e.message);
+      _pp.innerHTML='<div style="color:red;padding:10px">Sync error: '+e.message+'</div>';
+    }
+  } else {
+    console.warn('[SYNC] No properties panel found in DOM');
+  }
   if(!silent){
-    const total=Object.values(window._lastSQLProps).reduce((s,a)=>s+a.length,0);
-    toast('Showing '+total+' properties from SQL.');
+    var total=extraInt.length+extraBool.length+extraFloat.length+extraStr.length+extraDID.length;
+    toast('Synced '+total+' properties.');
   }
 }
 
@@ -2404,7 +2539,7 @@ let _sqlEditTimer=null;
 let _sqlDirty=false; // true when user has manually edited the SQL
 
 function regen(){
-  if(_regenLock||_userEditingSQL) return;
+  if(_regenLock) return;
   _regenLock=true;
   try{buildSQL();}catch(e){console.error('SQL:',e);}
   _regenLock=false;
@@ -2421,9 +2556,31 @@ function regen(){
       str:   extractInsertValues(sql,'weenie_properties_string'),
       did:   extractInsertValues(sql,'weenie_properties_d_i_d'),
     };
+    // Auto-populate sub-sub tab arrays if they're empty (fresh type load)
+    if(!extraInt.length&&!extraBool.length&&curType!=='quest'&&curType!=='recipe'){
+      function _mi(arr,src,stripQ){
+        Object.values(src||{}).forEach(function(row){
+          var t=String(row.type||'');var v=String(row.value||'');
+          if(stripQ){v=v.trim();if(v.startsWith("'")&&v.endsWith("'"))v=v.slice(1,-1).replace(/''/g,"'");}
+          if(t&&!arr.find(function(r){return String(r.type)===t;})) arr.push({type:t,value:v});
+        });
+        arr.sort(function(a,b){return parseInt(a.type)-parseInt(b.type);});
+      }
+      _mi(extraInt,window._lastSQLProps.int);
+      _mi(extraBool,window._lastSQLProps.bool);
+      _mi(extraFloat,window._lastSQLProps.float);
+      _mi(extraStr,window._lastSQLProps.str,true);
+      _mi(extraDID,window._lastSQLProps.did);
+      // Re-render Properties panel with populated data
+      var _pp=document.querySelector('.sub-panel[data-sub="properties"]');
+      if(_pp){
+        try{_pp.innerHTML=buildProps();}catch(e){}
+        _pp.querySelectorAll('input,select,textarea').forEach(function(e){e.addEventListener('input',onFieldInput);});
+      }
+    }
     // If Properties tab is visible, refresh it
     const advPanel=document.querySelector('[data-sub="advanced"].active');
-    if(advPanel) rebuildPanel('advanced');
+    if(advPanel) rebuildPanel('properties');
   }
 }
 
@@ -2528,7 +2685,7 @@ function parseSQLIntoForm(sql){
 
 function buildSQL(){
   const t=curType;
-
+  console.log('[SQL] buildSQL START curType='+t+' extraInt.length='+extraInt.length+' extraBool='+extraBool.length+' extraFloat='+extraFloat.length);
   // ── QUEST ────────────────────────────────────────────────────────────────────
   if(t==='quest'){
     const name=g('fName','NewQuest').replace(/\s+/g,'');
@@ -2963,16 +3120,42 @@ function buildSQL(){
 
   // Extra props from Advanced tab
   // Emit extras — skip any type already emitted by form fields to prevent duplicates
-  const _emittedInt=new Set(IR.map(r=>r[0]));
-  extraInt.forEach(r=>{if(r.type&&!_emittedInt.has(parseInt(r.type))) IR.push([parseInt(r.type), parseInt(r.value)||0, PROP_INT[r.type]||'custom_'+r.type]);});
-  const _emittedBool=new Set(BR.map(r=>r[0]));
-  extraBool.forEach(r=>{if(r.type&&!_emittedBool.has(parseInt(r.type))) BR.push([parseInt(r.type), r.value||'False', PROP_BOOL[r.type]||'custom_'+r.type]);});
-  const _emittedFloat=new Set(FR.map(r=>r[0]));
-  extraFloat.forEach(r=>{if(r.type&&!_emittedFloat.has(parseInt(r.type))) FR.push([parseInt(r.type), parseFloat(r.value)||0, PROP_FLOAT[r.type]||'custom_'+r.type]);});
-  extraStr.forEach(r=>{if(r.type&&r.value) SR.push([parseInt(r.type), r.value, PROP_STRING[r.type]||'custom_'+r.type]);});
-  extraDID.forEach(r=>{if(r.type&&r.value) DR.push([parseInt(r.type), r.value, PROP_DID[r.type]||'custom_'+r.type]);});
+  // Extra arrays are AUTHORITATIVE when populated — completely replace form-generated rows
+  // If an extra array has content, clear ALL form-generated rows for that type
+  // This prevents deleted rows from reappearing with default values
+  if(extraInt.length){
+    IR.splice(0,IR.length);
+    extraInt.forEach(r=>{if(r.type) IR.push([parseInt(r.type), parseInt(r.value)||0, PROP_INT[r.type]||'custom_'+r.type]);});
+  } else {
+    // No extras: form-field rows stay (fallback)
+  }
+  if(extraBool.length){
+    BR.splice(0,BR.length);
+    extraBool.forEach(r=>{if(r.type) BR.push([parseInt(r.type), r.value||'False', PROP_BOOL[r.type]||'custom_'+r.type]);});
+  }
+  if(extraFloat.length){
+    FR.splice(0,FR.length);
+    extraFloat.forEach(r=>{if(r.type) FR.push([parseInt(r.type), parseFloat(r.value)||0, PROP_FLOAT[r.type]||'custom_'+r.type]);});
+  } else {
+    // Fallback: form-field float rows stay
+  }
+  if(extraStr.length){
+    SR.splice(0,SR.length);
+    extraStr.forEach(r=>{if(r.type&&r.value!==undefined) SR.push([parseInt(r.type), r.value, PROP_STRING[r.type]||'custom_'+r.type]);});
+  } else {
+    const _xStr=new Set();
+    SR.forEach(function(r){_xStr.add(r[0]);});
+  }
+  // extraDID applied in final pass below
 
   // Emit standard tables
+  // FINAL AUTHORITATIVE PASS — clear ALL form-generated rows when extras populated
+  if(extraInt.length){while(IR.length)IR.pop();extraInt.forEach(function(r){if(r.type)IR.push([parseInt(r.type),parseInt(r.value)||0,PROP_INT[r.type]||'x'+r.type]);});}
+  if(extraBool.length){while(BR.length)BR.pop();extraBool.forEach(function(r){if(r.type)BR.push([parseInt(r.type),r.value||'False',PROP_BOOL[r.type]||'x'+r.type]);});}
+  if(extraFloat.length){while(FR.length)FR.pop();extraFloat.forEach(function(r){if(r.type)FR.push([parseInt(r.type),parseFloat(r.value)||0,PROP_FLOAT[r.type]||'x'+r.type]);});}
+  if(extraStr.length){while(SR.length)SR.pop();extraStr.forEach(function(r){if(r.type&&r.value!==undefined)SR.push([parseInt(r.type),r.value,PROP_STRING[r.type]||'x'+r.type]);});}
+  // DID dedup applied below, after baseDR is defined
+  console.log('[SQL] emit: int='+IR.length+' bool='+BR.length+' float='+FR.length+'['+FR.map(function(r){return r[0]+':'+r[1];}).join(',')+']'+' str='+SR.length+' did='+DR.length);
   emitInt(IR);
   emitBool(BR);
   emitFloat(FR);
@@ -2989,8 +3172,21 @@ function buildSQL(){
       [22, '0x34000026', 'PhysicsEffectTable'],
     ];
   }
-  extraDID.forEach(r=>{if(r.type&&r.value)DR.push([parseInt(r.type),r.value,PROP_DID[r.type]||'custom_'+r.type]);});
-  emitDID([...baseDR,...DR]);
+  // extraDID applied in final pass above
+  // DID dedup: merge baseDR defaults + DR, apply extraDID as authoritative
+  baseDR.forEach(function(r){DR.unshift(r);}); // prepend baseDR (lower priority)
+  (function(){
+    var seen={}; var deduped=[];
+    DR.forEach(function(r){seen[r[0]]=r;});
+    Object.keys(seen).sort(function(a,b){return parseInt(a)-parseInt(b);}).forEach(function(k){deduped.push(seen[k]);});
+    while(DR.length)DR.pop();
+    deduped.forEach(function(r){DR.push(r);});
+    if(extraDID.length){
+      while(DR.length)DR.pop();
+      extraDID.forEach(function(r){if(r.type&&r.value)DR.push([parseInt(r.type),r.value,PROP_DID[r.type]||'custom_'+r.type]);});
+    }
+  })();
+  emitDID(DR);
 
   // ── Attributes ────────────────────────────────────────────────────────────
   if(isCreature && $('attr_1')){
@@ -3924,6 +4120,71 @@ async function init(){
 // ── LOREFORGE ────────────────────────────────────────────────────────────────
 let _loreConvos=[], _loreActiveId=null, _loreMessages=[], _lorePollTimer=null;
 let _loreGenerating=false, _loreCurrentText='';
+let _curPropType='int';
+
+function switchPropType(type, btn){
+  _curPropType=type;
+  document.querySelectorAll('.prop-stab').forEach(function(b){b.classList.remove('active');});
+  if(btn) btn.classList.add('active');
+  document.querySelectorAll('.prop-stab-panel').forEach(function(p){p.classList.remove('active');});
+  const panel=document.getElementById('pst_'+type);
+  if(panel) panel.classList.add('active');
+}
+
+// Safe accessor for extra property arrays (let vars aren't on window)
+function _getExtraArr(arrRef){
+  switch(arrRef){
+    case 'extraInt':   return extraInt;
+    case 'extraBool':  return extraBool;
+    case 'extraFloat': return extraFloat;
+    case 'extraStr':   return extraStr;
+    case 'extraDID':   return extraDID;
+    default: return [];
+  }
+}
+function updateExtraProp(arrRef,idx,val){
+  var arr=_getExtraArr(arrRef);
+  if(arr&&arr[idx]!==undefined){
+    arr[idx].value=String(val);
+    regen();
+  }
+}
+function removeExtraProp(arrRef,idx){
+  var arr=_getExtraArr(arrRef);
+  if(arr){
+    arr.splice(idx,1);
+    rebuildPanel('properties');
+    regen();
+  }
+}
+
+// ── PROPERTIES DEBUG ─────────────────────────────────────────────────────────
+function showPropDebug(){
+  var d=document.getElementById('propDebugPanel');
+  if(d){ d.remove(); return; } // toggle
+  d=document.createElement('div');
+  d.id='propDebugPanel';
+  d.style.cssText='position:fixed;top:50px;right:440px;width:360px;max-height:80vh;overflow-y:auto;background:#0d0d0d;border:1px solid #444;font-family:monospace;font-size:11px;z-index:9999;border-radius:4px;padding:12px;color:#d0d0d0';
+  function row(label,arr){
+    return '<div style="margin-bottom:8px"><div style="color:#e8c97a;font-weight:700;margin-bottom:2px">'+label+' ('+arr.length+')</div>'
+      +arr.map(function(r){return '<div style="padding:1px 6px;color:#aaa">'+r.type+' = '+r.value+'</div>';}).join('')
+      +(arr.length===0?'<div style="color:#555;padding:1px 6px">empty</div>':'')
+      +'</div>';
+  }
+  d.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<span style="color:#c87137;font-family:Cinzel,serif;font-size:10px;font-weight:700;letter-spacing:.1em">PROPERTIES DEBUG</span>'
+    +'<button onclick="var pd=document.getElementById(\'propDebugPanel\');if(pd)pd.remove()" style="background:none;border:none;color:#888;cursor:pointer;font-size:14px">&#x2715;</button>'
+    +'</div>'
+    +'<div style="color:#888;font-size:9px;margin-bottom:8px">curType='+curType+' | _curPropType='+_curPropType+'</div>'
+    +row('extraInt',extraInt)
+    +row('extraBool',extraBool)
+    +row('extraFloat',extraFloat)
+    +row('extraStr',extraStr)
+    +row('extraDID',extraDID)
+    +'<button onclick="syncAdvancedFromSQL(false)" style="font-family:Cinzel,serif;font-size:8px;font-weight:700;padding:4px 10px;border:1px solid #c87137;background:transparent;color:#c87137;cursor:pointer;border-radius:2px;margin-top:6px">SYNC</button>'
+    +'<button onclick="showPropDebug();setTimeout(showPropDebug,10)" style="font-family:Cinzel,serif;font-size:8px;font-weight:700;padding:4px 10px;border:1px solid #555;background:transparent;color:#888;cursor:pointer;border-radius:2px;margin-top:6px;margin-left:4px">REFRESH</button>';
+  document.body.appendChild(d);
+}
 
 function loreInit(){
   if(!window.pywebview) return;
