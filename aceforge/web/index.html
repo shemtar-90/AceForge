@@ -566,24 +566,24 @@ const lookupName = (arr,val) => {const f=arr.find(r=>r[0]==val);return f?f[1]:St
 //           79=UpdateMyQuest, 91-98=eye/nose/mouth/head textures,
 //           101=StartBarber, 119=AddContract, 120=RemoveContract
 const EMOTE_TYPES=[
-  [1,'Act'],[2,'AwardXP'],[3,'Give'],[5,'Motion'],[8,'Say'],
-  [10,'Tell'],[11,'Turn'],[12,'TurnToTarget'],[14,'CastSpell'],[15,'Activate'],
-  [16,'WorldBroadcast'],[17,'LocalBroadcast'],[18,'DirectBroadcast'],[19,'CastSpellInstant'],[21,'InqQuest'],
-  [22,'StampQuest'],[23,'StartEvent'],[24,'StopEvent'],[27,'TeachSpell'],[30,'InqQuestSolves'],
-  [31,'EraseQuest'],[32,'DecrementQuest'],[33,'IncrementQuest'],[34,'AddCharacterTitle'],[35,'InqBoolStat'],
-  [36,'InqIntStat'],[37,'InqFloatStat'],[38,'InqStringStat'],[39,'InqAttributeStat'],[40,'InqRawAttributeStat'],
-  [41,'InqSecondaryAttributeStat'],[42,'InqRawSecondaryAttributeStat'],[43,'InqSkillStat'],[44,'InqRawSkillStat'],[45,'InqSkillTrained'],
-  [46,'InqSkillSpecialized'],[47,'AwardTrainingCredits'],[48,'InflictVitaePenalty'],[49,'AwardLevelProportionalXP'],[51,'InqEvent'],
-  [52,'ForceMotion'],[53,'SetIntStat'],[54,'IncrementIntStat'],[55,'DecrementIntStat'],[56,'CreateTreasure'],
-  [57,'ResetHomePosition'],[58,'InqFellowQuest'],[60,'UpdateFellowQuest'],[61,'StampFellowQuest'],[62,'AwardNoShareXP'],
-  [63,'SetSanctuaryPosition'],[65,'FellowBroadcast'],[66,'LockFellow'],[67,'Goto'],[68,'PopUp'],
-  [69,'SetBoolStat'],[70,'SetQuestCompletions'],[71,'InqNumCharacterTitles'],[73,'PetCastSpellOnOwner'],[74,'TakeItems'],
-  [75,'InqYesNo'],[76,'InqOwnsItems'],[77,'DeleteSelf'],[80,'InqMyQuest'],[81,'StampMyQuest'],
-  [82,'InqMyQuestSolves'],[83,'EraseMyQuest'],[84,'DecrementMyQuest'],[85,'IncrementMyQuest'],[86,'SetMyQuestCompletions'],
-  [87,'MoveToPos'],[88,'LocalSignal'],[89,'InqPackSpace'],[90,'RemoveVitaePenalty'],[99,'TeleportTarget'],
-  [100,'TeleportSelf'],[110,'UntrainSkill'],[112,'SpendLuminance'],[113,'AwardLuminance'],[114,'InqInt64Stat'],
-  [115,'SetInt64Stat'],[118,'SetFloatStat']
+  [2,'AwardXP'],[3,'Give'],[5,'Motion'],[8,'Say'],[10,'Tell'],
+  [12,'TurnToTarget'],[14,'CastSpell'],[16,'WorldBroadcast'],[17,'LocalBroadcast'],[18,'DirectBroadcast'],
+  [19,'CastSpellInstant'],[21,'InqQuest'],[22,'StampQuest'],[23,'StartEvent'],[24,'StopEvent'],
+  [27,'TeachSpell'],[30,'InqQuestSolves'],[31,'EraseQuest'],[32,'DecrementQuest'],[33,'IncrementQuest'],
+  [34,'AddCharacterTitle'],[35,'InqBoolStat'],[36,'InqIntStat'],[37,'InqFloatStat'],[38,'InqStringStat'],
+  [39,'InqAttributeStat'],[40,'InqRawAttributeStat'],[41,'InqSecondaryAttributeStat'],[42,'InqRawSecondaryAttributeStat'],[43,'InqSkillStat'],
+  [44,'InqRawSkillStat'],[45,'InqSkillTrained'],[46,'InqSkillSpecialized'],[47,'AwardTrainingCredits'],[48,'InflictVitaePenalty'],
+  [49,'AwardLevelProportionalXP'],[51,'InqEvent'],[52,'ForceMotion'],[53,'SetIntStat'],[54,'IncrementIntStat'],
+  [55,'DecrementIntStat'],[56,'CreateTreasure'],[57,'ResetHomePosition'],[58,'InqFellowQuest'],[60,'UpdateFellowQuest'],
+  [61,'StampFellowQuest'],[62,'AwardNoShareXP'],[63,'SetSanctuaryPosition'],[65,'FellowBroadcast'],[66,'LockFellow'],
+  [67,'Goto'],[68,'PopUp'],[69,'SetBoolStat'],[70,'SetQuestCompletions'],[71,'InqNumCharacterTitles'],
+  [73,'PetCastSpellOnOwner'],[74,'TakeItems'],[75,'InqYesNo'],[76,'InqOwnsItems'],[77,'DeleteSelf'],
+  [80,'InqMyQuest'],[81,'StampMyQuest'],[82,'InqMyQuestSolves'],[83,'EraseMyQuest'],[84,'DecrementMyQuest'],
+  [85,'IncrementMyQuest'],[86,'SetMyQuestCompletions'],[87,'MoveToPos'],[88,'LocalSignal'],[89,'InqPackSpace'],
+  [90,'RemoveVitaePenalty'],[99,'TeleportTarget'],[100,'TeleportSelf'],[110,'UntrainSkill'],[112,'SpendLuminance'],
+  [113,'AwardLuminance'],[114,'InqInt64Stat'],[115,'SetInt64Stat'],[118,'SetFloatStat']
 ];
+
 
 
 // MyQuest types — only shown for NPC content type
@@ -1959,11 +1959,28 @@ function _buildActionFields(fdefs, a, i, j, aType){
       '<input type="number" value="'+(a.heroXP64||'')+'" placeholder="e.g. 5000" oninput="emotes['+ii+'].actions['+jj+'].heroXP64=this.value;regen()"></div>';
   }
 
-  // InqYesNo — shows sub-note
+  // UntrainSkill — searchable skill dropdown
+  if(aType===110){
+    const skillSel=buildSearchSelect(
+      'ea_skill_'+ii+'_'+jj,
+      ALL_SKILLS.map(([id,name])=>[id,name+' (SK-'+id+')']),
+      a.stat||'',
+      'emotes['+ii+'].actions['+jj+'].stat=this.value;regen()',
+      'Search skills…'
+    );
+    return '<div class="fg" style="grid-column:span 3"><div class="fl">Skill to Untrain</div>'+skillSel+'</div>';
+  }
+
+  // InqYesNo — question field + TestSuccess/TestFailure guidance
   if(aType===75){
-    return '<div class="fg" style="grid-column:span 3"><div class="fl">Question Message</div>'
-      +'<input type="text" value="'+(a.message||'')+'" placeholder="e.g. Do you want to accept this quest?" oninput="emotes['+ii+'].actions['+jj+'].message=this.value;regen()"></div>'
-      +'<div style="grid-column:span 3;font-family:\'IM Fell English\',serif;font-style:italic;font-size:11px;color:var(--ink-dim);padding:4px 0">Yes answer → add a <strong style="font-style:normal">TestSuccess</strong> trigger with matching quest filter. No answer → add a <strong style="font-style:normal">TestFailure</strong> trigger.</div>';
+    return '<div class="fg" style="grid-column:span 3"><div class="fl">Question Message</div>'+
+      '<input type="text" value="'+(a.message||'')+'" placeholder="e.g. Do you want to accept this quest?" oninput="emotes['+ii+'].actions['+jj+'].message=this.value;regen()"></div>'+
+      '<div style="grid-column:span 3;margin-top:6px;padding:8px 10px;background:rgba(120,90,40,.12);border:1px solid rgba(180,140,60,.3);border-radius:3px;font-family:\'IM Fell English\',serif;font-style:italic;font-size:12px;color:var(--ink-dim);line-height:1.6">'+
+      '<strong style="font-style:normal;color:var(--crimson)">InqYesNo</strong> pops a Yes/No dialog. '+
+      'Add two additional <strong style="font-style:normal">Triggers</strong> on this weenie:<br>'+
+      '• Category <strong style="font-style:normal">22 · TestSuccess</strong> — responses that fire when the player clicks Yes<br>'+
+      '• Category <strong style="font-style:normal">23 · TestFailure</strong> — responses that fire when the player clicks No'+
+      '</div>';
   }
 
   // Default: render fdefs as generic fields
