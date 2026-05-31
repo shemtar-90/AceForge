@@ -578,22 +578,30 @@ class AppAPI:
         is_local   = provider == "ollama" or bool(ollama_mode)
 
         # Extract keywords from prompt and find matching base-game weenies
-        weenie_context = self._build_weenie_context(prompt, content_type)
+        try:
+            content_type = content_type or "creature"
+            weenie_context = self._build_weenie_context(prompt, content_type)
+            system_prompt = self.skill_loader.build_system_prompt(
+                content_type=content_type,
+                server_name=self.config.server_name,
+                wcid_ranges=self.config.get_wcid_ranges(),
+                author=self.config.get("author", ""),
+                weenie_context=weenie_context,
+                is_local=is_local,
+            )
+        except Exception as e:
+            self._generating = False
+            return {"success": False, "error": f"Prompt build error: {e}"}
 
-        system_prompt = self.skill_loader.build_system_prompt(
-            content_type=content_type,
-            server_name=self.config.server_name,
-            wcid_ranges=self.config.get_wcid_ranges(),
-            author=self.config.get("author", ""),
-            weenie_context=weenie_context,
-            is_local=is_local,
-        )
-
-        threading.Thread(
-            target=self.api_client.stream_generate,
-            args=(system_prompt, prompt, self._on_chunk, self._on_done, self._on_error),
-            daemon=True,
-        ).start()
+        try:
+            threading.Thread(
+                target=self.api_client.stream_generate,
+                args=(system_prompt, prompt, self._on_chunk, self._on_done, self._on_error),
+                daemon=True,
+            ).start()
+        except Exception as e:
+            self._generating = False
+            return {"success": False, "error": f"Failed to start generation: {e}"}
         return {"success": True}
 
     def _build_weenie_context(self, prompt: str, content_type: str) -> str:

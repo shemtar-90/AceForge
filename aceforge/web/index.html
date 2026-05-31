@@ -3403,7 +3403,9 @@ function startGeneration(){
   $('aiSaveBtn').disabled=true;
   $('aiStatus').textContent='● Generating…';$('aiStatus').className='ai-status generating';
   if(window.pywebview){
-    window.pywebview.api.start_generation(prompt,curAIType).then(r=>{if(!r.success)setAIError(r.error);});
+    window.pywebview.api.start_generation(prompt,curAIType||'creature')
+      .then(r=>{ if(r&&!r.success) setAIError(r.error||'Generation failed.'); })
+      .catch(e=>setAIError('Bridge error: '+e));
   } else {setAIError('Run as desktop app to use AI Mode.');}
 }
 function stopGeneration(){
