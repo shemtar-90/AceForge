@@ -1536,15 +1536,26 @@ function buildEmotesTab(){
 
 
 function rebuildPanel(sub){
-  // Rebuild a single sub-panel in-place without touching other panels
-  const panels=document.querySelectorAll('[data-sub="'+sub+'"]');  const panel=panels[panels.length-1]||null;
-  if(!panel) return;
-  const builders={properties:buildProps,attributes:buildAttrs,skills:buildSkills,spellbook:buildSpellbook,bodyparts:buildBodyPartsTab,emotes:buildEmotesTab,advanced:buildAdvanced};
-  panel.innerHTML=(builders[sub]||buildProps)();
+  console.log('[rebuildPanel] called for sub='+sub+', curType='+curType);
+  const panels=document.querySelectorAll('[data-sub="'+sub+'"]');
+  console.log('[rebuildPanel] panels found: '+panels.length);
+  const panel=panels[panels.length-1]||null;
+  if(!panel){ console.warn('[rebuildPanel] no panel found for: '+sub); return; }
+  const builders={properties:buildProps,attributes:buildAttrs,skills:buildSkills,
+    spellbook:buildSpellbook,bodyparts:buildBodyPartsTab,emotes:buildEmotesTab};
+  if(curType==='generator') builders.properties=buildGeneratorProps;
+  try{
+    const newHTML=(builders[sub]||buildProps)();
+    console.log('[rebuildPanel] built HTML length='+newHTML.length);
+    panel.innerHTML=newHTML;
+    console.log('[rebuildPanel] innerHTML set OK');
+  }catch(e){
+    console.error('[rebuildPanel] builder crashed: '+e.message);
+    panel.innerHTML='<div style="padding:10px;color:red">rebuildPanel error: '+e.message+'</div>';
+  }
   panel.querySelectorAll('input,select,textarea').forEach(e=>e.addEventListener('input',onFieldInput));
   regen();
 }
-
 function buildGeneratorProps(){
   const whenOpts=[[2,'Always (Respawn)'],[3,'Event'],[4,'Sleeping'],[1,'Once']];
   const targetWcid=g('fGenTargetWcid','800000');
@@ -1995,7 +2006,7 @@ function buildEmoteBlock(em,i){
     rs+='<div style="flex:1;border:1px solid var(--border-lt);padding:10px 12px;background:rgba(200,184,152,.04)">';
     rs+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
     rs+='<div class="fg" style="max-width:180px"><div class="fl">Response Type</div>';
-    rs+='<select onchange="emotes['+i+'].actions['+j+'].type=parseInt(this.value);rebuildPanel(\'emotes\')">'+typeOptHtml+'</select></div>';
+    rs+='<select onchange="console.log(\'[emote] type changed to \'+this.value+\' for emote \'+'+i+'+\' action \'+'+j+');emotes['+i+'].actions['+j+'].type=parseInt(this.value);rebuildPanel(\'emotes\')">'+typeOptHtml+'</select></div>';
     rs+='<div style="font-family:\'IM Fell English\',serif;font-style:italic;font-size:11px;color:var(--ink-dim);flex:1">'+hint+'</div>';
     rs+=upBtn;
     rs+='<button class="del" onclick="emotes['+i+'].actions.splice('+j+',1);rebuildPanel(\'emotes\')" style="margin-top:14px">\u2715</button>';
