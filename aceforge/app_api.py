@@ -510,10 +510,8 @@ Start with: /* ===== FILE: {fname} ===== */"""
                 try:
                     text = lib["check"].read_text(encoding="utf-8", errors="replace")
                     if lib["id"] == "icons":
-                        # Count entries in ICONS=[...] array
-                        import re
-                        m = re.search(r"\[([^\]]+)\]", text[:200])
-                        n = text.count("],[") + (1 if "],[" not in text and "[" in text else 0)
+                        # Count entries — icons.js uses "], [" separator
+                        n = text.count("], [") + text.count("],[") + 1
                         count = f"{n:,} icons loaded"
                     elif lib["id"] == "weenies":
                         data = json.loads(text)

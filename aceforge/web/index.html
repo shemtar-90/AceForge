@@ -314,6 +314,8 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 .theme-card.active{border-color:var(--crimson) !important}
 
 .logo-img{height:26px;width:auto;margin-right:8px;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))}</style>
+  <!-- Icon library — populated when user installs the library package via Settings -->
+  <script src="icons.js" onerror="/* library not yet installed */"></script>
 </head>
 <body>
 <div class="app">
@@ -839,7 +841,8 @@ const BRANCH_CATS = {
   35:[22,23], 36:[22,23], 37:[22,23], 38:[22,23],             // Stat queries
   39:[22,23], 40:[22,23], 41:[22,23], 42:[22,23],
   43:[22,23], 44:[22,23], 45:[22,23], 46:[22,23],
-  71:[22,23], 89:[22,23],                                      // NumTitles, PackSpace
+  71:[22,23],                                                    // PackSpace
+  89:[35,36],                                                    // InqNumCharacterTitles
 };
 // Quest-style: BOTH branches get the quest key (action.message)
 const QUEST_BRANCH_ACTIONS = new Set([21,30,80,82,58]);
@@ -848,7 +851,7 @@ const EVENT_BRANCH_ACTIONS = new Set([51]);
 // Stat/item-style: success gets auto-key, failure gets null quest
 const STAT_BRANCH_ACTIONS  = new Set([76,75,35,36,37,38,39,40,41,42,43,44,45,46,71,89]);
 // Categories that are branch RESULTS (never top-level triggers)
-const BRANCH_RESULT_CATS   = new Set([12,13,22,23,27,28]);
+const BRANCH_RESULT_CATS   = new Set([12,13,22,23,27,28,35,36]);
 let createList    = [];
 let extraInt      = [];
 let extraBool     = [];
@@ -906,7 +909,7 @@ const PROP_BOOL={1:'Stuck',6:'AiUsesMana',7:'AiUseHumanMagicAnimations',8:'Allow
 const PROP_FLOAT={1:'HeartbeatInterval',3:'HealthRate',4:'StaminaRate',5:'ManaRate',12:'Shade',13:'ArmorModVsSlash',14:'ArmorModVsPierce',15:'ArmorModVsBludgeon',16:'ArmorModVsCold',17:'ArmorModVsFire',18:'ArmorModVsAcid',19:'ArmorModVsElectric',21:'WeaponLength',22:'DamageVariance',29:'WeaponDefense',31:'VisualAwarenessRange',34:'PowerupTime',37:'BuyPrice',38:'SellPrice',39:'DefaultScale',41:'RegenerationInterval',43:'GeneratorRadius',54:'UseRadius',62:'WeaponOffense',64:'ResistSlash',65:'ResistPierce',66:'ResistBludgeon',67:'ResistFire',68:'ResistCold',69:'ResistAcid',70:'ResistElectric',71:'ResistHealthBoost',72:'ResistStaminaDrain',75:'ResistManaBoost',80:'AiUseMagicDelay',104:'ObviousRadarRange',125:'ResistHealthDrain',136:'CriticalMultiplier',144:'ManaConversionMod',149:'WeaponMissileDefense',150:'WeaponMagicDefense',152:'ElementalDamageMod',165:'ArmorModVsNether',166:'ResistNether'};
 const PROP_STRING={1:'Name',7:'Inscription',14:'Use',15:'ShortDesc',16:'LongDesc',17:'ActivationTalk',18:'UseMessage',20:'PluralName',22:'ActivationFailure',33:'Quest',34:'GeneratorEvent',38:'AppraisalPortalDestination',45:'KillQuest',49:'KillQuest2',50:'KillQuest3'};
 const PROP_DID={1:'Setup',2:'MotionTable',3:'SoundTable',4:'CombatTable',6:'PaletteBase',7:'ClothingBase',8:'Icon',9:'EyesTexture',10:'NoseTexture',11:'MouthTexture',12:'DefaultStyle',13:'DefaultSubStyle',14:'HeadObject',15:'HairTexture',16:'DefaultHairColor',17:'DefaultEyesColor',18:'DefaultSkinColor',19:'DefaultHairTexture',20:'IconHires',21:'ObjCells',22:'PhysicsEffectTable',23:'UseSound',24:'UseTargetAnimation',25:'UseTargetFailedAnimation',26:'ItemSkillLevelLimit',27:'LastPortal',28:'LinkedPortalOne',29:'WieldedTreasureType',30:'InventoryTreasureType',31:'ShopTreasureType',32:'DeathTreasureType',33:'MutateFilter',34:'UseCreateItem',35:'TsysMutationFilter',36:'IconOverlay',37:'IconOverlay2',38:'IconUnderlay',39:'AugmentationMutationData',40:'AugmentationEffect',41:'ProcSpell',42:'AugmentationCreateItem',43:'AlternateCurrency',44:'BlueSurgeSpell',45:'YellowSurgeSpell',46:'RedSurgeSpell',47:'OlthoiDeathTreasureType',48:'VendorShopTemplate',49:'LinkedLifestone',50:'LinkedPortalTwo',51:'OriginalPortal',52:'BiomeCombatTable',53:'UseItemAnimation',54:'UseItemFailAnimation',55:'CreateItemWielded',56:'EquipmentSetID',57:'WieldedTreasure2',58:'WieldedTreasure3',59:'WieldedTreasure4',60:'NpcLooksLikeObject',61:'PCAPPhysicsBurden'};
-const EMOTE_CATS=[[1,'Refuse'],[2,'Vendor'],[3,'Death'],[4,'Portal'],[5,'HeartBeat'],[6,'Give'],[7,'Use'],[8,'Activation'],[9,'Generation'],[10,'PickUp'],[11,'Drop'],[12,'QuestSuccess'],[13,'QuestFailure'],[14,'Taunt'],[15,'WoundedTaunt'],[16,'KillTaunt'],[17,'NewEnemy'],[18,'Scream'],[19,'Homesick'],[20,'ReceiveCritical'],[21,'ResistSpell'],[22,'TestSuccess'],[23,'TestFailure'],[24,'HearChat'],[25,'Wield'],[26,'UnWield'],[27,'EventSuccess'],[28,'EventFailure'],[29,'TestNoQuality'],[32,'GotoSet'],[33,'NumFellowsSuccess'],[34,'NumFellowsFailure']];
+const EMOTE_CATS=[[1,'Refuse'],[2,'Vendor'],[3,'Death'],[4,'Portal'],[5,'HeartBeat'],[6,'Give'],[7,'Use'],[8,'Activation'],[9,'Generation'],[10,'PickUp'],[11,'Drop'],[12,'QuestSuccess'],[13,'QuestFailure'],[14,'Taunt'],[15,'WoundedTaunt'],[16,'KillTaunt'],[17,'NewEnemy'],[18,'Scream'],[19,'Homesick'],[20,'ReceiveCritical'],[21,'ResistSpell'],[22,'TestSuccess'],[23,'TestFailure'],[24,'HearChat'],[25,'Wield'],[26,'UnWield'],[27,'EventSuccess'],[28,'EventFailure'],[29,'TestNoQuality'],[32,'GotoSet'],[33,'NumFellowsSuccess'],[34,'NumFellowsFailure'],[35,'NumCharacterTitlesSuccess'],[36,'NumCharacterTitlesFailure'],[37,'ReceiveLocalSignal'],[38,'ReceiveTalkDirect']];
 // ── CORE HELPERS ─────────────────────────────────────────────────────────────
 const $   = id => document.getElementById(id);
 const opt = (arr,selVal) => arr.map(r=>`<option value="${r[0]}"${r[0]==selVal?' selected':''} >${r[0]} · ${r[1]}</option>`).join('');
@@ -1323,7 +1326,7 @@ const CREATURE_LAYOUT_LABEL={
 
 // Dropdown options for specific Int property type IDs in sub-sub tabs
 const PROP_DROPDOWNS={
-  '1':[[0,'None'],[1,'MeleeWeapon'],[2,'Armor'],[4,'Missile'],[6,'Jewelry'],[7,'Container'],[8,'Book'],[9,'Coin'],[16,'Creature'],[18,'Food'],[20,'Chest'],[21,'Container (Open)'],[22,'Key'],[28,'Healer'],[29,'LightSource'],[32,'SpellComponent'],[34,'Scroll'],[35,'Caster'],[37,'ManaStone'],[38,'Gem'],[51,'Stackable']],
+  '1':[[1,'MeleeWeapon'],[2,'Armor'],[4,'Clothing'],[6,'Vestements'],[8,'Jewelry'],[16,'Creature'],[32,'Food'],[64,'Money'],[128,'Misc'],[256,'MissileWeapon'],[257,'Weapon'],[512,'Container'],[640,'LockableMagicTarget'],[1024,'Useless'],[2048,'Gem'],[4096,'SpellComponents'],[8192,'Writable'],[16384,'Key'],[32768,'Caster'],[33025,'WeaponOrCaster'],[33031,'RedirectableItemEnchantmentTarget'],[65536,'Portal'],[131072,'Lockable'],[262144,'PromissoryNote'],[524288,'ManaStone'],[560015,'ItemEnchantableTarget'],[1048576,'Service'],[2097152,'MagicWieldable'],[3013615,'Item'],[4194304,'CraftCookingBase'],[4481568,'VendorGrocer'],[8388608,'CraftAlchemyBase'],[16777216,'CraftFletchingBase'],[33554432,'CraftCookingIntermediate'],[67108864,'CraftAlchemyIntermediate'],[134217728,'CraftFletchingIntermediate'],[268435456,'LifeStone'],[268500992,'PortalMagicTarget'],[536870912,'TinkeringTool'],[1073741824,'TinkeringMaterial'],[1208248231,'VendorShopkeep']],
   '4':[[0,'None'],[1,'Head'],[2,'Chest'],[4,'Abdomen'],[8,'UpperArm'],[16,'LowerArm'],[32,'Hand'],[64,'UpperLeg'],[128,'LowerLeg'],[256,'Foot'],[512,'Necklace'],[1024,'Bracelet'],[2048,'Ring'],[4096,'Trinket'],[5119,'Full Armor'],[8191,'All Slots']],
   '9':[[0,'None'],[1,'Head'],[2,'Chest'],[4,'Abdomen'],[8,'UpperArm'],[16,'LowerArm'],[32,'Hand'],[64,'UpperLeg'],[128,'LowerLeg'],[256,'Foot'],[512,'Necklace'],[1024,'Bracelet'],[2048,'Ring'],[4096,'Trinket'],[5119,'Full Armor'],[8191,'All Slots']],
   '27':[[0,'None'],[1,'Leather'],[2,'Metal'],[3,'Cloth'],[4,'Sylvan'],[5,'Covenant'],[6,'Unknown'],[7,'Olthoi']],
@@ -1372,7 +1375,7 @@ function buildProps(){
   if(isCreature){
     h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Identity</div><div class=\"sl\"></div></div>
     <div class=\"grid g3\">
-      <div class=\"fg\"><div class=\"fl\">Creature Type <span class=\"fc\">I-2</span></div><select id=\"cType\" onchange=\"onCTypeChange()\">${CREATURE_TYPES.map(([v,l])=>`<option value=\"${v}\"${v===31?' selected':''}>${v}  ${l}</option>`).join('')}</select></div>
+      <div class=\"fg\"><div class=\"fl\">Creature Type <span class=\"fc\">I-2</span></div><select id=\"cType\" onchange=\"onCTypeChange()\" style=\"max-width:200px\">${CREATURE_TYPES.map(([v,l])=>`<option value=\"${v}\"${v===31?' selected':''}>${v}  ${l}</option>`).join('')}</select></div>
       <div class=\"fg\"><div class=\"fl\">Default Scale <span class=\"fc\">F-39</span></div><input type=\"text\" id=\"fScale\" value=\"1.0\"></div>
       <div class=\"fg\"><div class=\"fl\">Palette <span class=\"fc\">I-3</span></div><select id=\"fPalette\">${opt(PALETTES,9)}</select></div>
     </div></div>`;
@@ -1970,6 +1973,8 @@ function switchType(type,btn){
   var _newTabs=TYPE_CFG[type].subTabs;
   curSub=_newTabs.indexOf(curSub)>=0 ? curSub : _newTabs[0];
   spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];console.log('[SWITCH] arrays cleared, curType now='+curType);
+  // Pre-seed ItemType=128 (Misc) for item tab
+  if(type==='item') extraInt.push({type:1,value:128});
   // Pre-seed name in extraStr so String tab shows it
   if(DEFAULT_NAMES[type]) extraStr.push({type:'1',value:DEFAULT_NAMES[type]});
   recipeReqs=[];recipeReqsBool=[];recipeReqsFloat=[];recipeReqsStr=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];
@@ -2355,6 +2360,102 @@ function _yamlTabKey(e){
   _emoteScriptDraft=ta.value;
 }
 
+// ── Icon Picker (DID types: Icon=8, IconOverlay=36, IconOverlay2=37, IconUnderlay=38) ──
+function openIconPicker(onSelect){
+  var existing=document.getElementById('iconPickerModal');
+  if(existing) existing.remove();
+  var modal=document.createElement('div');
+  modal.id='iconPickerModal';
+  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center';
+  var box=document.createElement('div');
+  box.style.cssText='background:var(--parchment);border:1px solid var(--border-lt);width:680px;max-height:82vh;display:flex;flex-direction:column;padding:16px;gap:10px;';
+  var hdr=document.createElement('div');
+  hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;';
+  var title=document.createElement('span');
+  title.style.cssText='font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--gold)';
+  title.textContent='SELECT ICON';
+  var closeBtn=document.createElement('button');
+  closeBtn.textContent='\u2715';
+  closeBtn.style.cssText='background:transparent;border:none;cursor:pointer;color:var(--ink-dim);font-size:14px;padding:0 4px';
+  closeBtn.onclick=function(){ modal.remove(); };
+  hdr.appendChild(title); hdr.appendChild(closeBtn);
+  var search=document.createElement('input');
+  search.placeholder='Filter by WCID or hex\u2026';
+  search.style.cssText='padding:6px 8px;font-family:Source Code Pro,monospace;font-size:11px;border:1px solid var(--border);background:var(--parchment-lt);color:var(--ink);outline:none;';
+  var countEl=document.createElement('div');
+  countEl.style.cssText='font-family:var(--ui-font);font-size:9px;color:var(--ink-faint);letter-spacing:.05em';
+  var grid=document.createElement('div');
+  grid.style.cssText='display:flex;flex-wrap:wrap;gap:3px;overflow-y:auto;max-height:460px;padding:4px;';
+  var icons=typeof ICONS!=='undefined'&&ICONS.length?ICONS:null;
+  if(!icons){
+    // Icon library not installed — guide user to Settings
+    box.innerHTML='<div style="padding:30px;text-align:center">'
+      +'<div style="font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--gold);margin-bottom:12px">ICON LIBRARY NOT INSTALLED</div>'
+      +'<div style="font-family:IM Fell English,serif;font-style:italic;font-size:13px;color:var(--ink-dim);line-height:1.6;margin-bottom:16px">'
+      +'Install the icon library via <strong>Settings → Content Libraries → Install Library Package</strong>.'
+      +'</div>'
+      +'<button onclick="openSettings();document.getElementById(\'iconPickerModal\').remove()" style="background:var(--crimson);color:#fff;border:none;font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;padding:9px 20px;cursor:pointer;border-radius:2px">Open Settings</button>'
+      +'<div style="margin-top:10px"><button onclick="document.getElementById(\'iconPickerModal\').remove()" style="background:transparent;border:none;cursor:pointer;color:var(--ink-faint);font-size:11px">Cancel</button></div>'
+      +'</div>';
+    modal.appendChild(box); document.body.appendChild(modal); modal.onclick=function(e){if(e.target===modal)modal.remove();};
+    return;
+  }
+  icons=icons;
+  var _renderAF=null;
+  function renderGrid(filter){
+    // Cancel any in-progress render
+    if(_renderAF){ cancelAnimationFrame(_renderAF); _renderAF=null; }
+    grid.innerHTML='';
+    var q=(filter||'').toLowerCase().trim();
+    var filtered=q?icons.filter(function(ic){return String(ic[0]).includes(q)||ic[1].includes(q);}):icons;
+    countEl.textContent=filtered.length.toLocaleString()+' icons';
+    // Progressive chunked rendering — keeps UI responsive for 12,000+ icons
+    var CHUNK=400, i=0;
+    function renderChunk(){
+      var frag=document.createDocumentFragment();
+      var end=Math.min(i+CHUNK,filtered.length);
+      for(;i<end;i++){
+        var ic=filtered[i];
+        var btn=document.createElement('button');
+        btn.title=ic[0]+'\n'+ic[1];
+        btn.style.cssText='width:48px;height:48px;padding:2px;cursor:pointer;background:rgba(255,255,255,0.2);border:1px solid transparent;box-sizing:border-box;display:flex;align-items:center;justify-content:center;';
+        var img=document.createElement('img');
+        img.src='icons/'+ic[0]+'.png';
+        img.loading='lazy';  // native lazy loading — browser only fetches visible icons
+        img.decoding='async';
+        img.style.cssText='max-width:44px;max-height:44px;object-fit:contain;image-rendering:pixelated;';
+        img.onerror=(function(b){ return function(){ b.style.opacity='0.2'; }; })(btn);
+        btn.appendChild(img);
+        btn.onclick=(function(wid){ return function(){ onSelect(wid); modal.remove(); }; })(ic[0]);
+        btn.onmouseover=function(){ this.style.borderColor='var(--crimson)'; this.style.background='rgba(139,32,32,0.1)'; };
+        btn.onmouseout=function(){ this.style.borderColor='transparent'; this.style.background='rgba(255,255,255,0.2)'; };
+        frag.appendChild(btn);
+      }
+      grid.appendChild(frag);
+      if(i<filtered.length){
+        countEl.textContent=i.toLocaleString()+' / '+filtered.length.toLocaleString()+' icons loaded\u2026';
+        _renderAF=requestAnimationFrame(renderChunk);
+      } else {
+        countEl.textContent=filtered.length.toLocaleString()+' icons';
+      }
+    }
+    _renderAF=requestAnimationFrame(renderChunk);
+  }
+  search.oninput=function(){ renderGrid(this.value); };
+  renderGrid('');
+  box.appendChild(hdr); box.appendChild(search); box.appendChild(countEl); box.appendChild(grid);
+  modal.appendChild(box);
+  modal.onclick=function(e){ if(e.target===modal) modal.remove(); };
+  document.body.appendChild(modal);
+  search.focus();
+}
+function _pickIconDID(arrIdx){
+  openIconPicker(function(wcid){
+    updateExtraProp('extraDID',arrIdx,wcid);
+    rebuildPanel('properties');
+  });
+}
+
 function syncBuilderToYAML(){
   if(_emoteSyncLock) return;
   _d('EMOTE','Sync Builder\u2192YAML ('+emotes.length+' triggers)');
@@ -2558,7 +2659,7 @@ const TYPE_CFG={
     ]},
   item:{label:'Item',icon:'\u25c8',desc:'Quest tokens, gems, stackables, consumables, and containers.',
     wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
-    wTypes:[[38,'Gem'],[51,'Stackable'],[18,'Food'],[34,'Scroll'],[22,'Key'],[20,'Chest'],[21,'Container'],[8,'Book'],[29,'LightSource'],[9,'Coin'],[28,'Healer'],[37,'ManaStone'],[32,'SpellComponent']],
+    wTypes:[[1,'Generic'],[38,'Gem'],[51,'Stackable'],[18,'Food'],[34,'Scroll'],[22,'Key'],[20,'Chest'],[21,'Container'],[8,'Book'],[29,'LightSource'],[9,'Coin'],[28,'Healer'],[37,'ManaStone'],[32,'SpellComponent']],
     subTabs:['properties','emotes'],
     presets:[]},
   weapon:{label:'Weapon',icon:'\u2694',desc:'Melee weapons, missile launchers, and casters.',
@@ -2626,15 +2727,15 @@ function buildInnerTabs(){
   const el=document.getElementById('innerTabs');
   if(!el) return;
   const types=[
-    {k:'creature', icon:'✠', label:'CREATURE'},
-    {k:'npc',      icon:'◆', label:'NPC'},
-    {k:'item',     icon:'◈', label:'ITEM'},
-    {k:'weapon',   icon:'⚔', label:'WEAPON'},
-    {k:'armor',    icon:'⛨', label:'ARMOR'},
-    {k:'jewelry',  icon:'◎', label:'JEWELRY'},
-    {k:'generator',icon:'⟙', label:'GENERATOR'},
-    {k:'recipe',   icon:'⚗', label:'RECIPE'},
-    {k:'quest',    icon:'◇', label:'QUEST'},
+    {k:'creature', icon:'<img src="creature_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'CREATURE'},
+    {k:'npc',      icon:'<img src="npc_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'NPC'},
+    {k:'item',     icon:'<img src="item_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'ITEM'},
+    {k:'weapon',   icon:'<img src="weapon_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'WEAPON'},
+    {k:'armor',    icon:'<img src="armor_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'ARMOR'},
+    {k:'jewelry',  icon:'<img src="jewelry_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'JEWELRY'},
+    {k:'generator',icon:'<img src="generator_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'GENERATOR'},
+    {k:'recipe',   icon:'<img src="recipe_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'RECIPE'},
+    {k:'quest',    icon:'<img src="quest_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'QUEST'},
   ];
   const parts=types.map(function(t){
     const active=t.k===curType?' active':'';
@@ -3038,12 +3139,20 @@ function buildAdvanced(){
       var valCtrl;
       if(isCreatureType){
         var opts=CREATURE_TYPES.map(function(ct){return '<option value="'+ct[0]+'"'+(parseInt(r.value)===ct[0]?' selected':'')+'>'+ct[0]+' · '+ct[1]+'</option>';}).join('');
-        valCtrl='<select onchange="updateExtraProp(\'extraInt\','+i+',this.value);onCTypeChange()" style="flex-shrink:0;font-family:\'Source Code Pro\',monospace;font-size:11px;border-bottom:1px solid var(--border);background:transparent;color:var(--ink)">'+opts+'</select>';
+        valCtrl='<select onchange="updateExtraProp(\'extraInt\','+i+',this.value);onCTypeChange()" style="flex-shrink:0;max-width:240px;font-family:\'Source Code Pro\',monospace;font-size:11px;border-bottom:1px solid var(--border);background:transparent;color:var(--ink)">'+opts+'</select>';
       } else if(arrRef==='extraInt' && PROP_DROPDOWNS[String(r.type)]){
         var ddOpts=PROP_DROPDOWNS[String(r.type)].map(function(opt){return '<option value="'+opt[0]+'"'+(parseInt(r.value)===opt[0]?' selected':'')+'>'+opt[0]+' · '+opt[1]+'</option>';}).join('');
         valCtrl='<select onchange="updateExtraProp(\''+arrRef+'\','+i+',this.value)" style="flex-shrink:0;max-width:200px;font-family:\'Source Code Pro\',monospace;font-size:11px;border-bottom:1px solid var(--border);background:transparent;color:var(--ink)">'+ddOpts+'</select>';
       } else {
         valCtrl='<input type="text" value="'+String(r.value||'').replace(/"/g,'&quot;')+'" oninput="updateExtraProp(\''+arrRef+'\','+i+',this.value)" style="width:110px;text-align:right;font-family:\'Source Code Pro\',monospace;font-size:12px;font-weight:600;border-bottom:1px solid var(--border);flex-shrink:0">';
+      }
+      if(arrRef==='extraDID'&&(new Set([8,36,37,38])).has(parseInt(r.type))){
+        var _wv=parseInt(r.value)||0;
+        var _it=_wv?'<img src="icons/'+_wv+'.png" style="width:32px;height:32px;object-fit:contain;border:1px solid var(--border);background:rgba(255,255,255,0.15);image-rendering:pixelated;flex-shrink:0" onerror="this.style.opacity=.2" title="WCID '+_wv+'">'
+          :'<span style="width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:1px dashed var(--border);color:var(--ink-faint);font-size:8px;flex-shrink:0">?</span>';
+        valCtrl='<div style="display:flex;align-items:center;gap:4px;">'
+          +'<button onclick="_pickIconDID('+i+')" style="padding:3px 10px;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.05em;background:transparent;border:1px solid var(--border);cursor:pointer;color:var(--ink-dim);flex-shrink:0;white-space:nowrap">Icon Picker</button>'
+          +valCtrl+_it+'</div>';
       }
       return '<div style="display:flex;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-lt)">'
         +'<div style="width:36px;font-family:\'Source Code Pro\',monospace;font-size:10px;color:var(--ink-faint);flex-shrink:0">'+r.type+'</div>'
@@ -3136,12 +3245,24 @@ function syncAdvancedFromSQL(silent=false){
     if(!silent) toast('No SQL yet — generate content first.');
     return;
   }
+  // Filter inserts to only the main weenie wcid — prevents generator companion
+  // or other embedded weenies from polluting the property arrays
+  var _mainWcid=String(gi('fWcid',850000));
+  function _filterByWcid(obj){
+    var out={};
+    Object.keys(obj||{}).forEach(function(k){
+      var row=obj[k];
+      var rid=row.object_Id?String(row.object_Id).replace(/[^0-9]/g,''):'';
+      if(!rid||rid===_mainWcid) out[k]=row;
+    });
+    return out;
+  }
   var lsp={
-    int:   extractInsertValues(sql,'weenie_properties_int'),
-    bool:  extractInsertValues(sql,'weenie_properties_bool'),
-    float: extractInsertValues(sql,'weenie_properties_float'),
-    str:   extractInsertValues(sql,'weenie_properties_string'),
-    did:   extractInsertValues(sql,'weenie_properties_d_i_d'),
+    int:   _filterByWcid(extractInsertValues(sql,'weenie_properties_int')),
+    bool:  _filterByWcid(extractInsertValues(sql,'weenie_properties_bool')),
+    float: _filterByWcid(extractInsertValues(sql,'weenie_properties_float')),
+    str:   _filterByWcid(extractInsertValues(sql,'weenie_properties_string')),
+    did:   _filterByWcid(extractInsertValues(sql,'weenie_properties_d_i_d')),
   };
   window._lastSQLProps=lsp;
   console.log('[SYNC] parsed from SQL: int='+Object.keys(lsp.int||{}).length+' bool='+Object.keys(lsp.bool||{}).length+' float='+Object.keys(lsp.float||{}).length+' str='+Object.keys(lsp.str||{}).length+' did='+Object.keys(lsp.did||{}).length);
@@ -4131,6 +4252,21 @@ function buildSQL(){
     });
     lines.push('');
   }
+  // ── Companion generator for creature/npc (auto-appended) ─────────────────
+  if(curType==='creature'||curType==='npc'){
+    const gWcid=wcid+10000;
+    const gName=(g('fName','Creature')+'Gen').replace(/[^a-zA-Z0-9]/g,'');
+    lines.push('');
+    lines.push('-- Companion Generator --');
+    lines.push('DELETE FROM `weenie` WHERE `class_Id`='+gWcid+';');
+    lines.push('INSERT INTO `weenie` (`class_Id`,`class_Name`,`type`) VALUES ('+gWcid+',\''+gName+'\',7);');
+    lines.push('INSERT INTO `weenie_properties_int` (`object_Id`,`type`,`value`) VALUES ('+gWcid+',9,'+wcid+');');
+    lines.push('INSERT INTO `weenie_properties_float` (`object_Id`,`type`,`value`) VALUES ('+gWcid+',41,0);');
+    lines.push('INSERT INTO `weenie_properties_float` (`object_Id`,`type`,`value`) VALUES ('+gWcid+',42,900);');
+    lines.push('INSERT INTO `weenie_properties_string` (`object_Id`,`type`,`value`) VALUES ('+gWcid+',1,\''+gName+'\');');
+    lines.push('INSERT INTO `weenie_properties_generator` (`object_Id`,`probability`,`weenie_Class_Id`,`delay`,`init_Create`,`max_Create`,`when_Create`,`where_Create`,`stack_Size`,`palette_Id`,`shade`,`obj_Cell_Id`,`origin_X`,`origin_Y`,`origin_Z`,`angles_W`,`angles_X`,`angles_Y`,`angles_Z`) VALUES ('+gWcid+',1,'+wcid+',300,1,1,2,4,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);');
+  }
+
   // Generator is now its own content type tab
 
   writeSQLOut(lines.join('\n'));
@@ -5210,6 +5346,38 @@ function _showAIPlan(rawText){
   } else {
     approveBtn.style.display='inline-flex';
   }
+  // Deny button
+  var denyBtn=document.getElementById('aiDenyBtn');
+  if(!denyBtn){
+    denyBtn=document.createElement('button');
+    denyBtn.id='aiDenyBtn';
+    denyBtn.style.cssText='background:transparent;color:var(--ink-dim);border:1px solid var(--border);font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;padding:9px 16px;cursor:pointer;border-radius:2px;margin-left:6px';
+    denyBtn.textContent='✗ DENY';
+    denyBtn.onclick=_denyPlan;
+    var appBtn=$('aiApproveBtn');
+    if(appBtn&&appBtn.parentNode) appBtn.parentNode.insertBefore(denyBtn, appBtn.nextSibling);
+  } else {
+    denyBtn.style.display='inline-flex';
+  }
+}
+
+function _denyPlan(){
+  _aiPlan=null;
+  // Hide plan buttons
+  var appBtn=$('aiApproveBtn'); if(appBtn) appBtn.style.display='none';
+  var denyBtn=$('aiDenyBtn');   if(denyBtn) denyBtn.style.display='none';
+  // Show generate button again
+  var genBtn=$('aiGenBtn'); if(genBtn) genBtn.style.display='';
+  // Clear output and show refine message
+  var out=$('aiOut');
+  if(out){
+    out.innerHTML='<div style="font-family:IM Fell English,serif;font-style:italic;font-size:13px;color:#b08820;line-height:1.6;padding:12px 0">'
+      +'Plan denied. Refine your prompt and generate again.'
+      +'</div>';
+  }
+  $('aiStatus').textContent='Plan rejected — refine your prompt';
+  $('aiStatus').className='ai-status';
+  var fl=$('aiFileList'); if(fl) fl.innerHTML='';
 }
 
 function _approvePlan(){
