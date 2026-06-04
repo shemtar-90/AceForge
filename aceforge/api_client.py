@@ -220,10 +220,13 @@ class APIClient:
     def _stream_anthropic(self, system, user, on_chunk, on_done, on_error):
         try:
             import anthropic
-            client = anthropic.Anthropic(api_key=self._api_key)
+            client = anthropic.Anthropic(
+                api_key=self._api_key,
+                timeout=600.0,  # 10 minute timeout for long generations
+            )
             full = []
             with client.messages.stream(
-                model=self._model, max_tokens=8000,
+                model=self._model, max_tokens=16000,  # increased for longer SQL outputs
                 system=system,
                 messages=[{"role": "user", "content": user}],
             ) as stream:
@@ -256,17 +259,39 @@ class APIClient:
                 user,
                 stream=True,
                 generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=8000,
+                    max_output_tokens=16000,
                     temperature=0.7,
                 ),
             )
             for chunk in response:
-                text = chunk.text if hasattr(chunk, "text") else ""
+                # FinishReason 2 = MAX_TOKENS: chunk may have no valid Part.
+                # Guard against AttributeError on .text access.
+                try:
+                    text = chunk.text if hasattr(chunk, "text") else ""
+                except (AttributeError, ValueError):
+                    # No valid Part — model hit token limit on this chunk; skip it.
+                    text = ""
                 if text:
                     full.append(text)
                     on_chunk(text)
 
-            on_done("".join(full))
+            # Check finish reason on final response to detect truncation
+            try:
+                finish_reason = None
+                if hasattr(response, "candidates") and response.candidates:
+                    finish_reason = getattr(response.candidates[0], "finish_reason", None)
+                elif hasattr(response, "prompt_feedback"):
+                    pass  # safety block — let on_done handle empty full
+            except Exception:
+                pass
+
+            assembled = "".join(full)
+            if not assembled and finish_reason == 2:
+                # MAX_TOKENS with nothing streamed — likely a safety/quota issue
+                on_error("Google API hit token limit with no output. Try a shorter prompt or switch to a larger model.")
+                return
+
+            on_done(assembled)
 
         except ImportError:
             on_error(
@@ -294,12 +319,12 @@ class APIClient:
             )
             # Try with max_tokens first (works for Groq, Mistral, Ollama, etc.)
             try:
-                kwargs["max_tokens"] = 8000
+                kwargs["max_tokens"] = 16000
                 stream = client.chat.completions.create(**kwargs)
             except openai.BadRequestError as e:
                 if "max_tokens" in str(e).lower() or "max_completion_tokens" in str(e).lower():
                     kwargs.pop("max_tokens", None)
-                    kwargs["max_completion_tokens"] = 8000
+                    kwargs["max_completion_tokens"] = 16000
                     stream = client.chat.completions.create(**kwargs)
                 else:
                     raise
@@ -359,4 +384,9 @@ def _friendly_error(exc: Exception, provider: str) -> str:
     # Billing
     if "billing" in low or "payment" in low or "insufficient_quota" in low:
         return "Billing issue. Check your account at your provider's dashboard."
+    # Google FinishReason=2 (MAX_TOKENS) — "valid Part" / "Quick accessor" error
+    if "quick accessor" in low or "finish_reason" in low or "finishreason" in low or        ("part" in low and "valid" in low) or "finish reason" in low:
+        return ("Google hit max token limit mid-response. The multi-pass system will "
+                "automatically continue. If it fails, try switching to gemini-1.5-pro "
+                "or reducing prompt complexity.")
     return f"API error: {msg}"

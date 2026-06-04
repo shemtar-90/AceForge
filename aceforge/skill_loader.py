@@ -15,6 +15,7 @@ from typing import Optional
 
 ALWAYS_LOAD = [
     "SKILL.md",
+    "emote_format.md", # WeenieFab emote format — ALWAYS loaded (AI writes emotes in compact format)
     "quest_npcs.md",   # Quest emote system — ALWAYS loaded (prevents fake table errors)
     "enums.md",
     "spells.md",

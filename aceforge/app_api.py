@@ -16,6 +16,7 @@ from .config import Config
 from .skill_loader import SkillLoader
 from .api_client import APIClient, KNOWN_ENDPOINTS, DEFAULT_MODELS
 from .sql_parser import parse_and_save_files
+from .emote_parser import parse_emote_text
 
 
 class AppAPI(LoreMixin):
@@ -30,7 +31,8 @@ class AppAPI(LoreMixin):
         )
         self._window = None
         self._generating = False
-        self._chunk_queue = queue.Queue()
+        self._chunk_queue      = queue.Queue()
+        self._last_ai_response = ''  # stored Python-side to avoid bridge size limit
 
     def set_window(self, window):
         self._window = window
@@ -131,20 +133,345 @@ class AppAPI(LoreMixin):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def save_ai_files(self, full_response: str, content_type: str) -> dict:
+    # ── Emote Parser ──────────────────────────────────────────────────────────
+
+    def convert_emotes(self, emote_text: str, wcid: int) -> dict:
+        """
+        Convert WeenieFab compact emote text → ACEmulator SQL.
+        Called from JS as: window.pywebview.api.convert_emotes(text, wcid)
+
+        Returns:
+            {
+              success:      bool,
+              sql:          str,       # ready-to-paste SQL
+              warnings:     [str],     # non-fatal parser warnings
+              emote_count:  int,
+              action_count: int,
+              error:        str|None,
+            }
+        """
         try:
-            output_dir = self.config.output_dir or str(
-                Path.home() / "Documents" / "ACEForge" / "output"
+            if not emote_text or not emote_text.strip():
+                return {
+                    "success": False, "sql": "", "warnings": [],
+                    "emote_count": 0, "action_count": 0,
+                    "error": "Emote text is empty.",
+                }
+            try:
+                wcid = int(wcid)
+            except (TypeError, ValueError):
+                wcid = 850000
+
+            result = parse_emote_text(emote_text, wcid)
+            if result["error"]:
+                return {
+                    "success": False,
+                    "sql":          "",
+                    "warnings":     result["warnings"],
+                    "emote_count":  0,
+                    "action_count": 0,
+                    "error":        result["error"],
+                }
+            return {
+                "success":      True,
+                "sql":          result["sql"],
+                "warnings":     result["warnings"],
+                "emote_count":  result["emote_count"],
+                "action_count": result["action_count"],
+                "blocks":       result.get("blocks", []),
+                "error":        None,
+            }
+        except Exception as e:
+            import traceback
+            return {
+                "success":      False,
+                "sql":          "",
+                "warnings":     [traceback.format_exc()],
+                "emote_count":  0,
+                "action_count": 0,
+                "error":        str(e),
+            }
+
+    def start_planning(self, prompt: str, content_type: str) -> dict:
+        """Phase 1: Ask AI to produce a JSON plan of files needed."""
+        if self._generating:
+            return {"success": False, "error": "Already generating."}
+        if not self.config.api_key:
+            return {"success": False, "error": "No API key configured."}
+
+        self._generating = True
+        while not self._chunk_queue.empty():
+            try: self._chunk_queue.get_nowait()
+            except: break
+
+        wcid_ranges = self.config.get_wcid_ranges()
+        server_name = self.config.server_name or "Shattered Dawn"
+
+        system_prompt = f"""You are an ACEmulator content planner for the server "{server_name}".
+The user will describe content they want created. Your job is to plan the SQL files needed.
+
+Respond with ONLY a valid JSON object — no markdown, no explanation, no code fences.
+
+JSON format:
+{{
+  "summary": "one sentence describing what will be created",
+  "files": [
+    {{"index": 0, "name": "WCID Filename.sql", "type": "creature|npc|item|weapon|armor|jewelry|quest|generator", "wcid": 850000, "description": "what this file creates"}}
+  ]
+}}
+
+WCID ranges for {server_name}:
+- Creatures: 800000-809999
+- Items/Custom: 810000-819999  
+- Portals: 820000-829999
+- Bosses: 840000-849999
+- NPCs: 850000-859999
+- Kill Contracts: 860000-869999
+- Custom Gear/Jewelry: 870000-879999
+- Generators: target_wcid + 1000000
+
+Rules:
+- Assign realistic WCIDs from the correct range
+- List files in dependency order (items before quests that reference them)
+- Keep file count realistic (typically 1-8 files)
+- Name files as "WCID Descriptive Name.sql" """
+
+        self.api_client.update_credentials(
+            api_key=self.config.api_key,
+            model=self.config.model,
+            provider=self.config.provider,
+            base_url=self.config.base_url,
+        )
+
+        def _plan_done(text: str):
+            self._generating = False
+            self._last_plan_text = text
+            self._chunk_queue.put({"type": "plan_ready", "text": text})
+            print(f"[PLAN] done, {len(text)} chars", flush=True)
+
+        try:
+            threading.Thread(
+                target=self.api_client.stream_generate,
+                args=(system_prompt, prompt, self._on_chunk, _plan_done, self._on_error),
+                daemon=True,
+            ).start()
+        except Exception as e:
+            self._generating = False
+            return {"success": False, "error": str(e)}
+        return {"success": True}
+
+    def generate_planned_file(self, plan_json: str, file_index: int,
+                              original_prompt: str) -> dict:
+        """Phase 2: Generate SQL for one specific file from the plan."""
+        if self._generating:
+            return {"success": False, "error": "Already generating."}
+        if not self.config.api_key:
+            return {"success": False, "error": "No API key configured."}
+
+        try:
+            plan = json.loads(plan_json)
+            file_entry = plan["files"][file_index]
+        except Exception as e:
+            return {"success": False, "error": f"Plan parse error: {e}"}
+
+        server_name = self.config.server_name or "Shattered Dawn"
+        fname = file_entry.get("name", "output.sql")
+        ftype = file_entry.get("type", "creature")
+        wcid  = file_entry.get("wcid", 800000)
+        fdesc = file_entry.get("description", "")
+        total = len(plan.get("files", []))
+
+        # Build context about other files for cross-references
+        other_files = [f for i, f in enumerate(plan["files"]) if i != file_index]
+        ref_ctx = "\n".join(
+            f"- WCID {f['wcid']}: {f['name']} ({f['description']})"
+            for f in other_files
+        ) or "None"
+
+        # Load the skill system prompt for this content type
+        try:
+            weenie_context = self._build_weenie_context(original_prompt, ftype)
+            skill_system = self.skill_loader.build_system_prompt(
+                content_type=ftype,
+                server_name=server_name,
+                wcid_ranges=self.config.get_wcid_ranges(),
+                author=self.config.get("author", ""),
+                weenie_context=weenie_context,
+                is_local=False,
             )
-            # Save all files flat into output_dir — no per-generation subfolder
+        except Exception:
+            skill_system = f"You are an ACEmulator SQL expert for {server_name}."
+
+        system_prompt = f"""{skill_system}
+
+You are generating FILE {file_index + 1} of {total} in a planned sequence.
+Generate ONLY this one file. Do not generate other files.
+
+File to generate: {fname}
+WCID: {wcid}
+Type: {ftype}
+Description: {fdesc}
+
+Other files in this sequence (for WCID cross-references if needed):
+{ref_ctx}
+
+Output the complete SQL for ONLY this file.
+Start with: /* ===== FILE: {fname} ===== */"""
+
+        self._generating = True
+        self._last_ai_response = ""
+        while not self._chunk_queue.empty():
+            try: self._chunk_queue.get_nowait()
+            except: break
+
+        self.api_client.update_credentials(
+            api_key=self.config.api_key,
+            model=self.config.model,
+            provider=self.config.provider,
+            base_url=self.config.base_url,
+        )
+
+        file_prompt = (
+            f"Generate the SQL for: {fdesc}\n"
+            f"Original request: {original_prompt}\n"
+            f"File name: {fname} | WCID: {wcid}"
+        )
+
+        def _file_done(text: str):
+            self._generating = False
+            text = self._process_emote_scripts(text)   # convert WeenieFab blocks → SQL
+            self._last_ai_response = text
+            # Auto-save this file
+            save_result = self._save_single_file(text, fname)
+            self._chunk_queue.put({
+                "type": "file_done",
+                "file_index": file_index,
+                "file_name": fname,
+                "save": save_result,
+                "total": total,
+            })
+            print(f"[FILE] {file_index+1}/{total} done: {fname}", flush=True)
+
+        try:
+            threading.Thread(
+                target=self.api_client.stream_generate,
+                args=(system_prompt, file_prompt, self._on_chunk, _file_done, self._on_error),
+                daemon=True,
+            ).start()
+        except Exception as e:
+            self._generating = False
+            return {"success": False, "error": str(e)}
+        return {"success": True}
+
+    def _save_single_file(self, content: str, suggested_name: str) -> dict:
+        """Save one AI-generated SQL file immediately."""
+        try:
+            output_dir = str(self.config.output_dir or "").strip()
+            if not output_dir:
+                output_dir = str(Path.home() / "Documents" / "ACEForge" / "output")
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            written = parse_and_save_files(content, output_dir, subfolder="")
+            if not written:
+                # Fallback: save with suggested name
+                from aceforge.sql_parser import sanitize_filename, clean_sql
+                fname = sanitize_filename(suggested_name)
+                fpath = Path(output_dir) / fname
+                fpath.write_text(clean_sql(content), encoding="utf-8")
+                written = [str(fpath)]
+            return {
+                "success": True,
+                "files": [os.path.basename(f) for f in written],
+                "folder": output_dir,
+            }
+        except Exception as e:
+            import traceback
+            print(f"[SAVE] error: {traceback.format_exc()}", flush=True)
+            return {"success": False, "error": str(e)}
+
+
+    def continue_generation(self, pass_num: int) -> dict:
+        """Continue a truncated generation — appends to _last_ai_response."""
+        if self._generating:
+            return {"success": False, "error": "Already generating."}
+
+        tail = self._last_ai_response[-600:] if self._last_ai_response else ""
+        if not tail:
+            return {"success": False, "error": "No previous output to continue from."}
+
+        continuation_prompt = (
+            "Continue generating exactly where you left off. "
+            "Do NOT restate the file header or any SQL already written. "
+            "Do NOT add introductory text. "
+            "Begin IMMEDIATELY from after this last line:\n\n"
+            f"...{tail}"
+        )
+        # Minimal system prompt for continuation
+        system_prompt = (
+            "You are continuing an ACEmulator SQL generation. "
+            "Output only raw SQL continuation with /* ===== FILE: name.sql ===== */ "
+            "markers for any new files. No markdown fences, no explanations."
+        )
+        self._generating = True
+        self._continuation_pass = pass_num
+
+        def _on_done_continuation(text: str):
+            self._generating = False
+            text = self._process_emote_scripts(text)   # convert WeenieFab blocks → SQL
+            self._last_ai_response = self._last_ai_response + "\n" + text
+            stripped = text.rstrip()
+            looks_truncated = bool(stripped) and not any(
+                stripped.endswith(s) for s in (";", "*/", "---", "```")
+            )
+            self._chunk_queue.put({
+                "type": "done",
+                "truncated": looks_truncated,
+                "pass": pass_num,
+            })
+            print(f"[API] continuation pass {pass_num} done, appended {len(text)} chars", flush=True)
+
+        try:
+            self.api_client.update_credentials(
+                api_key=self.config.api_key,
+                model=self.config.model,
+                provider=self.config.provider,
+                base_url=self.config.base_url,
+            )
+            threading.Thread(
+                target=self.api_client.stream_generate,
+                args=(system_prompt, continuation_prompt,
+                      self._on_chunk, _on_done_continuation, self._on_error),
+                daemon=True,
+            ).start()
+        except Exception as e:
+            self._generating = False
+            return {"success": False, "error": str(e)}
+        return {"success": True}
+
+
+    def save_ai_files(self, content_type: str = "creature") -> dict:
+        try:
+            full_response = self._last_ai_response
+            if not full_response:
+                return {"success": False, "error": "No content to save — generate first."}
+            output_dir = str(self.config.output_dir or "").strip()
+            if not output_dir:
+                output_dir = str(Path.home() / "Documents" / "ACEForge" / "output")
+            # Ensure output dir exists
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
             written = parse_and_save_files(full_response, output_dir, subfolder="")
+            if not written:
+                return {"success": False, "error": "Parser found no SQL content in response. Ensure AI output contains FILE: markers or valid SQL."}
             return {
                 "success": True,
                 "files":  [os.path.basename(f) for f in written],
                 "count":  len(written),
                 "folder": output_dir,
             }
+        except PermissionError as e:
+            return {"success": False, "error": f"Permission denied writing to output directory: {e}"}
         except Exception as e:
+            import traceback
+            print(f"[SAVE] exception: {traceback.format_exc()}", flush=True)
             return {"success": False, "error": str(e)}
 
     # ── Content Libraries ─────────────────────────────────────────────────────
@@ -874,6 +1201,62 @@ class AppAPI(LoreMixin):
         self._generating = False
         return {"success": True}
 
+
+    # ── Emote Script Post-Processor ───────────────────────────────────────────
+
+    def _process_emote_scripts(self, text: str) -> str:
+        """
+        Scan AI output for WeenieFab emote blocks and convert them to SQL.
+
+        Marker format (written by AI):
+            -- EMOTE SCRIPT (WCID: 850000)
+            Use:
+                - Tell: Hello!
+            -- END EMOTE SCRIPT
+
+        Each block is replaced with the converted SQL in-place.
+        Conversion errors are left as SQL comments so the file is still usable.
+        """
+        import re
+        pattern = re.compile(
+            r'--\s*EMOTE SCRIPT\s*\(WCID:\s*(\d+)\)\s*\n(.*?)\n\s*--\s*END EMOTE SCRIPT',
+            re.DOTALL | re.IGNORECASE,
+        )
+
+        def _replace(m: re.Match) -> str:
+            wcid   = int(m.group(1))
+            script = m.group(2).strip()
+            if not script:
+                return ''
+            try:
+                result = parse_emote_text(script, wcid)
+                if result['error']:
+                    return (
+                        f'-- EMOTE CONVERSION ERROR: {result["error"]}\n'
+                        f'-- Original script preserved below:\n'
+                        + m.group(0)
+                    )
+                # Prefix with summary comment
+                header = (
+                    f'-- Emote rows: {result["emote_count"]}  '
+                    f'Action rows: {result["action_count"]}\n'
+                )
+                warnings = ''.join(
+                    f'-- WARN: {w}\n' for w in result['warnings']
+                )
+                return header + warnings + result['sql']
+            except Exception as exc:
+                return (
+                    f'-- EMOTE CONVERSION EXCEPTION: {exc}\n'
+                    + m.group(0)
+                )
+
+        converted = pattern.sub(_replace, text)
+        n_blocks   = len(pattern.findall(text))
+        if n_blocks:
+            print(f'[EMOTE] converted {n_blocks} emote block(s)', flush=True)
+        return converted
+
     def _on_chunk(self, text: str):
         if not self._generating:
             return
@@ -882,6 +1265,8 @@ class AppAPI(LoreMixin):
 
     def _on_done(self, text: str):
         self._generating = False
+        text = self._process_emote_scripts(text)   # convert WeenieFab blocks → SQL
+        self._last_ai_response = text              # store full text Python-side (avoid bridge size limit)
         stripped = text.rstrip()
         looks_truncated = bool(stripped) and not any(
             stripped.endswith(s) for s in (";", "*/", "---", "```")
