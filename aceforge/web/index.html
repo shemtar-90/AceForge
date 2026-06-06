@@ -400,6 +400,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
     <div class="sql-hdr">
       <div class="sql-title">Generated SQL</div>
       <div class="sql-btns">
+        <button class="sql-btn" onclick="importSQLToBuilder()" title="Import a .sql file to edit in the builder">⬆ Import</button>
         <button class="sql-btn" onclick="copySQL()">⊡ Copy</button>
         <button class="sql-btn" onclick="saveSQL()">+ Save</button>
       </div>
@@ -418,15 +419,17 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
   <div class="ai-left">
     <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:16px">
       <div style="font-family:'Cinzel',serif;font-size:14px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--crimson)">✨ AI Content Generator</div>
-      <div style="font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:13px">Describe what you want — AI generates complete SQL.</div>
+      <div style="font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:13px" id="aiModeDesc">Describe what you want — or import existing SQL to edit it.</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px" id="aiTypeTabs"></div>
     <div style="border:1px solid var(--border);background:var(--parch);padding:14px">
       <div style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:8px">Describe your content</div>
-      <textarea id="aiPrompt" style="width:100%;height:120px;font-family:'IM Fell English',serif;font-style:italic;font-size:15px;color:var(--ink);background:transparent;border:none;outline:none;resize:none;line-height:1.6;user-select:text" placeholder="e.g. A level 180 ice drudge for a snowy biome. High cold resist, weak to fire. Drops T6 loot. Casts Frost Bolt and Frost Volley."></textarea>
+      <textarea id="aiPrompt" style="width:100%;height:120px;font-family:'IM Fell English',serif;font-style:italic;font-size:15px;color:var(--ink);background:transparent;border:none;outline:none;resize:none;line-height:1.6;user-select:text" placeholder="e.g. A level 180 ice drudge — or import existing SQL above and describe changes like 'Make this mob stronger for level 250+'."></textarea>
     </div>
     <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
       <button onclick="openOllamaSetup()" style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:2px" title="Set up local AI — no API key required">⟳ LOCAL AI</button>
+      <button class="ai-gen-btn" id="aiImportBtn" onclick="importSQLToAI()" style="background:transparent;border:1px solid var(--border);color:var(--ink-mid)" title="Import an existing SQL file for AI editing">⬆ Import SQL</button>
+      <span id="aiImportBadge" style="display:none;font-family:var(--ui-font);font-size:9px;color:var(--gold);border:1px solid var(--gold);padding:2px 7px;letter-spacing:.05em;cursor:pointer" onclick="clearAIImport()" title="Click to clear imported SQL">📄 <span id="aiImportName"></span> ✕</span>
       <button class="ai-gen-btn" id="aiGenBtn" onclick="startAIGeneration()" disabled title="Connect an API key in Settings first">▶ Generate</button>
       <button class="ai-stop-btn" id="aiStopBtn" onclick="stopGeneration()" style="display:none">⏹ Stop</button>
       <button class="ai-gen-btn" onclick="clearAI()" style="background:transparent;border:1px solid var(--border);color:var(--ink-mid)">🗑 Clear</button>
@@ -889,6 +892,30 @@ const DEFAULT_NAMES={
   generator:'New Generator', recipe:'New Recipe', quest:'New Quest'
 };
 
+
+// ── Creature Type → Default DID values ─────────────────────────────────────
+// Maps CreatureType ID → {did_type: default_value} for auto-population when
+// creature type changes. Values from standard ACE weenie database.
+// Setup=DID1 (3D model), Icon=DID8, MotionTable=DID6, SoundTable=DID9, PhysicsEffectTable=DID22
+const CREATURE_TYPE_DID_DEFAULTS = {
+  // Human family (bipeds)
+  1:  { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Undefined
+  10: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Raven (avian)
+  16: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Quadruped
+  17: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Armoredillo
+  19: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Virindi
+  20: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Wisp/Elemental
+  23: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Quadruped (alt)
+  29: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Wisp (alt)
+  31: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Human
+  44: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Grievver
+  46: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Quadruped (alt2)
+  48: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // HollowMinion
+};
+// Note: Setup (DID 1) varies per creature and should be set manually from the
+// weenie database. The above provides Motion/Sound/Physics defaults only.
+// A full DID database per creature type requires the ACE weenie reference files.
+
 const CREATURE_TYPES=[[0,'None'],[1,'Olthoi'],[2,'Banderling'],[3,'Drudge'],[4,'Mosswart'],[5,'Lugian'],[6,'Tumerok'],[7,'Mite'],[8,'Tusker'],[13,'Golem'],[14,'Undead'],[15,'Gromnie'],[16,'Reedshark'],[17,'Armoredillo'],[18,'Fae'],[19,'Virindi'],[20,'Wisp'],[22,'Shadow'],[23,'Mattekar'],[28,'Monouga'],[29,'Zefir'],[30,'Skeleton'],[31,'Human'],[32,'Shreth'],[38,'FireElemental'],[39,'Snowman'],[44,'Grievver'],[46,'Ursuin'],[48,'HollowMinion'],[60,'AcidElemental'],[61,'FrostElemental'],[75,'Burun'],[99,'GearKnight'],[100,'Gurog'],[101,'Anekshay']];
 const DMG_TYPES=[[0,'None'],[1,'Slash'],[2,'Pierce'],[4,'Bludgeon'],[8,'Cold'],[16,'Fire'],[32,'Acid'],[64,'Electric'],[1024,'Nether']];
 const WEP_SKILLS=[[44,'HeavyWeapons'],[45,'LightWeapons'],[46,'FinesseWeapons'],[41,'TwoHandedCombat'],[47,'MissileWeapons'],[34,'WarMagic'],[33,'LifeMagic'],[43,'VoidMagic']];
@@ -900,15 +927,840 @@ const ITEM_USE=[[1,'No'],[2,'Self'],[4,'Wielded'],[8,'Contained'],[16,'Viewed'],
 const BONDED=[[-2,'Destroy on Death'],[-1,'Slippery'],[0,'Normal'],[1,'Bonded (kept)'],[2,'Sticky']];
 const ATTUNED=[[0,'Normal'],[1,'Attuned'],[2,'Sticky']];
 const PALETTES=[[0,'None'],[1,'AquaBlue'],[2,'Blue'],[4,'Brown'],[8,'Green'],[9,'Grey'],[14,'Red'],[17,'Yellow'],[19,'Copper'],[20,'Silver'],[21,'Gold'],[39,'Black'],[40,'Bronze'],[41,'SandyYellow'],[46,'Tan'],[47,'PastyYellow'],[48,'White']];
-const ALL_SKILLS=[[6,'MeleeDefense'],[7,'MissileDefense'],[14,'ArcaneLore'],[15,'MagicDefense'],[16,'ManaConversion'],[33,'LifeMagic'],[34,'WarMagic'],[41,'TwoHandedCombat'],[43,'VoidMagic'],[44,'HeavyWeapons'],[45,'LightWeapons'],[46,'FinesseWeapons'],[47,'MissileWeapons'],[48,'Shield'],[49,'DualWield'],[50,'Recklessness'],[51,'SneakAttack'],[52,'DirtyFighting']];
+const ALL_SKILLS=[
+  [1,'Axe'],[2,'Bow'],[3,'Crossbow'],[4,'Dagger'],[5,'Mace'],
+  [6,'MeleeDefense'],[7,'MissileDefense'],[8,'Sling'],[9,'Spear'],[10,'Staff'],
+  [11,'Sword'],[12,'ThrownWeapon'],[13,'UnarmedCombat'],[14,'ArcaneLore'],
+  [15,'MagicDefense'],[16,'ManaConversion'],[17,'Spellcraft'],
+  [18,'ItemAppraisal'],[19,'PersonalAppraisal'],[20,'Deception'],
+  [21,'Healing'],[22,'Jump'],[23,'Lockpick'],[24,'Run'],
+  [25,'Awareness'],[26,'ArmsAndArmorRepair'],[27,'CreatureAppraisal'],
+  [28,'WeaponAppraisal'],[29,'ArmorAppraisal'],[30,'MagicItemAppraisal'],
+  [31,'CreatureEnchantment'],[32,'ItemEnchantment'],[33,'LifeMagic'],
+  [34,'WarMagic'],[35,'Leadership'],[36,'Loyalty'],[37,'Fletching'],
+  [38,'Alchemy'],[39,'Cooking'],[40,'Salvaging'],[41,'TwoHandedCombat'],
+  [42,'Gearcraft'],[43,'VoidMagic'],[44,'HeavyWeapons'],[45,'LightWeapons'],
+  [46,'FinesseWeapons'],[47,'MissileWeapons'],[48,'Shield'],
+  [49,'DualWield'],[50,'Recklessness'],[51,'SneakAttack'],
+  [52,'DirtyFighting'],[53,'Challenge'],[54,'Summoning'],
+];
 const SKILL_SAC=[[1,'Untrained'],[2,'Trained'],[3,'Specialized']];
 const RADAR_COLORS=[[1,'Blue'],[2,'Gold'],[3,'White'],[4,'Purple'],[5,'Red'],[7,'Green'],[8,'Yellow (NPC)']];
 const WEENIE_TYPES=[[1,'Generic'],[2,'Clothing/Armor'],[3,'MissileLauncher'],[4,'Missile'],[6,'MeleeWeapon'],[7,'Portal'],[8,'Book'],[9,'Coin'],[10,'Creature'],[12,'Vendor'],[18,'Food'],[19,'Door'],[20,'Chest'],[21,'Container'],[22,'Key'],[24,'PressurePlate'],[25,'LifeStone'],[26,'Switch'],[28,'Healer'],[29,'LightSource'],[32,'SpellComponent'],[34,'Scroll'],[35,'Caster'],[37,'ManaStone'],[38,'Gem'],[51,'Stackable']];
-const PROP_INT={1:'ItemType',2:'CreatureType',3:'PaletteTemplate',4:'ClothingPriority',5:'EncumbranceVal',6:'ItemsCapacity',7:'ContainersCapacity',8:'Mass',9:'ValidLocations',10:'CurrentWieldedLocation',11:'MaxStackSize',12:'StackSize',13:'StackUnitEncumbrance',14:'StackUnitMass',15:'StackUnitValue',16:'ItemUseable',19:'Value',25:'Level',27:'ArmorType',28:'ArmorLevel',33:'Bonded',40:'CombatMode',44:'Damage',45:'DamageType',46:'DefaultCombatStyle',47:'AttackType',48:'WeaponSkill',49:'WeaponTime',51:'CombatUse',67:'Tolerance',68:'TargetingTactic',74:'MerchandiseItemTypes',75:'MerchandiseMinValue',76:'MerchandiseMaxValue',81:'MaxGeneratedObjects',82:'InitGeneratedObjects',86:'MinLevel',87:'MaxLevel',93:'PhysicsState',95:'RadarBlipColor',100:'GeneratorType',101:'AiAllowedCombatStyle',106:'ItemSpellcraft',107:'ItemCurMana',108:'ItemMaxMana',114:'Attuned',126:'VendorHappyMean',133:'ShowableOnRadar',134:'PlayerKillerStatus',140:'AiOptions',142:'GeneratorTimeType',146:'XpOverride',158:'WieldRequirements',159:'WieldSkilltype',160:'WieldDifficulty',204:'ElementalDamageBonus',270:'WieldRequirements2',271:'WieldSkilltype2',272:'WieldDifficulty2',292:'Cleaving',307:'DamageRating',308:'DamageResistRating',313:'CritRating',314:'CritDamageRating',315:'CritResistRating',317:'HealingResistRating',323:'HealingBoostRating',332:'LuminanceAward',353:'WeaponType',390:'Enlightenment'};
-const PROP_BOOL={1:'Stuck',6:'AiUsesMana',7:'AiUseHumanMagicAnimations',8:'AllowGive',11:'IgnoreCollisions',12:'ReportCollisions',13:'Ethereal',14:'GravityStatus',15:'LightsStatus',18:'Visibility',19:'Attackable',22:'Inscribable',23:'DestroyOnSell',29:'NoCorpse',39:'DealMagicalItems',41:'ReportCollisionsAsEnvironment',42:'AllowEdgeSlide',50:'NeverFailCasting',52:'AiImmobile',63:'UnlimitedUse',65:'IgnoreMagicResist',66:'IgnoreMagicArmor',79:'AiAcceptEverything',91:'Retained',98:'Invincible',120:'TreasureCorpse'};
-const PROP_FLOAT={1:'HeartbeatInterval',3:'HealthRate',4:'StaminaRate',5:'ManaRate',12:'Shade',13:'ArmorModVsSlash',14:'ArmorModVsPierce',15:'ArmorModVsBludgeon',16:'ArmorModVsCold',17:'ArmorModVsFire',18:'ArmorModVsAcid',19:'ArmorModVsElectric',21:'WeaponLength',22:'DamageVariance',29:'WeaponDefense',31:'VisualAwarenessRange',34:'PowerupTime',37:'BuyPrice',38:'SellPrice',39:'DefaultScale',41:'RegenerationInterval',43:'GeneratorRadius',54:'UseRadius',62:'WeaponOffense',64:'ResistSlash',65:'ResistPierce',66:'ResistBludgeon',67:'ResistFire',68:'ResistCold',69:'ResistAcid',70:'ResistElectric',71:'ResistHealthBoost',72:'ResistStaminaDrain',75:'ResistManaBoost',80:'AiUseMagicDelay',104:'ObviousRadarRange',125:'ResistHealthDrain',136:'CriticalMultiplier',144:'ManaConversionMod',149:'WeaponMissileDefense',150:'WeaponMagicDefense',152:'ElementalDamageMod',165:'ArmorModVsNether',166:'ResistNether'};
-const PROP_STRING={1:'Name',7:'Inscription',14:'Use',15:'ShortDesc',16:'LongDesc',17:'ActivationTalk',18:'UseMessage',20:'PluralName',22:'ActivationFailure',33:'Quest',34:'GeneratorEvent',38:'AppraisalPortalDestination',45:'KillQuest',49:'KillQuest2',50:'KillQuest3'};
-const PROP_DID={1:'Setup',2:'MotionTable',3:'SoundTable',4:'CombatTable',6:'PaletteBase',7:'ClothingBase',8:'Icon',9:'EyesTexture',10:'NoseTexture',11:'MouthTexture',12:'DefaultStyle',13:'DefaultSubStyle',14:'HeadObject',15:'HairTexture',16:'DefaultHairColor',17:'DefaultEyesColor',18:'DefaultSkinColor',19:'DefaultHairTexture',20:'IconHires',21:'ObjCells',22:'PhysicsEffectTable',23:'UseSound',24:'UseTargetAnimation',25:'UseTargetFailedAnimation',26:'ItemSkillLevelLimit',27:'LastPortal',28:'LinkedPortalOne',29:'WieldedTreasureType',30:'InventoryTreasureType',31:'ShopTreasureType',32:'DeathTreasureType',33:'MutateFilter',34:'UseCreateItem',35:'TsysMutationFilter',36:'IconOverlay',37:'IconOverlay2',38:'IconUnderlay',39:'AugmentationMutationData',40:'AugmentationEffect',41:'ProcSpell',42:'AugmentationCreateItem',43:'AlternateCurrency',44:'BlueSurgeSpell',45:'YellowSurgeSpell',46:'RedSurgeSpell',47:'OlthoiDeathTreasureType',48:'VendorShopTemplate',49:'LinkedLifestone',50:'LinkedPortalTwo',51:'OriginalPortal',52:'BiomeCombatTable',53:'UseItemAnimation',54:'UseItemFailAnimation',55:'CreateItemWielded',56:'EquipmentSetID',57:'WieldedTreasure2',58:'WieldedTreasure3',59:'WieldedTreasure4',60:'NpcLooksLikeObject',61:'PCAPPhysicsBurden'};
+const PROP_INT={
+  1:'ItemType',
+  2:'CreatureType',
+  3:'PaletteTemplate',
+  4:'ClothingPriority',
+  5:'EncumbVal',
+  6:'ItemsCapacity',
+  7:'ContainersCapacity',
+  8:'Mass',
+  9:'Locations',
+  10:'CurrentWieldedLocation',
+  11:'MaxStackSize',
+  12:'StackSize',
+  13:'StackUnitEncumb',
+  14:'StackUnitMass',
+  15:'StackUnitValue',
+  16:'ItemUseable',
+  17:'RareId',
+  18:'UiEffects',
+  19:'Value',
+  20:'CoinValue',
+  21:'TotalExperience',
+  22:'AvailableCharacter',
+  23:'TotalSkillCredits',
+  24:'AvailableSkillCredits',
+  25:'Level',
+  26:'AccountRequirements',
+  27:'ArmorType',
+  28:'ArmorLevel',
+  29:'AllegianceCpPool',
+  30:'AllegianceRank',
+  31:'ChannelsAllowed',
+  32:'ChannelsActive',
+  33:'Bonded',
+  34:'MonarchsRank',
+  35:'AllegianceFollowers',
+  36:'ResistMagic',
+  37:'ResistItemAppraisal',
+  38:'ResistLockpick',
+  39:'DeprecatedResistRepair',
+  40:'CombatMode',
+  41:'CurrentAttackHeight',
+  42:'CombatCollisions',
+  43:'NumDeaths',
+  44:'Damage',
+  45:'DamageType',
+  46:'DefaultCombatStyle',
+  47:'AttackType',
+  48:'WeaponSkill',
+  49:'WeaponTime',
+  50:'AmmoType',
+  51:'CombatUse',
+  52:'ParentLocation',
+  53:'PlacementPosition',
+  54:'WeaponEncumbrance',
+  55:'WeaponMass',
+  56:'ShieldValue',
+  57:'ShieldEncumbrance',
+  58:'MissileInventoryLocation',
+  59:'FullDamageType',
+  60:'WeaponRange',
+  61:'AttackersSkill',
+  62:'DefendersSkill',
+  63:'AttackersSkillValue',
+  64:'AttackersClass',
+  65:'Placement',
+  66:'CheckpointStatus',
+  67:'Tolerance',
+  68:'TargetingTactic',
+  69:'CombatTactic',
+  70:'HomesickTargetingTactic',
+  71:'NumFollowFailures',
+  72:'FriendType',
+  73:'FoeType',
+  74:'MerchandiseItemTypes',
+  75:'MerchandiseMinValue',
+  76:'MerchandiseMaxValue',
+  77:'NumItemsSold',
+  78:'NumItemsBought',
+  79:'MoneyIncome',
+  80:'MoneyOutflow',
+  81:'MaxGeneratedObjects',
+  82:'InitGeneratedObjects',
+  83:'ActivationResponse',
+  84:'OriginalValue',
+  85:'NumMoveFailures',
+  86:'MinLevel',
+  87:'MaxLevel',
+  88:'LockpickMod',
+  89:'BoosterEnum',
+  90:'BoostValue',
+  91:'MaxStructure',
+  92:'Structure',
+  93:'PhysicsState',
+  94:'TargetType',
+  95:'RadarblipColor',
+  96:'EncumbCapacity',
+  97:'LoginTimestamp',
+  98:'CreationTimestamp',
+  99:'PkLevelModifier',
+  100:'GeneratorType',
+  101:'AiAllowedCombatStyle',
+  102:'LogoffTimestamp',
+  103:'GeneratorDestructionType',
+  104:'ActivationCreateClass',
+  105:'ItemWorkmanship',
+  106:'ItemSpellcraft',
+  107:'ItemCurMana',
+  108:'ItemMaxMana',
+  109:'ItemDifficulty',
+  110:'ItemAllegianceRankLimit',
+  111:'PortalBitmask',
+  112:'AdvocateLevel',
+  113:'Gender',
+  114:'Attuned',
+  115:'ItemSkillLevelLimit',
+  116:'GateLogic',
+  117:'ItemManaCost',
+  118:'Logoff',
+  119:'Active',
+  120:'AttackHeight',
+  121:'NumAttackFailures',
+  122:'AiCpThreshold',
+  123:'AiAdvancementStrategy',
+  124:'Version',
+  125:'Age',
+  126:'VendorHappyMean',
+  127:'VendorHappyVariance',
+  128:'CloakStatus',
+  129:'VitaeCpPool',
+  130:'NumServicesSold',
+  131:'MaterialType',
+  132:'NumAllegianceBreaks',
+  133:'ShowableOnRadar',
+  134:'PlayerKillerStatus',
+  135:'VendorHappyMaxItems',
+  136:'ScorePageNum',
+  137:'ScoreConfigNum',
+  138:'ScoreNumScores',
+  139:'DeathLevel',
+  140:'AiOptions',
+  141:'OpenToEveryone',
+  142:'GeneratorTimeType',
+  143:'GeneratorStartTime',
+  144:'GeneratorEndTime',
+  145:'GeneratorEndDestructionType',
+  146:'XpOverride',
+  147:'NumCrashAndTurns',
+  148:'ComponentWarningThreshold',
+  149:'HouseStatus',
+  150:'HookPlacement',
+  151:'HookType',
+  152:'HookItemType',
+  153:'AiPpThreshold',
+  154:'GeneratorVersion',
+  155:'HouseType',
+  156:'PickupEmoteOffset',
+  157:'WeenieIteration',
+  158:'WieldRequirements',
+  159:'WieldSkilltype',
+  160:'WieldDifficulty',
+  161:'HouseMaxHooksUsable',
+  162:'HouseCurrentHooksUsable',
+  163:'AllegianceMinLevel',
+  164:'AllegianceMaxLevel',
+  165:'HouseRelinkHookCount',
+  166:'SlayerCreatureType',
+  167:'ConfirmationInProgress',
+  168:'ConfirmationTypeInProgress',
+  169:'TsysMutationData',
+  170:'NumItemsInMaterial',
+  171:'NumTimesTinkered',
+  172:'AppraisalLongDescDecoration',
+  173:'AppraisalLockpickSuccessPercent',
+  174:'AppraisalPages',
+  175:'AppraisalMaxPages',
+  176:'AppraisalItemSkill',
+  177:'GemCount',
+  178:'GemType',
+  179:'ImbuedEffect',
+  180:'AttackersRawSkillValue',
+  181:'ChessRank',
+  182:'ChessTotalgames',
+  183:'ChessGameswon',
+  184:'ChessGameslost',
+  185:'TypeOfAlteration',
+  186:'SkillToBeAltered',
+  187:'SkillAlterationCount',
+  188:'HeritageGroup',
+  189:'TransferFromAttribute',
+  190:'TransferToAttribute',
+  191:'AttributeTransferCount',
+  192:'FakeFishingSkill',
+  193:'NumKeys',
+  194:'DeathTimestamp',
+  195:'PkTimestamp',
+  196:'VictimTimestamp',
+  197:'HookGroup',
+  198:'AllegianceSwearTimestamp',
+  199:'HousePurchaseTimestamp',
+  200:'RedirectableEquippedArmorCount',
+  201:'MeleedefenseImbuedeffecttypeCache',
+  202:'MissiledefenseImbuedeffecttypeCache',
+  203:'MagicdefenseImbuedeffecttypeCache',
+  204:'ElementalDamageBonus',
+  205:'ImbueAttempts',
+  206:'ImbueSuccesses',
+  207:'CreatureKills',
+  208:'PlayerKillsPk',
+  209:'PlayerKillsPkl',
+  210:'RaresTierOne',
+  211:'RaresTierTwo',
+  212:'RaresTierThree',
+  213:'RaresTierFour',
+  214:'RaresTierFive',
+  215:'AugmentationStat',
+  216:'AugmentationFamilyStat',
+  217:'AugmentationInnateFamily',
+  218:'AugmentationInnateStrength',
+  219:'AugmentationInnateEndurance',
+  220:'AugmentationInnateCoordination',
+  221:'AugmentationInnateQuickness',
+  222:'AugmentationInnateFocus',
+  223:'AugmentationInnateSelf',
+  224:'AugmentationSpecializeSalvaging',
+  225:'AugmentationSpecializeItemTinkering',
+  226:'AugmentationSpecializeArmorTinkering',
+  227:'AugmentationSpecializeMagicItemTinkering',
+  228:'AugmentationSpecializeWeaponTinkering',
+  229:'AugmentationExtraPackSlot',
+  230:'AugmentationIncreasedCarryingCapacity',
+  231:'AugmentationLessDeathItemLoss',
+  232:'AugmentationSpellsRemainPastDeath',
+  233:'AugmentationCriticalDefense',
+  234:'AugmentationBonusXp',
+  235:'AugmentationBonusSalvage',
+  236:'AugmentationBonusImbueChance',
+  237:'AugmentationFasterRegen',
+  238:'AugmentationIncreasedSpellDuration',
+  239:'AugmentationResistanceFamily',
+  240:'AugmentationResistanceSlash',
+  241:'AugmentationResistancePierce',
+  242:'AugmentationResistanceBlunt',
+  243:'AugmentationResistanceAcid',
+  244:'AugmentationResistanceFire',
+  245:'AugmentationResistanceFrost',
+  246:'AugmentationResistanceLightning',
+  247:'RaresTierOneLogin',
+  248:'RaresTierTwoLogin',
+  249:'RaresTierThreeLogin',
+  250:'RaresTierFourLogin',
+  251:'RaresTierFiveLogin',
+  252:'RaresLoginTimestamp',
+  253:'RaresTierSix',
+  254:'RaresTierSeven',
+  255:'RaresTierSixLogin',
+  256:'RaresTierSevenLogin',
+  257:'ItemAttributeLimit',
+  258:'ItemAttributeLevelLimit',
+  259:'ItemAttribute2ndLimit',
+  260:'ItemAttribute2ndLevelLimit',
+  261:'CharacterTitleId',
+  262:'NumCharacterTitles',
+  263:'ResistanceModifierType',
+  264:'FreeTinkersBitfield',
+  265:'EquipmentSetId',
+  266:'PetClass',
+  267:'Lifespan',
+  268:'RemainingLifespan',
+  269:'UseCreateQuantity',
+  270:'WieldRequirements2',
+  271:'WieldSkilltype2',
+  272:'WieldDifficulty2',
+  273:'WieldRequirements3',
+  274:'WieldSkilltype3',
+  275:'WieldDifficulty3',
+  276:'WieldRequirements4',
+  277:'WieldSkilltype4',
+  278:'WieldDifficulty4',
+  279:'Unique',
+  280:'SharedCooldown',
+  281:'Faction1Bits',
+  282:'Faction2Bits',
+  283:'Faction3Bits',
+  284:'Hatred1Bits',
+  285:'Hatred2Bits',
+  286:'Hatred3Bits',
+  287:'SocietyRankCelhan',
+  288:'SocietyRankEldweb',
+  289:'SocietyRankRadblo',
+  290:'HearLocalSignals',
+  291:'HearLocalSignalsRadius',
+  292:'Cleaving',
+  293:'AugmentationSpecializeGearcraft',
+  294:'AugmentationInfusedCreatureMagic',
+  295:'AugmentationInfusedItemMagic',
+  296:'AugmentationInfusedLifeMagic',
+  297:'AugmentationInfusedWarMagic',
+  298:'AugmentationCriticalExpertise',
+  299:'AugmentationCriticalPower',
+  300:'AugmentationSkilledMelee',
+  301:'AugmentationSkilledMissile',
+  302:'AugmentationSkilledMagic',
+  303:'ImbuedEffect2',
+  304:'ImbuedEffect3',
+  305:'ImbuedEffect4',
+  306:'ImbuedEffect5',
+  307:'DamageRating',
+  308:'DamageResistRating',
+  309:'AugmentationDamageBonus',
+  310:'AugmentationDamageReduction',
+  311:'ImbueStackingBits',
+  312:'HealOverTime',
+  313:'CritRating',
+  314:'CritDamageRating',
+  315:'CritResistRating',
+  316:'CritDamageResistRating',
+  317:'HealingResistRating',
+  318:'DamageOverTime',
+  319:'ItemMaxLevel',
+  320:'ItemXpStyle',
+  321:'EquipmentSetExtra',
+  322:'AetheriaBitfield',
+  323:'HealingBoostRating',
+  324:'HeritageSpecificArmor',
+  325:'AlternateRacialSkills',
+  326:'AugmentationJackOfAllTrades',
+  327:'AugmentationResistanceNether',
+  328:'AugmentationInfusedVoidMagic',
+  329:'WeaknessRating',
+  330:'NetherOverTime',
+  331:'NetherResistRating',
+  332:'LuminanceAward',
+  333:'LumAugDamageRating',
+  334:'LumAugDamageReductionRating',
+  335:'LumAugCritDamageRating',
+  336:'LumAugCritReductionRating',
+  337:'LumAugSurgeEffectRating',
+  338:'LumAugSurgeChanceRating',
+  339:'LumAugItemManaUsage',
+  340:'LumAugItemManaGain',
+  341:'LumAugVitality',
+  342:'LumAugHealingRating',
+  343:'LumAugSkilledCraft',
+  344:'LumAugSkilledSpec',
+  345:'LumAugNoDestroyCraft',
+  346:'RestrictInteraction',
+  347:'OlthoiLootTimestamp',
+  348:'OlthoiLootStep',
+  349:'UseCreatesContractId',
+  350:'DotResistRating',
+  351:'LifeResistRating',
+  352:'CloakWeaveProc',
+  353:'WeaponType',
+  354:'MeleeMastery',
+  355:'RangedMastery',
+  356:'SneakAttackRating',
+  357:'RecklessnessRating',
+  358:'DeceptionRating',
+  359:'CombatPetRange',
+  360:'WeaponAuraDamage',
+  361:'WeaponAuraSpeed',
+  362:'SummoningMastery',
+  363:'HeartbeatLifespan',
+  364:'UseLevelRequirement',
+  365:'LumAugAllSkills',
+  366:'UseRequiresSkill',
+  367:'UseRequiresSkillLevel',
+  368:'UseRequiresSkillSpec',
+  369:'UseRequiresLevel',
+  370:'GearDamage',
+  371:'GearDamageResist',
+  372:'GearCrit',
+  373:'GearCritResist',
+  374:'GearCritDamage',
+  375:'GearCritDamageResist',
+  376:'GearHealingBoost',
+  377:'GearNetherResist',
+  378:'GearLifeResist',
+  379:'GearMaxHealth',
+  380:'Unknown',
+  381:'PkDamage',
+  382:'PkDamageResist',
+  383:'GearPkDamage',
+  384:'GearPkDamageResist',
+  385:'Unknown',
+  386:'Overpower',
+  387:'OverpowerResist',
+  388:'GearOverpower',
+  389:'GearOverpowerResist',
+  390:'Enlightenment'
+};
+const PROP_BOOL={
+  1:'Stuck',
+  2:'Open',
+  3:'Locked',
+  4:'RotProof',
+  5:'AllegianceUpdateRequest',
+  6:'AiUsesMana',
+  7:'AiUseHumanMagicAnimations',
+  8:'AllowGive',
+  9:'CurrentlyAttacking',
+  10:'AttackerAi',
+  11:'IgnoreCollisions',
+  12:'ReportCollisions',
+  13:'Ethereal',
+  14:'GravityStatus',
+  15:'LightsStatus',
+  16:'ScriptedCollision',
+  17:'Inelastic',
+  18:'Visibility',
+  19:'Attackable',
+  20:'SafeSpellComponents',
+  21:'AdvocateState',
+  22:'Inscribable',
+  23:'DestroyOnSell',
+  24:'UiHidden',
+  25:'IgnoreHouseBarriers',
+  26:'HiddenAdmin',
+  27:'PkWounder',
+  28:'PkKiller',
+  29:'NoCorpse',
+  30:'UnderLifestoneProtection',
+  31:'ItemManaUpdatePending',
+  32:'GeneratorStatus',
+  33:'ResetMessagePending',
+  34:'DefaultOpen',
+  35:'DefaultLocked',
+  36:'DefaultOn',
+  37:'OpenForBusiness',
+  38:'IsFrozen',
+  39:'DealMagicalItems',
+  40:'LogoffImDead',
+  41:'ReportCollisionsAsEnvironment',
+  42:'AllowEdgeSlide',
+  43:'AdvocateQuest',
+  44:'IsAdmin',
+  45:'IsArch',
+  46:'IsSentinel',
+  47:'IsAdvocate',
+  48:'CurrentlyPoweringUp',
+  49:'GeneratorEnteredWorld',
+  50:'NeverFailCasting',
+  51:'VendorService',
+  52:'AiImmobile',
+  53:'DamagedByCollisions',
+  54:'IsDynamic',
+  55:'IsHot',
+  56:'IsAffecting',
+  57:'AffectsAis',
+  58:'SpellQueueActive',
+  59:'GeneratorDisabled',
+  60:'IsAcceptingTells',
+  61:'LoggingChannel',
+  62:'OpensAnyLock',
+  63:'UnlimitedUse',
+  64:'GeneratedTreasureItem',
+  65:'IgnoreMagicResist',
+  66:'IgnoreMagicArmor',
+  67:'AiAllowTrade',
+  68:'SpellComponentsRequired',
+  69:'IsSellable',
+  70:'IgnoreShieldsBySkill',
+  71:'Nodraw',
+  72:'ActivationUntargeted',
+  73:'HouseHasGottenPriorityBootPos',
+  74:'GeneratorAutomaticDestruction',
+  75:'HouseHooksVisible',
+  76:'HouseRequiresMonarch',
+  77:'HouseHooksEnabled',
+  78:'HouseNotifiedHudOfHookCount',
+  79:'AiAcceptEverything',
+  80:'IgnorePortalRestrictions',
+  81:'RequiresBackpackSlot',
+  82:'DontTurnOrMoveWhenGiving',
+  83:'NpcLooksLikeObject',
+  84:'IgnoreCloIcons',
+  85:'AppraisalHasAllowedWielder',
+  86:'ChestRegenOnClose',
+  87:'LogoffInMinigame',
+  88:'PortalShowDestination',
+  89:'PortalIgnoresPkAttackTimer',
+  90:'NpcInteractsSilently',
+  91:'Retained',
+  92:'IgnoreAuthor',
+  93:'Limbo',
+  94:'AppraisalHasAllowedActivator',
+  95:'ExistedBeforeAllegianceXpChanges',
+  96:'IsDeaf',
+  97:'IsPsr',
+  98:'Invincible',
+  99:'Ivoryable',
+  100:'Dyable',
+  101:'CanGenerateRare',
+  102:'CorpseGeneratedRare',
+  103:'NonProjectileMagicImmune',
+  104:'ActdReceivedItems',
+  105:'UnknownGuessedname',
+  106:'FirstEnterWorldDone',
+  107:'RecallsDisabled',
+  108:'RareUsesTimer',
+  109:'ActdPreorderReceivedItems',
+  110:'Afk',
+  111:'IsGagged',
+  112:'ProcSpellSelfTargeted',
+  113:'IsAllegianceGagged',
+  114:'EquipmentSetTriggerPiece',
+  115:'Uninscribe',
+  116:'WieldOnUse',
+  117:'ChestClearedWhenClosed',
+  118:'NeverAttack',
+  119:'SuppressGenerateEffect',
+  120:'TreasureCorpse',
+  121:'EquipmentSetAddLevel',
+  122:'BarberActive',
+  123:'TopLayerPriority',
+  124:'NoHeldItemShown',
+  125:'LoginAtLifestone',
+  126:'OlthoiPk',
+  127:'Account15Days',
+  128:'HadNoVitae',
+  129:'NoOlthoiTalk',
+  130:'AutowieldLeft'
+};
+const PROP_FLOAT={
+  1:'HeartbeatInterval',
+  2:'HeartbeatTimestamp',
+  3:'HealthRate',
+  4:'StaminaRate',
+  5:'ManaRate',
+  6:'HealthUponResurrection',
+  7:'StaminaUponResurrection',
+  8:'ManaUponResurrection',
+  9:'StartTime',
+  10:'StopTime',
+  11:'ResetInterval',
+  12:'Shade',
+  13:'ArmorModVsSlash',
+  14:'ArmorModVsPierce',
+  15:'ArmorModVsBludgeon',
+  16:'ArmorModVsCold',
+  17:'ArmorModVsFire',
+  18:'ArmorModVsAcid',
+  19:'ArmorModVsElectric',
+  20:'CombatSpeed',
+  21:'WeaponLength',
+  22:'DamageVariance',
+  23:'CurrentPowerMod',
+  24:'AccuracyMod',
+  25:'StrengthMod',
+  26:'MaximumVelocity',
+  27:'RotationSpeed',
+  28:'MotionTimestamp',
+  29:'WeaponDefense',
+  30:'WimpyLevel',
+  31:'VisualAwarenessRange',
+  32:'AuralAwarenessRange',
+  33:'PerceptionLevel',
+  34:'PowerupTime',
+  35:'MaxChargeDistance',
+  36:'ChargeSpeed',
+  37:'BuyPrice',
+  38:'SellPrice',
+  39:'DefaultScale',
+  40:'LockpickMod',
+  41:'RegenerationInterval',
+  42:'RegenerationTimestamp',
+  43:'GeneratorRadius',
+  44:'TimeToRot',
+  45:'DeathTimestamp',
+  46:'PkTimestamp',
+  47:'VictimTimestamp',
+  48:'LoginTimestamp',
+  49:'CreationTimestamp',
+  50:'MinimumTimeSincePk',
+  51:'DeprecatedHousekeepingPriority',
+  52:'AbuseLoggingTimestamp',
+  53:'LastPortalTeleportTimestamp',
+  54:'UseRadius',
+  55:'HomeRadius',
+  56:'ReleasedTimestamp',
+  57:'MinHomeRadius',
+  58:'Facing',
+  59:'ResetTimestamp',
+  60:'LogoffTimestamp',
+  61:'EconRecoveryInterval',
+  62:'WeaponOffense',
+  63:'DamageMod',
+  64:'ResistSlash',
+  65:'ResistPierce',
+  66:'ResistBludgeon',
+  67:'ResistFire',
+  68:'ResistCold',
+  69:'ResistAcid',
+  70:'ResistElectric',
+  71:'ResistHealthBoost',
+  72:'ResistStaminaDrain',
+  73:'ResistStaminaBoost',
+  74:'ResistManaDrain',
+  75:'ResistManaBoost',
+  76:'Translucency',
+  77:'PhysicsScriptIntensity',
+  78:'Friction',
+  79:'Elasticity',
+  80:'AiUseMagicDelay',
+  81:'ItemMinSpellcraftMod',
+  82:'ItemMaxSpellcraftMod',
+  83:'ItemRankProbability',
+  84:'Shade2',
+  85:'Shade3',
+  86:'Shade4',
+  87:'ItemEfficiency',
+  88:'ItemManaUpdateTimestamp',
+  89:'SpellGestureSpeedMod',
+  90:'SpellStanceSpeedMod',
+  91:'AllegianceAppraisalTimestamp',
+  92:'PowerLevel',
+  93:'AccuracyLevel',
+  94:'AttackAngle',
+  95:'AttackTimestamp',
+  96:'CheckpointTimestamp',
+  97:'SoldTimestamp',
+  98:'UseTimestamp',
+  99:'UseLockTimestamp',
+  100:'HealkitMod',
+  101:'FrozenTimestamp',
+  102:'HealthRateMod',
+  103:'AllegianceSwearTimestamp',
+  104:'ObviousRadarRange',
+  105:'HotspotCycleTime',
+  106:'HotspotCycleTimeVariance',
+  107:'SpamTimestamp',
+  108:'SpamRate',
+  109:'BondWieldedTreasure',
+  110:'BulkMod',
+  111:'SizeMod',
+  112:'GagTimestamp',
+  113:'GeneratorUpdateTimestamp',
+  114:'DeathSpamTimestamp',
+  115:'DeathSpamRate',
+  116:'WildAttackProbability',
+  117:'FocusedProbability',
+  118:'CrashAndTurnProbability',
+  119:'CrashAndTurnRadius',
+  120:'CrashAndTurnBias',
+  121:'GeneratorInitialDelay',
+  122:'AiAcquireHealth',
+  123:'AiAcquireStamina',
+  124:'AiAcquireMana',
+  125:'ResistHealthDrain',
+  126:'LifestoneProtectionTimestamp',
+  127:'AiCounteractEnchantment',
+  128:'AiDispelEnchantment',
+  129:'TradeTimestamp',
+  130:'AiTargetedDetectionRadius',
+  131:'EmotePriority',
+  132:'LastTeleportStartTimestamp',
+  133:'EventSpamTimestamp',
+  134:'EventSpamRate',
+  135:'InventoryOffset',
+  136:'CriticalMultiplier',
+  137:'ManaStoneDestroyChance',
+  138:'SlayerDamageBonus',
+  139:'AllegianceInfoSpamTimestamp',
+  140:'AllegianceInfoSpamRate',
+  141:'NextSpellcastTimestamp',
+  142:'AppraisalRequestedTimestamp',
+  143:'AppraisalHeartbeatDueTimestamp',
+  144:'ManaConversionMod',
+  145:'LastPkAttackTimestamp',
+  146:'FellowshipUpdateTimestamp',
+  147:'CriticalFrequency',
+  148:'LimboStartTimestamp',
+  149:'WeaponMissileDefense',
+  150:'WeaponMagicDefense',
+  151:'IgnoreShield',
+  152:'ElementalDamageMod',
+  153:'StartMissileAttackTimestamp',
+  154:'LastRareUsedTimestamp',
+  155:'IgnoreArmor',
+  156:'ProcSpellRate',
+  157:'ResistanceModifier',
+  158:'AllegianceGagTimestamp',
+  159:'AbsorbMagicDamage',
+  160:'CachedMaxAbsorbMagicDamage',
+  161:'GagDuration',
+  162:'AllegianceGagDuration',
+  163:'GlobalXpMod',
+  164:'HealingModifier',
+  165:'ArmorModVsNether',
+  166:'ResistNether',
+  167:'CooldownDuration',
+  168:'WeaponAuraOffense',
+  169:'WeaponAuraDefense',
+  170:'WeaponAuraElemental',
+  171:'WeaponAuraManaConv'
+};
+const PROP_STRING={
+  1:'Name',
+  2:'Title',
+  3:'Sex',
+  4:'HeritageGroup',
+  5:'Template',
+  6:'AttackersName',
+  7:'Inscription',
+  8:'ScribeName',
+  9:'VendorsName',
+  10:'Fellowship',
+  11:'MonarchsName',
+  12:'LockCode',
+  13:'KeyCode',
+  14:'Use',
+  15:'ShortDesc',
+  16:'LongDesc',
+  17:'ActivationTalk',
+  18:'UseMessage',
+  19:'ItemHeritageGroupRestriction',
+  20:'PluralName',
+  21:'MonarchsTitle',
+  22:'ActivationFailure',
+  23:'ScribeAccount',
+  24:'TownName',
+  25:'CraftsmanName',
+  26:'UsePkServerError',
+  27:'ScoreCachedText',
+  28:'ScoreDefaultEntryFormat',
+  29:'ScoreFirstEntryFormat',
+  30:'ScoreLastEntryFormat',
+  31:'ScoreOnlyEntryFormat',
+  32:'ScoreNoEntry',
+  33:'Quest',
+  34:'GeneratorEvent',
+  35:'PatronsTitle',
+  36:'HouseOwnerName',
+  37:'QuestRestriction',
+  38:'AppraisalPortalDestination',
+  39:'TinkerName',
+  40:'ImbuerName',
+  41:'HouseOwnerAccount',
+  42:'DisplayName',
+  43:'DateOfBirth',
+  44:'ThirdPartyApi',
+  45:'KillQuest',
+  46:'Afk',
+  47:'AllegianceName',
+  48:'AugmentationAddQuest',
+  49:'KillQuest2',
+  50:'KillQuest3',
+  51:'UseSendsSignal',
+  52:'GearPlatingName'
+};
+const PROP_DID={
+  1:'Setup',
+  2:'MotionTable',
+  3:'SoundTable',
+  4:'CombatTable',
+  5:'QualityFilter',
+  6:'PaletteBase',
+  7:'Clothingbase',
+  8:'Icon',
+  9:'EyesTexture',
+  10:'NoseTexture',
+  11:'MouthTexture',
+  12:'DefaultEyesTexture',
+  13:'DefaultNoseTexture',
+  14:'DefaultMouthTexture',
+  15:'HairPalette',
+  16:'EyesPalette',
+  17:'SkinPalette',
+  18:'HeadObject',
+  19:'ActivationAnimation',
+  20:'InitMotion',
+  21:'ActivationSound',
+  22:'PhysicsEffectTable',
+  23:'UseSound',
+  24:'UseTargetAnimation',
+  25:'UseTargetSuccessAnimation',
+  26:'UseTargetFailureAnimation',
+  27:'UseUserAnimation',
+  28:'Spell',
+  29:'SpellComponent',
+  30:'PhysicsScript',
+  31:'LinkedPortalOne',
+  32:'WieldedTreasureType',
+  33:'UnknownGuessedname',
+  34:'UnknownGuessedname2',
+  35:'DeathTreasureType',
+  36:'MutateFilter',
+  37:'ItemSkillLimit',
+  38:'UseCreateItem',
+  39:'DeathSpell',
+  40:'VendorsClassid',
+  41:'ItemSpecializedOnly',
+  42:'Houseid',
+  43:'AccountHouseid',
+  44:'RestrictionEffect',
+  45:'CreationMutationFilter',
+  46:'TsysMutationFilter',
+  47:'LastPortal',
+  48:'LinkedPortalTwo',
+  49:'OriginalPortal',
+  50:'IconOverlay',
+  51:'IconOverlaySecondary',
+  52:'IconUnderlay',
+  53:'AugmentationMutationFilter',
+  54:'AugmentationEffect',
+  55:'ProcSpell',
+  56:'AugmentationCreateItem',
+  57:'AlternateCurrency',
+  58:'BlueSurgeSpell',
+  59:'YellowSurgeSpell',
+  60:'RedSurgeSpell',
+  61:'OlthoiDeathTreasureType'
+};
 const EMOTE_CATS=[[1,'Refuse'],[2,'Vendor'],[3,'Death'],[4,'Portal'],[5,'HeartBeat'],[6,'Give'],[7,'Use'],[8,'Activation'],[9,'Generation'],[10,'PickUp'],[11,'Drop'],[12,'QuestSuccess'],[13,'QuestFailure'],[14,'Taunt'],[15,'WoundedTaunt'],[16,'KillTaunt'],[17,'NewEnemy'],[18,'Scream'],[19,'Homesick'],[20,'ReceiveCritical'],[21,'ResistSpell'],[22,'TestSuccess'],[23,'TestFailure'],[24,'HearChat'],[25,'Wield'],[26,'UnWield'],[27,'EventSuccess'],[28,'EventFailure'],[29,'TestNoQuality'],[32,'GotoSet'],[33,'NumFellowsSuccess'],[34,'NumFellowsFailure'],[35,'NumCharacterTitlesSuccess'],[36,'NumCharacterTitlesFailure'],[37,'ReceiveLocalSignal'],[38,'ReceiveTalkDirect']];
 // ── CORE HELPERS ─────────────────────────────────────────────────────────────
 const $   = id => document.getElementById(id);
@@ -1653,6 +2505,10 @@ function onCTypeChange(){
     bpPanel.innerHTML=buildBodyPartsTab();
     bpPanel.querySelectorAll('input,select').forEach(function(e){e.addEventListener('input',onFieldInput);});
   }
+  // DID auto-population removed — CREATURE_TYPE_DID_DEFAULTS had incorrect values.
+  // Users should set DID values manually or import from an existing weenie file.
+  // Rebuild the full Properties panel so DID / Int / Bool sub-tabs all refresh
+  rebuildPanel('properties');
   regen();
 }
 function onArmorTypeChange(){
@@ -1736,8 +2592,8 @@ function buildRecipeProps(){
 //  ATTRIBUTES 
 function buildAttrs(){
   const attrs=[[1,'Strength'],[2,'Endurance'],[3,'Quickness'],[4,'Coordination'],[5,'Focus'],[6,'Self']];
-  return `<div class=\"sec\">
-    <div class=\"sh\"><div class=\"st\">Attributes</div><div class=\"sl\"></div></div>
+  return `<div class=\"sec\" style=\"padding:0 16px\">
+    <div class=\"sh\"><div class=\"st\">Attributes</div><div class=\"sl\"></div></div></div>
     <div class=\"grid g3\">${attrs.map(([t,n])=>`<div class=\"fg\"><div class=\"fl\">${n} <span class=\"fc\">A-${t}</span></div><input type=\"number\" id=\"attr_${t}\" value=\"260\"></div>`).join('')}</div>
     <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Vitals</div><div class=\"sl\"></div></div>
     <div class=\"grid g3\">
@@ -1749,8 +2605,17 @@ function buildAttrs(){
 
 //  SKILLS 
 // Core skills always shown; extras added by user
-const CORE_SKILL_IDS=[6,7,15,44]; // MeleeDefense,MissileDefense,MagicDefense,HeavyWeapons
+let CORE_SKILL_IDS=[6,7,15,44]; // default — MeleeDefense,MissileDefense,MagicDefense,HeavyWeapons
 let extraSkills=[]; // [{id,sac,init}]
+
+function removeCoreSkill(id){
+  var idx=CORE_SKILL_IDS.indexOf(id);
+  if(idx>=0){
+    CORE_SKILL_IDS.splice(idx,1);
+    rebuildPanel('skills');
+    regen();
+  }
+}
 
 function buildSkills(){
   const level=gi('fLevel',100);
@@ -1775,7 +2640,7 @@ function buildSkills(){
         <div style=\"flex:1;font-family:var(--ui-font);font-size:11px;font-weight:700;color:var(--ink-mid)\">${name} <span class=\"fc\">SK-${id}</span></div>
         <select id=\"sk_sac_${id}\" style=\"width:150px\">${opt(SKILL_SAC,2)}</select>
         <input type=\"number\" id=\"sk_init_${id}\" value=\"${base}\" style=\"width:90px\">
-        <button class=\"del\" onclick=\"removeCoreSkill(${id})\" title=\"Remove\"></button>
+        <button class=\"del\" onclick=\"removeCoreSkill(${id})\" title=\"Remove this skill\">&#x2715;</button>
       </div>`;
     }).join('')}
     ${extraRows}
@@ -1972,7 +2837,11 @@ function switchType(type,btn){
   // Preserve current sub-tab if it exists in the new type; else fall back to first
   var _newTabs=TYPE_CFG[type].subTabs;
   curSub=_newTabs.indexOf(curSub)>=0 ? curSub : _newTabs[0];
-  spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];console.log('[SWITCH] arrays cleared, curType now='+curType);
+  spells=[];emotes=[];
+  window._importedClassName=null;window._importedTimestamp=null;extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];window._presetStore=[];
+  // Reset core skills to default (4 core skills) on type switch
+  while(CORE_SKILL_IDS.length) CORE_SKILL_IDS.pop();
+  [6,7,15,44].forEach(function(id){CORE_SKILL_IDS.push(id);});window._importedEmoteSQL='';window._importedCreateListSQL='';window._importedBodyParts=null;window._importedCoreSkills=null;;window._importedEmoteSQL='';window._importedCreateListSQL='';window._importedBodyParts=null;window._importedCoreSkills=null;console.log('[SWITCH] arrays cleared, curType now='+curType);
   // Pre-seed ItemType=128 (Misc) for item tab
   if(type==='item') extraInt.push({type:1,value:128});
   // Pre-seed name in extraStr so String tab shows it
@@ -2247,8 +3116,8 @@ function _actionToYAML(a, indent, _inlined, _gotoSetMap){
   else if(t===67) val=a.message||'';
   else if(t===3||t===74){
     val=String(a.wcid||'');
-    const st=String(a.stackSize||'');
-    if(st&&st!=='0'&&st!=='1') val+=', '+st;
+    const st=parseInt(a.stackSize||0);
+    if(st&&st>1) val+=', '+st;
   }
   else if(t===76){
     val=String(a.wcid||'');
@@ -2258,8 +3127,15 @@ function _actionToYAML(a, indent, _inlined, _gotoSetMap){
   else if(t===49){
     const pct=parseFloat(a.percent||0)*100;
     val=pct%1===0?pct.toFixed(0)+'%':pct.toFixed(2).replace(/\.?0+$/,'')+'%';
+    // Include min64-max64 XP range if present
+    if(a.min64!==null&&a.min64!==undefined&&a.max64!==null&&a.max64!==undefined){
+      val+=', '+a.min64+' - '+a.max64;
+    }
   }
-  else if(t===113||t===112) val=String(a.heroXP64||'');
+  else if(t===113||t===112){
+    var lv=parseInt(a.heroXP64||0);
+    val=lv?lv.toLocaleString('en-US'):'0';
+  }
   else if([1,2,62,47,48,90].includes(t)) val=String(a.amount64||'');
   else if([14,19,27,73].includes(t)) val=String(a.spellId||'');
   else val=a.message||a.testString||'';
@@ -2361,6 +3237,16 @@ function _yamlTabKey(e){
 }
 
 // ── Icon Picker (DID types: Icon=8, IconOverlay=36, IconOverlay2=37, IconUnderlay=38) ──
+function _showIconLibraryMissing(modal,box){
+  box.innerHTML='<div style="padding:30px;text-align:center">'
+    +'<div style="font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--gold);margin-bottom:12px">ICON LIBRARY NOT INSTALLED</div>'
+    +'<div style="font-family:IM Fell English,serif;font-style:italic;font-size:13px;color:var(--ink-dim);line-height:1.6;margin-bottom:16px">'
+    +'Install the icon library via <strong>Settings \u2192 Content Libraries \u2192 Install Library Package</strong>.'
+    +'</div>'
+    +'<button onclick="openSettings();document.getElementById(\'iconPickerModal\').remove()" style="background:var(--crimson);color:#fff;border:none;font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;padding:9px 20px;cursor:pointer;border-radius:2px">Open Settings</button>'
+    +'<div style="margin-top:10px"><button onclick="document.getElementById(\'iconPickerModal\').remove()" style="background:transparent;border:none;cursor:pointer;color:var(--ink-faint);font-size:11px">Cancel</button></div>'
+    +'</div>';
+}
 function openIconPicker(onSelect){
   var existing=document.getElementById('iconPickerModal');
   if(existing) existing.remove();
@@ -2386,20 +3272,32 @@ function openIconPicker(onSelect){
   countEl.style.cssText='font-family:var(--ui-font);font-size:9px;color:var(--ink-faint);letter-spacing:.05em';
   var grid=document.createElement('div');
   grid.style.cssText='display:flex;flex-wrap:wrap;gap:3px;overflow-y:auto;max-height:460px;padding:4px;';
-  var icons=typeof ICONS!=='undefined'&&ICONS.length?ICONS:null;
-  if(!icons){
-    // Icon library not installed — guide user to Settings
-    box.innerHTML='<div style="padding:30px;text-align:center">'
-      +'<div style="font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--gold);margin-bottom:12px">ICON LIBRARY NOT INSTALLED</div>'
-      +'<div style="font-family:IM Fell English,serif;font-style:italic;font-size:13px;color:var(--ink-dim);line-height:1.6;margin-bottom:16px">'
-      +'Install the icon library via <strong>Settings → Content Libraries → Install Library Package</strong>.'
-      +'</div>'
-      +'<button onclick="openSettings();document.getElementById(\'iconPickerModal\').remove()" style="background:var(--crimson);color:#fff;border:none;font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;padding:9px 20px;cursor:pointer;border-radius:2px">Open Settings</button>'
-      +'<div style="margin-top:10px"><button onclick="document.getElementById(\'iconPickerModal\').remove()" style="background:transparent;border:none;cursor:pointer;color:var(--ink-faint);font-size:11px">Cancel</button></div>'
-      +'</div>';
-    modal.appendChild(box); document.body.appendChild(modal); modal.onclick=function(e){if(e.target===modal)modal.remove();};
+  // Use cached icons if already loaded, else try global ICONS (dev/script mode),
+  // else ask Python API (frozen .exe mode where icons.js can't be script-loaded)
+  var icons=window._ICONS_CACHE||(typeof ICONS!=='undefined'&&ICONS.length?ICONS:null);
+  if(!icons&&window.pywebview){
+    // EXE mode: load icons via Python API then reopen
+    window.pywebview.api.get_icons_data().then(function(data){
+      if(data&&data.length){
+        window._ICONS_CACHE=data;
+        document.getElementById('iconPickerModal').remove();
+        openIconPicker(onSelect);
+      } else {
+        _showIconLibraryMissing(modal,box);
+      }
+    }).catch(function(){ _showIconLibraryMissing(modal,box); });
+    modal.appendChild(box); document.body.appendChild(modal);
+    modal.onclick=function(e){if(e.target===modal)modal.remove();};
+    box.innerHTML='<div style="padding:40px;text-align:center;font-family:var(--ui-font);font-size:10px;color:var(--ink-dim);letter-spacing:.08em">LOADING ICON LIBRARY\u2026</div>';
     return;
   }
+  if(!icons){
+    _showIconLibraryMissing(modal,box);
+    modal.appendChild(box); document.body.appendChild(modal);
+    modal.onclick=function(e){if(e.target===modal)modal.remove();};
+    return;
+  }
+  if(!window._ICONS_CACHE) window._ICONS_CACHE=icons;
   icons=icons;
   var _renderAF=null;
   function renderGrid(filter){
@@ -2456,6 +3354,654 @@ function _pickIconDID(arrIdx){
   });
 }
 
+
+// ── SQL Import ─────────────────────────────────────────────────────────────
+
+/** Map ACE weenie type numbers to ACEForge tab keys */
+var _WEENIE_TYPE_TAB = {
+  1:'item', 2:'armor', 3:'weapon', 4:'weapon', 6:'weapon', 7:'generator',
+  8:'item', 9:'item', 10:'creature', 12:'npc', 18:'item', 19:'item',
+  20:'item', 21:'item', 22:'item', 25:'item', 26:'item', 28:'item',
+  29:'item', 32:'item', 34:'item', 35:'weapon', 37:'item', 38:'item',
+  40:'item', 51:'item',
+};
+
+function _parseWeenieSQL(sql){
+  // Extract WCID: try DELETE statement first (most reliable, no column count issues)
+  var wcid = null, name = '', typeNum = 10;
+  var d = sql.match(/DELETE FROM `weenie` WHERE `class_Id`\s*=\s*(\d+)/i);
+  if(d) wcid = d[1];
+  // Parse weenie INSERT — allow extra columns (timestamp, etc.)
+  var m = sql.match(/INSERT\s+INTO\s+`?weenie`?\s*\([^)]+\)\s*[\n\r]*VALUES\s*\(\s*(\d+)\s*,\s*'([^']+)'\s*,\s*(\d+)/i);
+  if(m){ if(!wcid) wcid=m[1]; name=m[2]; typeNum=parseInt(m[3]); }
+  // Last fallback: grab first numeric value from any property INSERT
+  if(!wcid){
+    var f = sql.match(/INSERT INTO `weenie_properties_[^`]+`[^)]+\)\s*[\n\r]*VALUES\s*\(\s*(\d+)/i);
+    if(f) wcid = f[1];
+  }
+  return wcid ? {wcid:wcid, name:name, typeNum:typeNum} : null;
+}
+
+/** Import SQL file into the Manual builder */
+function importSQLToBuilder(){
+  if(!window.pywebview){ toast('File import requires the desktop app.'); return; }
+  window.pywebview.api.import_sql().then(function(r){
+    if(!r||r.cancelled) return;
+    if(r.error){ toast('Import failed: '+r.error); return; }
+    var sql = r.content;
+    var info = _parseWeenieSQL(sql);
+    var targetTab = (info && _WEENIE_TYPE_TAB[info.typeNum]) || curType;
+
+    // Switch mode to manual if in AI
+    var manBtn = document.querySelector('.mode-tab');
+    if(manBtn && !document.getElementById('manualWS').classList.contains('active'))
+      switchMode('manual', manBtn);
+
+    // Switch to the right tab
+    if(targetTab !== curType) switchType(targetTab);
+
+    setTimeout(function(){
+      // Load SQL into the output panel
+      var sqlOut = document.getElementById('sqlOut');
+      if(sqlOut){ sqlOut.value = sql; }
+
+      // ── CRITICAL: set WCID FIRST so _filterByWcid uses the imported file's ID ──
+      // Cascade: _parseWeenieSQL → DELETE row → any property INSERT
+      var _iWcid = (info && info.wcid) || null;
+      if(!_iWcid){
+        var _dm = sql.match(/DELETE FROM `weenie` WHERE `class_Id`\s*=\s*(\d+)/i);
+        if(_dm) _iWcid = _dm[1];
+      }
+      if(!_iWcid){
+        var _pm = sql.match(/VALUES\s*\(\s*(\d{4,7})\s*,/i);
+        if(_pm) _iWcid = _pm[1];
+      }
+      if(_iWcid){
+        var _fwEl = document.getElementById('fWcid');
+        if(_fwEl) _fwEl.value = _iWcid;
+      }
+      // Preserve original class_Name and last_Modified from imported weenie row
+      window._isImported = true; // suppress auto-scale during import
+      var _wHdr = sql.match(/INSERT INTO `weenie`[\s\S]+?VALUES\s*\(\s*\d+\s*,\s*'([^']+)'\s*,\s*\d+\s*,\s*'([^']+)'/i);
+      window._importedClassName = _wHdr ? _wHdr[1] : null;
+      window._importedTimestamp = _wHdr ? _wHdr[2] : null;
+      // Set weenie sub-type from parsed info
+      if(info && info.typeNum){
+        var fWT = document.getElementById('fWeenieType');
+        if(fWT) fWT.value = info.typeNum;
+      }
+      // Set class_name in fName as initial value (display name overwritten by _syncImportedToFormFields)
+      if(info && info.name){
+        var fNm = document.getElementById('fName');
+        if(fNm) fNm.value = info.name;
+      }
+
+      // Extract and store emote/create-list blocks before other parsing
+      _extractImportedSections(sql, _iWcid);
+      // Sync all property panels from the imported SQL (wcid now correct)
+      syncAdvancedFromSQL(true);
+      // Parse spells from spellbook table
+      _parseSpellbookFromSQL(sql, _iWcid);
+      // Parse emotes from SQL into flat blocks, then nest them properly
+      _parseEmotesFromImportedSQL(sql);
+      if(emotes.length){
+        var _nested=_nestSQLEmotes(emotes.slice());
+        emotes.splice(0,emotes.length);
+        _nested.forEach(function(e){emotes.push(e);});
+        console.log('[IMPORT] Nested emotes: '+emotes.length+' triggers');
+      }
+      // Promote extraInt/Float/Bool/Str values to form fields, remove from extra arrays
+      _syncImportedToFormFields(sql);
+      // Update body parts based on imported creature type
+      var _ctImport = extraInt.find(function(r){return parseInt(r.type)===2;});
+      if(_ctImport){
+        bodyParts = getBodyParts(parseInt(_ctImport.value));
+      }
+      // Rebuild all panels
+      rebuildPanel('properties');
+      rebuildPanel('skills');
+      rebuildPanel('spellbook');
+      rebuildPanel('emotes');
+      setTimeout(function(){
+        // Skills fully in extraSkills on import — no core skill DOM hydration needed
+        if(window._importedBodyParts){
+          // Rebuild body parts panel then hydrate DOM inputs
+          rebuildPanel('bodyparts');
+          setTimeout(function(){
+            Object.keys(_importedBodyParts).forEach(function(k){
+              var i=parseInt(k), bp=_importedBodyParts[k];
+              var flds={dt:'bp_dt_'+i,dv:'bp_dv_'+i,al:'bp_al_'+i,sl:'bp_sl_'+i,
+                        pi:'bp_pi_'+i,bl:'bp_bl_'+i,co:'bp_co_'+i,fi:'bp_fi_'+i,
+                        ac:'bp_ac_'+i,el:'bp_el_'+i,nt:'bp_nt_'+i};
+              Object.keys(flds).forEach(function(f){
+                var el=document.getElementById(flds[f]);
+                if(el&&bp[f]!==undefined) el.value=bp[f];
+              });
+            });
+            window._importedBodyParts=null;
+          }, 80);
+        }
+      }, 50);
+      regen();
+      window._isImported = false;
+      toast('\u2713 Imported: '+r.filename);
+    }, 150);
+  }).catch(function(e){ toast('Import error: '+e); });
+}
+
+// ── AI Mode SQL Import ──────────────────────────────────────────────────────
+var _aiImportedSQL = '';
+var _aiImportedFilename = '';
+
+function importSQLToAI(){
+  if(!window.pywebview){ toast('File import requires the desktop app.'); return; }
+  window.pywebview.api.import_sql().then(function(r){
+    if(!r||r.cancelled) return;
+    if(r.error){ toast('Import failed: '+r.error); return; }
+    _aiImportedSQL = r.content;
+    _aiImportedFilename = r.filename;
+    // Show badge
+    var badge = document.getElementById('aiImportBadge');
+    var nameEl = document.getElementById('aiImportName');
+    if(badge) badge.style.display='inline-flex';
+    if(nameEl) nameEl.textContent = r.filename;
+    // Update mode description
+    var desc = document.getElementById('aiModeDesc');
+    if(desc) desc.innerHTML='<span style="color:var(--gold)">Edit mode</span> \u2014 AI will modify your imported SQL based on your prompt.';
+    // Pre-fill the prompt placeholder hint
+    var prompt = document.getElementById('aiPrompt');
+    if(prompt && !prompt.value) prompt.placeholder = 'e.g. Make this mob stronger for level 250+, scale all stats, add more abilities.';
+    toast('\u2713 SQL imported for AI editing: '+r.filename);
+  }).catch(function(e){ toast('Import error: '+e); });
+}
+
+function clearAIImport(){
+  _aiImportedSQL = '';
+  _aiImportedFilename = '';
+  var badge = document.getElementById('aiImportBadge');
+  if(badge) badge.style.display='none';
+  var desc = document.getElementById('aiModeDesc');
+  if(desc) desc.textContent='Describe what you want \u2014 or import existing SQL to edit it.';
+  var prompt = document.getElementById('aiPrompt');
+  if(prompt) prompt.placeholder='e.g. A level 180 ice drudge \u2014 or import existing SQL above and describe changes.';
+}
+
+
+// ── Post-import: promote extraInt/extraFloat values back into form fields ──
+// buildSQL uses either extraInt OR hardcoded form-field reads — never both.
+// After import we extract the types that buildSQL reads from form fields,
+// set those form fields, then remove those entries from extra arrays so
+// buildSQL's gi() / gf() paths take over and user edits stick.
+
+var _INT_FORM_MAP = {
+  // Only types that have real DOM elements in the current form
+  2:'cType',   3:'fPalette',
+  // 25:'fLevel' — no fLevel element; Level stays in extraInt
+  // 146:'fXp'   — no fXp element; XP stays in extraInt
+  44:'fDmg',  45:'fDmgType', 47:'fAttackType', 48:'fWepSkill',
+  101:'fCombatStyle', 332:'fLum',
+  95:'fRadarColor', 74:'fMerchItemTypes', 75:'fMerchMinVal',
+  76:'fMerchMaxVal', 126:'fVendorHappy',
+};
+var _FLOAT_FORM_MAP = {
+  13:'rSlash',14:'rPierce',15:'rBludge',16:'rCold',17:'rFire',
+  18:'rAcid', 19:'rElec',  31:'fAggroRange', 39:'fScale',
+  64:'rSlash',65:'rPierce',66:'rBludge',67:'rFire',68:'rCold',
+  69:'rAcid', 70:'rElec',  165:'rNether', 166:'rNether',
+};
+// Bool types owned by form fields
+var _BOOL_FORM_TYPES = new Set([6]); // 6 = AiUsesMana → fUsesMana
+
+function _syncImportedToFormFields(importedSQL) {
+  // ── Int — set form field display values but KEEP all types in extraInt ──
+  // (buildSQL's 'if extraInt populated, clear IR' path uses extraInt as source of truth)
+  extraInt.forEach(function(r) {
+    var fid = _INT_FORM_MAP[parseInt(r.type)];
+    if (fid) {
+      var el = document.getElementById(fid);
+      if (el) { el.value = r.value; }
+      // NOTE: onCTypeChange not called here — it adds DID defaults that would
+      // override the imported file's DID values. Body parts are rebuilt separately.
+    }
+  });
+
+  // ── Float — set form field display, keep all in extraFloat ──
+  var _floatSeen = {};
+  extraFloat.forEach(function(r) {
+    var fid = _FLOAT_FORM_MAP[parseInt(r.type)];
+    if (fid && !_floatSeen[fid]) {
+      var el = document.getElementById(fid);
+      if (el) { el.value = parseFloat(r.value).toFixed(2); _floatSeen[fid] = true; }
+    }
+  });
+
+  // ── Bool — set fUsesMana display, keep all in extraBool ──
+  extraBool.forEach(function(r) {
+    if (_BOOL_FORM_TYPES.has(parseInt(r.type))) {
+      var el = document.getElementById('fUsesMana');
+      if (el) el.value = (String(r.value).toLowerCase()==='true'||r.value==='1')?'1':'0';
+    }
+  });
+
+  // ── String — extract display name and any other string form fields ──
+  var _STR_FORM_MAP = {1:'fName'};
+  var keepStr = [];
+  extraStr.forEach(function(r){
+    var fid = _STR_FORM_MAP[parseInt(r.type)];
+    if(fid){
+      var el = document.getElementById(fid);
+      if(el && r.value) el.value = r.value.replace(/^'|'$/g,'');
+    } else {
+      keepStr.push(r);
+    }
+  });
+  extraStr.length = 0;
+  keepStr.forEach(function(r){ extraStr.push(r); });
+
+  // ── Primary Attributes (Strength/Endurance/etc.) — parse from SQL text ──
+  if(importedSQL){
+    // Primary attributes use ids attr_1 through attr_6 in the Attributes sub-tab
+    var primBlock = importedSQL.match(/INSERT INTO `weenie_properties_attribute`[\s\S]+?;\s*\n/i);
+    if(primBlock){
+      var pa, paRe = /\(\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)/g;
+      while((pa = paRe.exec(primBlock[0])) !== null){
+        var atype = parseInt(pa[1]);
+        if(atype>=1 && atype<=6){
+          var ael = document.getElementById('attr_'+atype);
+          if(ael) ael.value = pa[2];
+        }
+      }
+    }
+  }
+
+  // ── Attribute_2nd (MaxHealth / MaxStamina / MaxMana → vital_1/3/5) ──
+  if (importedSQL) {
+    var attrBlock = importedSQL.match(/INSERT INTO `weenie_properties_attribute_2nd`[\s\S]+?;\s*\n/i);
+    if (attrBlock) {
+      var valRe = /\(\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)/g, m;
+      var attrMap = {1:'vital_1', 3:'vital_3', 5:'vital_5'};
+      while ((m = valRe.exec(attrBlock[0])) !== null) {
+        var fidv = attrMap[parseInt(m[1])]; if(fidv){var elv=document.getElementById(fidv);if(elv)elv.value=m[2];}
+      }
+    }
+  }
+
+  // ── Skills — populate core skill inputs + extraSkills from SQL ──────────
+  if(importedSQL){
+    var skBlock = importedSQL.match(/INSERT INTO `weenie_properties_skill`[\s\S]+?;\s*\n/i);
+    if(skBlock){
+      // Clear default core skills and move ALL imported skills to extraSkills
+      // so every skill gets an X button and none are hardcoded
+      while(CORE_SKILL_IDS.length) CORE_SKILL_IDS.pop();
+      extraSkills.length = 0;
+      window._importedCoreSkills = null; // no longer needed
+      var skRe = /\(\s*\d+\s*,\s*(\d+)\s*,\s*\d+\s*,\s*(\d+)\s*,\s*\d+\s*,\s*(\d+)/g, sm;
+      while((sm = skRe.exec(skBlock[0])) !== null){
+        var skId=parseInt(sm[1]), skSac=parseInt(sm[2]), skInit=parseInt(sm[3]);
+        extraSkills.push({id:skId, sac:skSac, init:skInit});
+      }
+    }
+  }
+
+  // ── Body Parts — parse and store for DOM hydration after panel rebuild ──
+  if(importedSQL){
+    var bpBlock = importedSQL.match(/INSERT INTO `weenie_properties_body_part`[\s\S]+?;\s*\n/i);
+    if(bpBlock){
+      window._importedBodyParts = {};
+      // Match rows: (wcid, key, d_Type, d_Val, d_Var, base_Armor, slash, pierce, bludge, cold, fire, acid, elec, nether, bh, ...)
+      var bpRe = /\(\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/g, bm;
+      while((bm = bpRe.exec(bpBlock[0])) !== null){
+        var bk=parseInt(bm[1]);
+        _importedBodyParts[bk]={dt:bm[2],dv:bm[3],dvar:bm[4],al:bm[5],sl:bm[6],pi:bm[7],bl:bm[8],co:bm[9],fi:bm[10],ac:bm[11],el:bm[12],nt:bm[13]};
+      }
+    }
+  }
+}
+
+
+// ── Attribute & Skill Auto-Scaling Table ─────────────────────────────────────
+const LEVEL_SCALE_TIERS = [
+  {min:1,   max:5,   attrMin:10,  attrMax:30,  skillMin:20,  skillMax:50},
+  {min:6,   max:25,  attrMin:30,  attrMax:80,  skillMin:50,  skillMax:90},
+  {min:26,  max:75,  attrMin:80,  attrMax:130, skillMin:90,  skillMax:150},
+  {min:76,  max:120, attrMin:130, attrMax:180, skillMin:150, skillMax:210},
+  {min:121, max:180, attrMin:180, attrMax:220, skillMin:210, skillMax:250},
+  {min:181, max:225, attrMin:220, attrMax:250, skillMin:250, skillMax:290},
+  {min:226, max:275, attrMin:250, attrMax:290, skillMin:290, skillMax:360},
+];
+
+// Skill ID → category: 'defense'|'melee'|'missile'|'magic'
+var _SKILL_CAT = {
+  6:'defense',7:'defense',15:'defense',              // MeleeDefense, MissileDefense, MagicDefense
+  44:'melee',45:'melee',46:'melee',54:'melee',       // Heavy, Light, Finesse, DualWield
+  35:'missile',                                       // MissileWeapons
+  28:'magic',31:'magic',34:'magic',43:'magic',        // Life, Creature, War, Void Magic
+};
+
+function scaleCreatureStats(){
+  // Resolve current level from extraInt type 25
+  var lvEntry = extraInt.find(function(r){ return parseInt(r.type)===25; });
+  var level = lvEntry ? parseInt(lvEntry.value) : 100;
+
+  var tier = null;
+  LEVEL_SCALE_TIERS.forEach(function(t){ if(level>=t.min&&level<=t.max) tier=t; });
+  if(!tier){ toast('Level '+level+' is outside the 1\u2013275 scaling range'); return; }
+
+  // Linear interpolation within tier (clamp to [0,1])
+  var frac = tier.max===tier.min ? 1 : Math.max(0,Math.min(1,(level-tier.min)/(tier.max-tier.min)));
+  var attrVal = Math.round(tier.attrMin + frac*(tier.attrMax-tier.attrMin));
+  var skillVal = Math.round(tier.skillMin + frac*(tier.skillMax-tier.skillMin));
+
+  // Set all 6 primary attributes (Self = Willpower in user terminology)
+  for(var ai=1;ai<=6;ai++){
+    var ael=document.getElementById('attr_'+ai); if(ael) ael.value=attrVal;
+  }
+
+  // Scale vitals proportionally (Endurance drives HP/Stamina, Self drives Mana)
+  var hpEl=document.getElementById('vital_1');
+  var stEl=document.getElementById('vital_3');
+  var mnEl=document.getElementById('vital_5');
+  if(hpEl) hpEl.value=Math.round(attrVal*10);
+  if(stEl) stEl.value=Math.round(attrVal*8);
+  if(mnEl) mnEl.value=Math.round(attrVal*5);
+
+  // Scale core skills
+  CORE_SKILL_IDS.forEach(function(id){
+    var sac=parseInt((document.getElementById('sk_sac_'+id)||{}).value||'2');
+    if(sac<2) return; // skip Untrained
+    var initEl=document.getElementById('sk_init_'+id);
+    if(initEl) initEl.value=skillVal;
+  });
+
+  // Scale extra skills
+  extraSkills.forEach(function(sk,i){
+    var initEl=document.getElementById('sk_init_x_'+i);
+    if(initEl) initEl.value=skillVal;
+    sk.init=skillVal;
+  });
+
+  regen();
+  toast('\u21af Stats auto-scaled to Level '+level+
+        ' \u2014 Attr '+attrVal+' / Skills '+skillVal);
+}
+
+
+// ── Imported emote/create-list SQL preservation ──────────────────────────────
+var _importedEmoteSQL = '';
+var _importedCreateListSQL = '';
+var _importedWcidForReplace = '';
+
+function _extractImportedSections(sql, importedWcid) {
+  _importedWcidForReplace = String(importedWcid || '');
+  var emStart = sql.indexOf('INSERT INTO `weenie_properties_emote`');
+  var clStart = sql.indexOf('INSERT INTO `weenie_properties_create_list`');
+  if (emStart >= 0) {
+    var emEnd = clStart >= 0 ? clStart : sql.length;
+    _importedEmoteSQL = sql.substring(emStart, emEnd).trim();
+  } else {
+    _importedEmoteSQL = '';
+  }
+  if (clStart >= 0) {
+    _importedCreateListSQL = sql.substring(clStart).trim();
+  } else {
+    _importedCreateListSQL = '';
+  }
+}
+
+function _applyImportedSQLSections(lines, wcid) {
+  if (_importedEmoteSQL && emotes.length === 0) {
+    lines.push('');
+    var eSQL = _importedWcidForReplace
+      ? _importedEmoteSQL.replace(new RegExp('\\b'+_importedWcidForReplace+'\\b','g'), wcid)
+      : _importedEmoteSQL;
+    lines.push(eSQL);
+  }
+  if (_importedCreateListSQL) {
+    lines.push('');
+    var cSQL = _importedWcidForReplace
+      ? _importedCreateListSQL.replace(new RegExp('\\b'+_importedWcidForReplace+'\\b','g'), wcid)
+      : _importedCreateListSQL;
+    lines.push(cSQL);
+  }
+}
+
+
+// ── Emote SQL → emotes array parser ────────────────────────────────────────
+
+/** Parse a comma-separated SQL value list handling NULL, strings, @var, booleans */
+function _parseSQLValueList(str) {
+  // Strip SQL block comments /* ... */ BEFORE tokenizing — they can contain
+  // commas and parens that would break field parsing (e.g. /* Trade Note (250,000) */)
+  str = str.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+  var vals = [];
+  var i = 0;
+  function ws(){ while(i<str.length && /[\s\n\r]/.test(str[i])) i++; }
+  while(i < str.length){
+    ws();
+    if(i >= str.length) break;
+    if(str[i] === "'"){
+      // single-quoted string with '' escape
+      i++;
+      var s = '';
+      while(i < str.length){
+        if(str[i]==="'" && str[i+1]==="'"){s+="'"; i+=2;}
+        else if(str[i]==="'"){i++; break;}
+        else s += str[i++];
+      }
+      vals.push(s);
+    } else {
+      var start=i;
+      while(i<str.length && str[i]!==',') i++;
+      var tok=str.substring(start,i).trim();
+      if(!tok || tok.toUpperCase()==='NULL') vals.push(null);
+      else if(tok[0]==='@') vals.push(null);
+      else if(tok.toUpperCase()==='TRUE') vals.push(1);
+      else if(tok.toUpperCase()==='FALSE') vals.push(0);
+      else vals.push(isNaN(tok)?tok:(tok.indexOf('.')>=0?parseFloat(tok):parseInt(tok,10)));
+    }
+    ws();
+    if(i<str.length && str[i]===',') i++;
+  }
+  return vals;
+}
+
+/** Extract all (…) row tuples from a VALUES block, handling strings safely */
+function _extractSQLRowTuples(text){
+  var rows=[], i=0;
+  while(i<text.length){
+    if(text[i]==='('){
+      var start=i+1; i++; var depth=1, inStr=false;
+      while(i<text.length && depth>0){
+        if(inStr){
+          if(text[i]==="'" && text[i+1]==="'") i+=2;
+          else if(text[i]==="'"){inStr=false; i++;}
+          else i++;
+        } else {
+          if(text[i]==="'"){inStr=true; i++;}
+          else if(text[i]==='('){depth++; i++;}
+          else if(text[i]===')'){depth--; if(depth===0){rows.push(text.substring(start,i)); i++;} else i++;}
+          else i++;
+        }
+      }
+    } else i++;
+  }
+  return rows;
+}
+
+/**
+ * Parse weenie_properties_emote + weenie_properties_emote_action SQL into emotes[].
+ * Sets window.emotes and clears _importedEmoteSQL so buildSQL uses the array.
+ */
+function _parseEmotesFromImportedSQL(sql){
+  // Find all emote trigger and action INSERT blocks in document order
+  var blocks=[];
+  var reE = /INSERT INTO `weenie_properties_emote`([^;]*);/g;
+  var reA = /INSERT INTO `weenie_properties_emote_action`([^;]*);/g;
+  var m;
+  while((m=reE.exec(sql))!==null) blocks.push({t:'trigger',text:m[0],pos:m.index});
+  while((m=reA.exec(sql))!==null) blocks.push({t:'action', text:m[0],pos:m.index});
+  blocks.sort(function(a,b){return a.pos-b.pos;});
+
+  var parsed=[];
+  var cur=null;
+
+  for(var bi=0; bi<blocks.length; bi++){
+    var blk=blocks[bi];
+    if(blk.t==='trigger'){
+      if(cur) parsed.push(cur);
+      // Parse single VALUES row for trigger
+      var vm=blk.text.match(/VALUES\s*\(([^)]*)\)/i);
+      if(!vm){cur=null; continue;}
+      var tv=_parseSQLValueList(vm[1]);
+      // cols: object_Id(0), category(1), probability(2), weenie_Class_Id(3),
+      //       style(4), substyle(5), quest(6), vendor_Type(7), min_Health(8), max_Health(9)
+      cur={
+        category:  tv[1],
+        probability: tv[2]!==null?tv[2]:1,
+        wClassId:  tv[3],
+        style:     tv[4],
+        substyle:  tv[5],
+        quest:     tv[6]||'',
+        vendorType:tv[7],
+        minHealth: tv[8],
+        maxHealth: tv[9],
+        actions:   [],
+      };
+    } else if(blk.t==='action' && cur){
+      // Parse multi-row action VALUES block
+      var valIdx=blk.text.indexOf('VALUES');
+      if(valIdx<0) continue;
+      var valSection=blk.text.substring(valIdx+6);
+      var rowTuples=_extractSQLRowTuples(valSection);
+      cur.actions=rowTuples.map(function(rowStr){
+        var av=_parseSQLValueList(rowStr);
+        // cols: emote_Id(0),order(1),type(2),delay(3),extent(4),motion(5),
+        //       message(6),test_String(7),min(8),max(9),min_64(10),max_64(11),
+        //       min_Dbl(12),max_Dbl(13),stat(14),display(15),amount(16),
+        //       amount_64(17),hero_X_P_64(18),percent(19),spell_Id(20),
+        //       wealth_Rating(21),treasure_Class(22),treasure_Type(23),
+        //       p_Script(24),sound(25),destination_Type(26),weenie_Class_Id(27),
+        //       stack_Size(28)
+        return {
+          type:            av[2],
+          delay:           av[3],
+          extent:          av[4]!==null?av[4]:1,
+          message:         av[6],
+          testString:      av[7],
+          min:             av[8],
+          max:             av[9],
+          min64:           av[10],
+          max64:           av[11],
+          amount:          av[16],
+          amount64:        av[17],
+          heroXP64:        av[18],   // AwardLuminance reads heroXP64
+          percent:         av[19],   // _actionToYAML multiplies *100 for display
+          spellId:         av[20],
+          treasureType:    av[23],
+          wcid:            av[27],   // Give/TakeItems/InqOwnsItems read wcid
+          weenie_class_id: av[27],   // nestBlocks fallback
+          stackSize:       av[28],
+        };
+      }).filter(function(a){ return a.type!==null; });
+    }
+  }
+  if(cur) parsed.push(cur);
+
+  if(parsed.length>0){
+    emotes.splice(0,emotes.length);
+    parsed.forEach(function(e){ emotes.push(e); });
+    // Emotes are now in the array — suppress raw SQL injection (no duplication)
+    _importedEmoteSQL='';
+    console.log('[IMPORT] Parsed '+parsed.length+' emote blocks from SQL');
+  }
+}
+
+
+/**
+ * Nest flat SQL-imported emote blocks into the builder's nested structure.
+ * Unlike nestBlocks(), uses a.message as the branch lookup key for ALL
+ * branching action types — this matches the SQL format for InqOwnsItems
+ * (quest='OwnsItem-810052_5') which nestBlocks() cannot handle with its
+ * computed 'OwnsItem-'+wcid key.
+ */
+function _nestSQLEmotes(flatEmotes){
+  var BRANCH_RESULT = new Set([12,13,22,23,27,28,35,36]);
+
+  var triggers = flatEmotes.filter(function(em){ return !BRANCH_RESULT.has(parseInt(em.category)); });
+
+  // Build branch map keyed by quest field: successMap/failureMap
+  var successMap = {}; // quest → [emoteBlock]
+  var failureMap = {};
+  var SUCCESS_CATS = new Set([12,22,27,35]);
+  flatEmotes.forEach(function(em){
+    var cat = parseInt(em.category);
+    if(!BRANCH_RESULT.has(cat)) return;
+    var k = em.quest || '';
+    if(SUCCESS_CATS.has(cat)){ if(!successMap[k]) successMap[k]=[]; successMap[k].push(em); }
+    else                      { if(!failureMap[k]) failureMap[k]=[]; failureMap[k].push(em); }
+  });
+
+  function nestActions(actions){
+    return (actions||[]).map(function(a){
+      var t = parseInt(a.type);
+      if(!BRANCH_CATS[t]) return Object.assign({},a,{branches:null});
+      // Use a.message as the branch lookup key (works for InqQuest, InqQuestSolves, InqOwnsItems, etc.)
+      var key = a.message||'';
+      var sList = successMap[key]||[];
+      var fList = failureMap[key]||[];
+      // Consume first matching block (shift) to handle duplicate quest names
+      var sBlock = sList.shift();
+      var fBlock = fList.shift();
+      return Object.assign({},a,{
+        branches:{
+          success:{actions: nestActions(sBlock?sBlock.actions:[])},
+          failure:{actions: nestActions(fBlock?fBlock.actions:[])},
+        }
+      });
+    });
+  }
+
+  return triggers.map(function(em){
+    return {
+      category:    parseInt(em.category),
+      prob:        parseFloat(em.probability)||1,
+      questFilter: em.quest||'',
+      wcidFilter:  '',
+      vendorType:  1,
+      actions:     nestActions(em.actions),
+    };
+  });
+}
+
+
+function _parseSpellbookFromSQL(sql, importedWcid) {
+  spells.length = 0;
+  var wcidStr = String(importedWcid||'');
+  var sbBlock = sql.match(/INSERT INTO `weenie_properties_spell_book`[\s\S]+?;(?:\s*\n|$)/i);
+  if (!sbBlock) return;
+  var rawBlock = sbBlock[0];
+  // Capture each row AND its trailing /* spell name */ comment before any stripping.
+  // Matches: (val, val, val) /* optional name */
+  // We skip the column-name header tuple by checking that the first token is numeric.
+  var rowRe = /\(([^)]+)\)\s*(?:\/\*\s*([^*]+?)\s*\*\/)?/g;
+  var m;
+  while ((m = rowRe.exec(rawBlock)) !== null) {
+    var rowStr = m[1];
+    var spellName = m[2] ? m[2].trim() : '';
+    var av = _parseSQLValueList(rowStr);
+    // av[0]=object_Id, av[1]=spell, av[2]=probability
+    var spellId = av[1];
+    var prob = av[2];
+    // Skip header tuple `(object_Id, spell, probability)` — not numeric
+    if (spellId === null || spellId === undefined || isNaN(parseInt(spellId))) continue;
+    // Filter by WCID if available
+    if (wcidStr && av[0] !== null && String(av[0]) !== wcidStr) continue;
+    // Preserve original probability exactly; null defaults to 2.0
+    var builderProb = prob !== null ? String(prob) : '2.0';
+    spells.push({ id: parseInt(spellId), prob: builderProb, name: spellName });
+  }
+  console.log('[IMPORT] Parsed ' + spells.length + ' spells from spell_book');
+}
 function syncBuilderToYAML(){
   if(_emoteSyncLock) return;
   _d('EMOTE','Sync Builder\u2192YAML ('+emotes.length+' triggers)');
@@ -2631,8 +4177,9 @@ function buildForm(){
   // Presets row
   const prow=document.getElementById('presetsRow');
   if(prow && c.presets && c.presets.length){
+    window._presetStore=window._presetStore||[];
     prow.innerHTML='<div style="display:flex;gap:6px;flex-wrap:wrap;padding:6px 0">'+
-      c.presets.map(p=>{const n=p.name||p.l||'Preset';const d=p.desc||p.l||'';const dat=p.data||p.d||p;return '<button class="preset-btn" onclick="applyPreset('+JSON.stringify(dat)+')" title="'+d+'">'+n+'</button>';}).join('')+
+      c.presets.map(p=>{const n=p.name||p.l||'Preset';const d=p.desc||p.l||'';const dat=p.data||p.d||p;const pidx=(_presetStore.push(dat)-1);return '<button class="preset-btn" onclick="applyPreset(_presetStore['+pidx+'])" title="'+d+'">'+n+'</button>';}).join('')+
       '<button class="preset-btn" onclick="openPresetModal()" style="border-style:dashed">+ Save Current</button>'+
       '</div>';
   } else if(prow){
@@ -2643,12 +4190,12 @@ function buildForm(){
 
 
 const TYPE_CFG={
-  creature:{label:'Creature',icon:'\u2720',desc:'Hostile creatures with combat, loot, and behavior.',
+  creature:{label:'Creature',icon:'<img src="creature_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Hostile creatures with combat, loot, and behavior.',
     wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 \u2013 859,999',
     wTypes:[[10,'Creature']],
     subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes'],
     presets:[]},
-  npc:{label:'NPC',icon:'\u25c6',desc:'Quest givers, merchants, and interactive characters.',
+  npc:{label:'NPC',icon:'<img src="npc_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Quest givers, merchants, and interactive characters.',
     wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 \u2013 859,999',
     wTypes:[[10,'Creature (NPC)'],[12,'Vendor']],
     subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes'],
@@ -2657,27 +4204,27 @@ const TYPE_CFG={
       {l:'Quest Giver',d:{fName:'',fLevel:'100',fMaxHealth:'2000',fMaxStamina:'2000',fMaxMana:'1000',fDmg:'0',fXp:'0'}},
       {l:'Vendor',d:{fName:'',fLevel:'100',fMaxHealth:'2000',fMaxStamina:'2000',fMaxMana:'1000',fDmg:'0',fXp:'0'}}
     ]},
-  item:{label:'Item',icon:'\u25c8',desc:'Quest tokens, gems, stackables, consumables, and containers.',
+  item:{label:'Item',icon:'<img src="item_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Quest tokens, gems, stackables, consumables, and containers.',
     wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
     wTypes:[[1,'Generic'],[38,'Gem'],[51,'Stackable'],[18,'Food'],[34,'Scroll'],[22,'Key'],[20,'Chest'],[21,'Container'],[8,'Book'],[29,'LightSource'],[9,'Coin'],[28,'Healer'],[37,'ManaStone'],[32,'SpellComponent']],
     subTabs:['properties','emotes'],
     presets:[]},
-  weapon:{label:'Weapon',icon:'\u2694',desc:'Melee weapons, missile launchers, and casters.',
+  weapon:{label:'Weapon',icon:'<img src="weapon_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Melee weapons, missile launchers, and casters.',
     wcidFrom:'870000',wcidTo:'879999',wcidRange:'870,000 \u2013 879,999',
     wTypes:[[6,'MeleeWeapon'],[3,'MissileLauncher'],[35,'Caster'],[4,'Missile']],
     subTabs:['properties','spellbook','emotes'],
     presets:[]},
-  armor:{label:'Armor/Clothing',icon:'\u26e8',desc:'Clothing and armor for all body slots.',
+  armor:{label:'Armor/Clothing',icon:'<img src="armor_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Clothing and armor for all body slots.',
     wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
     wTypes:[[2,'Clothing/Armor']],
     subTabs:['properties','spellbook','emotes'],
     presets:[]},
-  jewelry:{label:'Jewelry',icon:'\u25ce',desc:'Rings, necklaces, bracelets, and wristlets.',
+  jewelry:{label:'Jewelry',icon:'<img src="jewelry_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Rings, necklaces, bracelets, and wristlets.',
     wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
     wTypes:[[1,'Generic'],[35,'Jewelry'],[38,'Gem (Jewelry)'],[40,'TinkerTool']],
     subTabs:['properties','emotes'],
     presets:[]},
-  generator:{label:'Generator',icon:'⧙',desc:'Spawn generators with placement coordinates.',
+  generator:{label:'Generator',icon:'<img src="generator_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Spawn generators with placement coordinates.',
     wcidFrom:'1800000',wcidTo:'1899999',wcidRange:'1,800,000+',
     wTypes:[[7,'7 · Generator'],[1,'1 · Generic']],
     subTabs:['properties'],
@@ -2686,12 +4233,12 @@ const TYPE_CFG={
       {name:'Boss (Rare)',desc:'1hr boss respawn',data:{fGenWeenieType:'7',fGenTimeType:'1',fGenRespawn:'3600',fGenInit:'1',fGenMax:'1',fGenWhen:'1',fGenWhere:'2',fGenProb:'-1',fGenStackSize:'-1'}},
       {name:'Event Spawn',desc:'Event-driven add generator',data:{fGenWeenieType:'1',fGenTimeType:'3',fGenRespawn:'60',fGenInit:'5',fGenMax:'5',fGenWhen:'1',fGenWhere:'2',fGenProb:'-1',fGenRegenInterval:'5',fGenRadius:'5',fGenInitDelay:'3'}},
     ]},
-  recipe:{label:'Recipe',icon:'\u2697',desc:'Crafting recipes and material combinations.',
+  recipe:{label:'Recipe',icon:'<img src="recipe_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Crafting recipes and material combinations.',
     wcidFrom:'600000',wcidTo:'609999',wcidRange:'600,000 \u2013 609,999',
     wTypes:null,
     subTabs:['properties'],
     presets:[]},
-  quest:{label:'Quest',icon:'\u25c7',desc:'Quest flags, kill tasks, and progression timers.',
+  quest:{label:'Quest',icon:'<img src="quest_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Quest flags, kill tasks, and progression timers.',
     wcidFrom:'860000',wcidTo:'869999',wcidRange:'860,000 \u2013 869,999',
     wTypes:null,
     subTabs:['properties'],
@@ -3698,8 +5245,9 @@ function buildSQL(){
   const wcid=gi('fWcid',850000);
   const name=g('fName','New Weenie');
   const wType=gi('fWType',10);
-  const className=name.toLowerCase().replace(/[^a-z0-9]/g,'');
-  const now='2025-01-01 00:00:00';
+  // Use original class_Name and timestamp if available from import
+  const className=window._importedClassName||name.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const now=window._importedTimestamp||'2025-01-01 00:00:00';
   const isCreature=t==='creature'||t==='npc';
 
   const lines=[];
@@ -4136,7 +5684,10 @@ function buildSQL(){
     validSpells.forEach((sp,i)=>{
       const prefix=i===0?'VALUES ':'     , ';
       const name=sp.name?` /* ${sp.name} */`:'';
-      lines.push(`${prefix}(${wcid}, ${sp.id}, ${sp.prob||2.0})${i===validSpells.length-1?';':''}${name}`);
+      // Column-aligned format matching ACE SQL export: wcid, padded spellId, padded prob
+      const spId=String(sp.id).padStart(5);
+      const spPr=String(sp.prob!==undefined&&sp.prob!==''?sp.prob:2.0).padStart(7);
+      lines.push(`${prefix}(${wcid}, ${spId}, ${spPr})${i===validSpells.length-1?';':''}${name}`);
     });
     lines.push('');
   }
@@ -4145,10 +5696,19 @@ function buildSQL(){
   if(isCreature && $('bp_dt_0')){
     lines.push(`INSERT INTO \`weenie_properties_body_part\` (\`object_Id\`, \`key\`, \`d_Type\`, \`d_Val\`, \`d_Var\`, \`base_Armor\`, \`armor_Vs_Slash\`, \`armor_Vs_Pierce\`, \`armor_Vs_Bludgeon\`, \`armor_Vs_Cold\`, \`armor_Vs_Fire\`, \`armor_Vs_Acid\`, \`armor_Vs_Electric\`, \`armor_Vs_Nether\`, \`b_h\`, \`h_l_f\`, \`m_l_f\`, \`l_l_f\`, \`h_r_f\`, \`m_r_f\`, \`l_r_f\`, \`h_l_b\`, \`m_l_b\`, \`l_l_b\`, \`h_r_b\`, \`m_r_b\`, \`l_r_b\`)`);
     bodyParts.forEach((bp,i)=>{
-      const dt=gi('bp_dt_'+i,4), dv=gi('bp_dv_'+i,0), al=gi('bp_al_'+i,80);
-      const sl=gi('bp_sl_'+i,64), pi=gi('bp_pi_'+i,56), bl=gi('bp_bl_'+i,120);
-      const co=gi('bp_co_'+i,40), fi=gi('bp_fi_'+i,120), ac=gi('bp_ac_'+i,80);
-      const el=gi('bp_el_'+i,80), nt=gi('bp_nt_'+i,0);
+      // Use imported body part values when available (avoids DOM timing issues)
+      var _ibp = window._importedBodyParts && window._importedBodyParts[bp.k];
+      const dt = _ibp ? parseInt(_ibp.dt) : gi('bp_dt_'+i,4);
+      const dv = _ibp ? parseInt(_ibp.dv) : gi('bp_dv_'+i,0);
+      const al = _ibp ? parseInt(_ibp.al) : gi('bp_al_'+i,80);
+      const sl = _ibp ? parseInt(_ibp.sl) : gi('bp_sl_'+i,64);
+      const pi = _ibp ? parseInt(_ibp.pi) : gi('bp_pi_'+i,56);
+      const bl = _ibp ? parseInt(_ibp.bl) : gi('bp_bl_'+i,120);
+      const co = _ibp ? parseInt(_ibp.co) : gi('bp_co_'+i,40);
+      const fi = _ibp ? parseInt(_ibp.fi) : gi('bp_fi_'+i,120);
+      const ac = _ibp ? parseInt(_ibp.ac) : gi('bp_ac_'+i,80);
+      const el = _ibp ? parseInt(_ibp.el) : gi('bp_el_'+i,80);
+      const nt = _ibp ? parseInt(_ibp.nt) : gi('bp_nt_'+i,0);
       const prefix=i===0?'VALUES ':'     , ';
       lines.push(`${prefix}(${wcid}, ${bp.k}, ${dt}, ${dv}, 0, ${al}, ${sl}, ${pi}, ${bl}, ${co}, ${fi}, ${ac}, ${el}, ${nt}, 1, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0)${i===bodyParts.length-1?';':''} /* ${bp.name||bp.k} */`);
     });
@@ -4252,23 +5812,12 @@ function buildSQL(){
     });
     lines.push('');
   }
-  // ── Companion generator for creature/npc (auto-appended) ─────────────────
-  if(curType==='creature'||curType==='npc'){
-    const gWcid=wcid+10000;
-    const gName=(g('fName','Creature')+'Gen').replace(/[^a-zA-Z0-9]/g,'');
-    lines.push('');
-    lines.push('-- Companion Generator --');
-    lines.push('DELETE FROM `weenie` WHERE `class_Id`='+gWcid+';');
-    lines.push('INSERT INTO `weenie` (`class_Id`,`class_Name`,`type`) VALUES ('+gWcid+',\''+gName+'\',7);');
-    lines.push('INSERT INTO `weenie_properties_int` (`object_Id`,`type`,`value`) VALUES ('+gWcid+',9,'+wcid+');');
-    lines.push('INSERT INTO `weenie_properties_float` (`object_Id`,`type`,`value`) VALUES ('+gWcid+',41,0);');
-    lines.push('INSERT INTO `weenie_properties_float` (`object_Id`,`type`,`value`) VALUES ('+gWcid+',42,900);');
-    lines.push('INSERT INTO `weenie_properties_string` (`object_Id`,`type`,`value`) VALUES ('+gWcid+',1,\''+gName+'\');');
-    lines.push('INSERT INTO `weenie_properties_generator` (`object_Id`,`probability`,`weenie_Class_Id`,`delay`,`init_Create`,`max_Create`,`when_Create`,`where_Create`,`stack_Size`,`palette_Id`,`shade`,`obj_Cell_Id`,`origin_X`,`origin_Y`,`origin_Z`,`angles_W`,`angles_X`,`angles_Y`,`angles_Z`) VALUES ('+gWcid+',1,'+wcid+',300,1,1,2,4,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);');
-  }
+  // Companion generator is AI-only — generated as a separate file in AI Mode
 
   // Generator is now its own content type tab
 
+  // Inject preserved emote/create_list SQL from imported file
+  _applyImportedSQLSections(lines, wcid);
   writeSQLOut(lines.join('\n'));
 }
 
@@ -5208,6 +6757,10 @@ function updateExtraProp(arrRef,idx,val){
   var arr=_getExtraArr(arrRef);
   if(arr&&arr[idx]!==undefined){
     arr[idx].value=String(val);
+    // Auto-scale stats when Level (Int type 25) changes for creature/NPC
+    if(arrRef==='extraInt'&&parseInt(arr[idx].type)===25&&(curType==='creature'||curType==='npc')&&parseInt(val)>0&&!window._isImported){
+      scaleCreatureStats(); return; // scaleCreatureStats calls regen()
+    }
     regen();
   }
 }
@@ -5271,7 +6824,7 @@ function startAIGeneration(){
   $('aiSaveBtn').disabled=true;
   aiGenerating=true;
   _startAIPoll();
-  window.pywebview.api.start_planning(prompt, curAIType||'creature').then(function(r){
+  window.pywebview.api.start_planning(prompt, curAIType||'creature', _aiImportedSQL||'').then(function(r){
     if(!r||!r.success){
       _stopAIPoll(); aiGenerating=false;
       $('aiGenBtn').disabled=false; $('aiStopBtn').style.display='none';

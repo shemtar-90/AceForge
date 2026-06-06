@@ -192,7 +192,7 @@ class AppAPI(LoreMixin):
                 "error":        str(e),
             }
 
-    def start_planning(self, prompt: str, content_type: str) -> dict:
+    def start_planning(self, prompt: str, content_type: str, existing_sql: str = '') -> dict:
         """Phase 1: Ask AI to produce a JSON plan of files needed."""
         if self._generating:
             return {"success": False, "error": "Already generating."}
@@ -207,7 +207,8 @@ class AppAPI(LoreMixin):
         wcid_ranges = self.config.get_wcid_ranges()
         server_name = self.config.server_name or "Shattered Dawn"
 
-        system_prompt = f"""You are an ACEmulator content planner for the server "{server_name}".
+        edit_mode = bool(existing_sql and existing_sql.strip())
+        system_prompt = f"""You are an ACEmulator content {"editor" if edit_mode else "planner"} for the server "{server_name}".
 The user will describe content they want created. Your job is to plan the SQL files needed.
 
 Respond with ONLY a valid JSON object — no markdown, no explanation, no code fences.
@@ -234,7 +235,10 @@ Rules:
 - Assign realistic WCIDs from the correct range
 - List files in dependency order (items before quests that reference them)
 - Keep file count realistic (typically 1-8 files)
-- Name files as "WCID Descriptive Name.sql" """
+- Name files as "WCID Descriptive Name.sql"
+- For creature or npc content types, ALWAYS include a companion generator file
+  as a separate entry (type "generator", wcid = creature_wcid + 10000, named
+  "WCID CreatureName Generator.sql") so the creature spawns in the world """
 
         self.api_client.update_credentials(
             api_key=self.config.api_key,
@@ -249,10 +253,22 @@ Rules:
             self._chunk_queue.put({"type": "plan_ready", "text": text})
             print(f"[PLAN] done, {len(text)} chars", flush=True)
 
+        # In edit mode, prepend the existing SQL so AI knows what to modify
+        planning_prompt = prompt
+        if existing_sql and existing_sql.strip():
+            # Store for use by generate_planned_file
+            self._editing_sql = existing_sql.strip()
+            planning_prompt = (
+                f"EXISTING WEENIE SQL (modify this, do not create new):\n```sql\n{existing_sql[:8000]}\n```\n\n"
+                f"USER REQUEST: {prompt}"
+            )
+        else:
+            self._editing_sql = ""
+
         try:
             threading.Thread(
                 target=self.api_client.stream_generate,
-                args=(system_prompt, prompt, self._on_chunk, _plan_done, self._on_error),
+                args=(system_prompt, planning_prompt, self._on_chunk, _plan_done, self._on_error),
                 daemon=True,
             ).start()
         except Exception as e:
@@ -261,7 +277,7 @@ Rules:
         return {"success": True}
 
     def generate_planned_file(self, plan_json: str, file_index: int,
-                              original_prompt: str) -> dict:
+                              original_prompt: str, existing_sql: str = '') -> dict:
         """Phase 2: Generate SQL for one specific file from the plan."""
         if self._generating:
             return {"success": False, "error": "Already generating."}
@@ -280,6 +296,10 @@ Rules:
         wcid  = file_entry.get("wcid", 800000)
         fdesc = file_entry.get("description", "")
         total = len(plan.get("files", []))
+
+        # In edit mode, prefer stored SQL from planning phase
+        if not existing_sql:
+            existing_sql = getattr(self, "_editing_sql", "")
 
         # Build context about other files for cross-references
         other_files = [f for i, f in enumerate(plan["files"]) if i != file_index]
@@ -331,10 +351,15 @@ Start with: /* ===== FILE: {fname} ===== */"""
             base_url=self.config.base_url,
         )
 
+        edit_ctx = (
+            f"EXISTING WEENIE SQL TO MODIFY:\n```sql\n{existing_sql[:8000]}\n```\n\n"
+            if existing_sql else ""
+        )
         file_prompt = (
-            f"Generate the SQL for: {fdesc}\n"
-            f"Original request: {original_prompt}\n"
-            f"File name: {fname} | WCID: {wcid}"
+            edit_ctx
+            + f"Generate the SQL for: {fdesc}\n"
+            + f"Original request: {original_prompt}\n"
+            + f"File name: {fname} | WCID: {wcid}"
         )
 
         def _file_done(text: str):
@@ -476,6 +501,75 @@ Start with: /* ===== FILE: {fname} ===== */"""
 
     # ── Content Libraries ─────────────────────────────────────────────────────
 
+
+
+    def import_sql(self) -> dict:
+        """Open a file dialog and return SQL file content for import into the builder."""
+        import sys
+        from pathlib import Path
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.lift()
+            root.attributes('-topmost', True)
+            path = filedialog.askopenfilename(
+                title="Import SQL File",
+                filetypes=[("SQL files", "*.sql"), ("All files", "*.*")]
+            )
+            root.destroy()
+        except Exception as e:
+            return {"error": str(e)}
+        if not path:
+            return {"cancelled": True}
+        try:
+            content = Path(path).read_text(encoding='utf-8', errors='ignore')
+            return {
+                "path": str(path),
+                "filename": Path(path).name,
+                "content": content,
+                "size": len(content),
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+    def get_icons_data(self) -> list:
+        """
+        Return the ICONS array from icons.js for the icon picker.
+        In frozen (.exe) mode sys._MEIPASS is a temp dir that changes each run,
+        so we read from the persistent directory beside the executable instead.
+        """
+        import sys, json, re
+        from pathlib import Path
+
+        # Persistent base: next to the .exe when frozen, or next to this file in dev
+        if getattr(sys, 'frozen', False):
+            persistent_base = Path(sys.executable).parent / 'aceforge'
+        else:
+            persistent_base = Path(__file__).parent
+
+        icons_js = persistent_base / 'web' / 'icons.js'
+
+        # Also check next to the exe directly (some install layouts)
+        if not icons_js.exists():
+            icons_js = Path(sys.executable).parent / 'aceforge' / 'web' / 'icons.js'
+        if not icons_js.exists():
+            icons_js = Path(sys.executable).parent / 'web' / 'icons.js'
+
+        if not icons_js.exists():
+            return []
+
+        try:
+            text = icons_js.read_text(encoding='utf-8', errors='ignore')
+            # Extract the array literal: const ICONS = [...];
+            m = re.search(r'(?:const|var|let)\s+ICONS\s*=\s*(\[.*?\])\s*;?\s*$', text, re.DOTALL)
+            if m:
+                return json.loads(m.group(1))
+            return []
+        except Exception:
+            return []
+
     def get_library_status(self) -> list:
         """Return status of all installable content libraries."""
         import json
@@ -584,7 +678,13 @@ Start with: /* ===== FILE: {fname} ===== */"""
 
                     # ── ICONS PACKAGE ──────────────────────────────────────
                     if has_icons_js:
-                        web_dir  = base / "web"
+                        # Use persistent dir (beside .exe) so files survive restarts
+                        import sys as _sys
+                        if getattr(_sys, "frozen", False):
+                            _persistent = Path(_sys.executable).parent / "aceforge"
+                        else:
+                            _persistent = Path(__file__).parent
+                        web_dir  = _persistent / "web"
                         icon_dst = web_dir / "icons"
                         icon_dst.mkdir(parents=True, exist_ok=True)
                         extracted = 0
