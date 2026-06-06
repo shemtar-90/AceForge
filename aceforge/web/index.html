@@ -342,12 +342,127 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 </div>
 
 
+
+<!-- SERVER IDENTITY MODAL -->
+<div id="serverIdentityModal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(20,15,8,.72);align-items:center;justify-content:center">
+  <div style="background:var(--parch);border:1px solid var(--border);width:min(640px,92vw);max-height:88vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.5);display:flex;flex-direction:column">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--parch-dk)">
+      <div>
+        <div style="font-family:var(--ui-font);font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--crimson)">⚙ SERVER IDENTITY</div>
+        <div style="font-family:'IM Fell English',serif;font-style:italic;font-size:11px;color:var(--ink-faint);margin-top:2px">This context is injected into every LoreForge conversation to personalize AI responses.</div>
+      </div>
+      <button onclick="closeServerIdentity()" style="background:none;border:none;font-size:18px;color:var(--ink-faint);cursor:pointer;line-height:1">×</button>
+    </div>
+    <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+
+      <!-- Server Name (synced with Settings) -->
+      <div>
+        <label style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink-dim);display:block;margin-bottom:4px">SERVER NAME</label>
+        <input type="text" id="siServerName" placeholder="Your server's name" style="width:100%;box-sizing:border-box"
+          oninput="siCheckNameSync()">
+        <div id="siNameMismatch" style="display:none;margin-top:4px;font-size:10px;color:var(--crimson);font-style:italic">⚠ Differs from Settings → Server Name. Saving will update both.</div>
+      </div>
+
+      <!-- Row: Host Type + Content Type -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink-dim);display:block;margin-bottom:4px">HOST TYPE</label>
+          <select id="siHostType" style="width:100%">
+            <option value="ACE">ACEmulator (ACE)</option>
+            <option value="GDLE">GDLE</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink-dim);display:block;margin-bottom:4px">CONTENT TYPE</label>
+          <select id="siContentType" style="width:100%">
+            <option value="End of Retail">End of Retail</option>
+            <option value="Custom">Custom</option>
+            <option value="Hybrid">Hybrid (Retail + Custom)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Row: DAT Type + Era -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink-dim);display:block;margin-bottom:4px">.DAT TYPE</label>
+          <select id="siDatType" style="width:100%" onchange="siDatTypeChange()">
+            <option value="Standard ACE">Standard ACE</option>
+            <option value="Realms">Realms</option>
+            <option value="Other">Other</option>
+          </select>
+          <input type="text" id="siDatOther" placeholder="Describe your .DAT type…"
+            style="width:100%;box-sizing:border-box;margin-top:6px;display:none">
+        </div>
+        <div>
+          <label style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink-dim);display:block;margin-bottom:4px">SERVER ERA / TIMELINE</label>
+          <select id="siEra" style="width:100%">
+            <option value="End of Retail (ToD-era)">End of Retail (ToD-era)</option>
+            <option value="Classic (pre-events)">Classic (pre-events)</option>
+            <option value="Custom Timeline">Custom Timeline</option>
+            <option value="Post-Retail (fan continuation)">Post-Retail (fan continuation)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Row: Tone + Target Audience -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink-dim);display:block;margin-bottom:4px">SERVER TONE</label>
+          <select id="siTone" style="width:100%">
+            <option value="Authentic / Lore-faithful">Authentic / Lore-faithful</option>
+            <option value="Serious / Dark">Serious / Dark</option>
+            <option value="Heroic / Epic">Heroic / Epic</option>
+            <option value="Light / Casual">Light / Casual</option>
+            <option value="Mixed">Mixed</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink-dim);display:block;margin-bottom:4px">TARGET AUDIENCE</label>
+          <select id="siAudience" style="width:100%">
+            <option value="Veterans">Veterans (know the lore)</option>
+            <option value="New Players">New Players</option>
+            <option value="Mixed">Mixed</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Server Intent -->
+      <div>
+        <label style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink-dim);display:block;margin-bottom:4px">SERVER INTENT <span style="font-weight:400;color:var(--ink-faint)">(goals, theme, what makes it unique)</span></label>
+        <textarea id="siIntent" rows="3" placeholder="e.g. A lore-faithful end-of-retail experience with new postgame content, harder raids, and an ongoing custom storyline set after the Hopeslayer arc…" style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
+      </div>
+
+      <!-- Lore -->
+      <div>
+        <label style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink-dim);display:block;margin-bottom:4px">CUSTOM LORE / WORLD NOTES <span style="font-weight:400;color:var(--ink-faint)">(factions, history, places, ongoing storylines)</span></label>
+        <textarea id="siLore" rows="5" placeholder="e.g. The Rift Syndicate is a new faction born from exiled Viamontian mages who discovered a way to harness Void magic for teleportation. Their stronghold, the Rifted Spire, floats above the Direlands…" style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
+      </div>
+
+      <!-- Custom Factions / Characters -->
+      <div>
+        <label style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink-dim);display:block;margin-bottom:4px">KEY CUSTOM CHARACTERS / NPCS <span style="font-weight:400;color:var(--ink-faint)">(names, roles, personality)</span></label>
+        <textarea id="siCharacters" rows="3" placeholder="e.g. Marson Riftrider — ex-Viamontian knight who defected to the Rift Syndicate, now guards the entrance to the Rifted Spire. Stoic but conflicted." style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
+      </div>
+
+    </div>
+    <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;background:var(--parch-dk)">
+      <button onclick="closeServerIdentity()" style="background:none;border:1px solid var(--border);padding:6px 18px;font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.06em;cursor:pointer;color:var(--ink-dim)">CANCEL</button>
+      <button onclick="saveServerIdentity()" style="background:var(--crimson);border:none;padding:6px 18px;font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.06em;cursor:pointer;color:#fff">SAVE IDENTITY</button>
+    </div>
+  </div>
+</div>
+
 <!-- LOREFORGE WORKSPACE -->
 <div class="workspace" id="loreWS">
   <div class="lore-sidebar">
-    <div class="lore-sidebar-hdr">
-      <span class="lore-sidebar-title">LOREFORGE</span>
-      <button class="lore-new-btn" onclick="loreNewConvo()">+ New</button>
+    <div class="lore-sidebar-hdr" style="flex-direction:column;align-items:stretch;gap:7px">
+      <span class="lore-sidebar-title" style="padding-bottom:2px">LOREFORGE</span>
+      <div style="display:flex;gap:6px">
+        <button class="lore-new-btn" onclick="openServerIdentity()" title="Server Identity"
+          style="flex:1;background:transparent;border:1px solid var(--crimson);color:var(--crimson);font-size:9px;padding:4px 6px;white-space:nowrap">⚙ Identity</button>
+        <button class="lore-new-btn" onclick="loreNewConvo()" style="flex:1">+ New</button>
+      </div>
     </div>
     <div class="lore-convo-list" id="loreConvoList">
       <div style="padding:20px 12px;text-align:center;font-family:'IM Fell English',serif;font-style:italic;font-size:12px;color:var(--ink-faint)">No conversations yet</div>
@@ -868,6 +983,8 @@ let recipeReqsStr = [];
 let recipeMods    = [];
 let cookbookEntries=[];
 let aiGenerating  = false;
+let _aiLastChunkTime = 0;   // timestamp of last chunk/activity from poll
+let _aiStallCount    = 0;   // consecutive empty polls while aiGenerating=true
 let aiFullText    = '';
 let curAIType     = 'creature';
 let curAISub      = 'npc';
@@ -2592,15 +2709,18 @@ function buildRecipeProps(){
 //  ATTRIBUTES 
 function buildAttrs(){
   const attrs=[[1,'Strength'],[2,'Endurance'],[3,'Quickness'],[4,'Coordination'],[5,'Focus'],[6,'Self']];
+  const vitals=[[1,'MaxHealth','vital_1',2000],[3,'MaxStamina','vital_3',2000],[5,'MaxMana','vital_5',800]];
+  const row=(label,code,id,def)=>`
+    <div style=\"display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-lt)\">
+      <span style=\"font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--ink-dim)\">${label} <span class=\"fc\">${code}</span></span>
+      <input type=\"number\" id=\"${id}\" value=\"${def}\" style=\"width:90px;text-align:right\" oninput=\"regen()\">
+    </div>`;
   return `<div class=\"sec\" style=\"padding:0 16px\">
-    <div class=\"sh\"><div class=\"st\">Attributes</div><div class=\"sl\"></div></div></div>
-    <div class=\"grid g3\">${attrs.map(([t,n])=>`<div class=\"fg\"><div class=\"fl\">${n} <span class=\"fc\">A-${t}</span></div><input type=\"number\" id=\"attr_${t}\" value=\"260\"></div>`).join('')}</div>
+    <div class=\"sh\"><div class=\"st\">Attributes</div><div class=\"sl\"></div></div>
+    ${attrs.map(([t,n])=>row(n,'A-'+t,'attr_'+t,260)).join('')}
     <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Vitals</div><div class=\"sl\"></div></div>
-    <div class=\"grid g3\">
-      <div class=\"fg\"><div class=\"fl\">MaxHealth <span class=\"fc\">V-1</span></div><input type=\"number\" id=\"vital_1\" value=\"2000\"></div>
-      <div class=\"fg\"><div class=\"fl\">MaxStamina <span class=\"fc\">V-3</span></div><input type=\"number\" id=\"vital_3\" value=\"2000\"></div>
-      <div class=\"fg\"><div class=\"fl\">MaxMana <span class=\"fc\">V-5</span></div><input type=\"number\" id=\"vital_5\" value=\"800\"></div>
-    </div></div>`;
+    ${vitals.map(([t,n,id,def])=>row(n,'V-'+t,id,def)).join('')}
+  </div>`;
 }
 
 //  SKILLS 
@@ -2707,7 +2827,7 @@ function buildSpellbook(){
         <div class=\"fl\">Probability</div>
         <input type=\"text\" id=\"sp_pr_${i}\" value=\"${sp.prob||'2.0'}\" oninput=\"spells[${i}].prob=this.value;regen()\">
       </div>
-      <button class=\"del\" onclick=\"spells.splice(${i},1);rebuildPanel('spellbook')\" style=\"margin-top:16px\"></button>
+      <button class=\"del\" onclick=\"spells.splice(${i},1);rebuildPanel('spellbook');regen()\" style=\"margin-top:16px\" title=\"Remove spell\">✕</button>
     </div>`).join('');
   return `<div class=\"sec\">
     <div class=\"sh\"><div class=\"st\">Spell Book</div><div class=\"sl\"></div></div>
@@ -2850,6 +2970,7 @@ function switchType(type,btn){
   bodyParts=getBodyParts(parseInt(gi('cType',31)));
   document.querySelectorAll('.itab').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
+  try{ loadServerIdentity(); }catch(e){ console.warn('loadServerIdentity:',e); }
   try{ buildForm(); }catch(e){
     const fc=document.getElementById('formContent');
     if(fc) fc.innerHTML='<div style="padding:20px;color:darkred;font-family:monospace;font-size:11px"><b>switchType('+type+') error:</b><br>'+e.message+'<br><pre>'+e.stack+'</pre></div>';
@@ -3099,6 +3220,23 @@ const _CAT_TRIGGER={
 // Categories that require a quest/label key on the trigger line
 const _CAT_NEEDS_KEY=new Set([32,38,12,13,22,23,27,28,29,30,31,33,34,35,36,37]);
 
+
+// Stat name lookup for Inq/Set stat action types
+function _lookupStatName(statId, actionType){
+  var id=parseInt(statId);
+  if(isNaN(id)||id===0) return String(statId||'');
+  var arr;
+  if([36,53,54,55,115].includes(actionType))     arr=INT_STATS;
+  else if([35,69].includes(actionType))           arr=BOOL_STATS;
+  else if([37,118].includes(actionType))          arr=FLOAT_STATS;
+  else if([43,44,45,46,110].includes(actionType)) arr=ALL_SKILLS_FULL;
+  else if([39,40].includes(actionType))           arr=[[1,'Strength'],[2,'Endurance'],[3,'Quickness'],[4,'Coordination'],[5,'Focus'],[6,'Self']];
+  else if([41,42].includes(actionType))           arr=[[1,'MaxHealth'],[2,'Health'],[3,'MaxStamina'],[4,'Stamina'],[5,'MaxMana'],[6,'Mana']];
+  else arr=INT_STATS;
+  var entry=(arr||[]).find(function(e){return parseInt(e[0])===id;});
+  return entry?entry[1]:String(id);
+}
+
 function _actionToYAML(a, indent, _inlined, _gotoSetMap){
   const t=parseInt(a.type)||10;
   const tName=(EMOTE_TYPES.find(e=>e[0]===t)||[t,String(t)])[1];
@@ -3138,6 +3276,28 @@ function _actionToYAML(a, indent, _inlined, _gotoSetMap){
   }
   else if([1,2,62,47,48,90].includes(t)) val=String(a.amount64||'');
   else if([14,19,27,73].includes(t)) val=String(a.spellId||'');
+  // ── Inq / Set stat actions — stat name + range ──────────────────────
+  else if([35,36,37,38,39,40,41,42,43,44,45,46,53,54,55,69,110,115,118].includes(t)){
+    var _sn=_lookupStatName(a.stat,t);
+    val=_sn;
+    // Inq types: append min-max range
+    if([36,39,40,41,42,43,44,115].includes(t)){ // integer range
+      if(a.min!=null&&a.max!=null) val+=', '+a.min+' - '+a.max;
+      else if(a.min!=null) val+=', '+a.min;
+    } else if(t===37){ // float range (min_Dbl/max_Dbl)
+      if(a.minDbl!=null&&a.maxDbl!=null) val+=', '+a.minDbl+' - '+a.maxDbl;
+      else if(a.minDbl!=null) val+=', '+a.minDbl;
+    } else if(t===35){ // bool — min column holds 0/1
+      if(a.min!=null) val+=', '+(parseInt(a.min)===1?'True':'False');
+    }
+    // Set / Increment / Decrement types: append target value
+    if([53,54,55].includes(t)&&a.amount!=null) val+=', '+a.amount;
+    if(t===69&&a.amount!=null)  val+=', '+(parseInt(a.amount)===1?'True':'False');
+    if(t===118&&a.minDbl!=null) val+=', '+a.minDbl;
+    // InqStringStat (38): stat + testString value
+    if(t===38&&a.testString)    val+=', '+a.testString;
+    // InqSkillTrained (45), InqSkillSpecialized (46), InqSkillUntrainable (110): just name
+  }
   else val=a.message||a.testString||'';
 
   const delay=(parseFloat(a.delay||0)>0)?'Delay: '+a.delay+', ':'';
@@ -3583,20 +3743,17 @@ function _syncImportedToFormFields(importedSQL) {
     }
   });
 
-  // ── String — extract display name and any other string form fields ──
+  // ── String — set form fields but KEEP all types in extraStr (like extraInt) ──
+  // Stripping type 1 would leave the String sub-tab empty after import.
   var _STR_FORM_MAP = {1:'fName'};
-  var keepStr = [];
   extraStr.forEach(function(r){
     var fid = _STR_FORM_MAP[parseInt(r.type)];
     if(fid){
       var el = document.getElementById(fid);
       if(el && r.value) el.value = r.value.replace(/^'|'$/g,'');
-    } else {
-      keepStr.push(r);
     }
+    // All types stay in extraStr — the String sub-tab reads from this array
   });
-  extraStr.length = 0;
-  keepStr.forEach(function(r){ extraStr.push(r); });
 
   // ── Primary Attributes (Strength/Endurance/etc.) — parse from SQL text ──
   if(importedSQL){
@@ -3886,12 +4043,16 @@ function _parseEmotesFromImportedSQL(sql){
           type:            av[2],
           delay:           av[3],
           extent:          av[4]!==null?av[4]:1,
+          motion:          av[5],    // PlayAnimation / ExecuteEmote
           message:         av[6],
           testString:      av[7],
           min:             av[8],
           max:             av[9],
           min64:           av[10],
           max64:           av[11],
+          minDbl:          av[12],   // InqFloatStat / SetFloatStat range
+          maxDbl:          av[13],   // InqFloatStat / SetFloatStat range
+          stat:            av[14],   // InqIntStat / InqBoolStat / InqFloatStat etc.
           amount:          av[16],
           amount64:        av[17],
           heroXP64:        av[18],   // AwardLuminance reads heroXP64
@@ -3901,6 +4062,10 @@ function _parseEmotesFromImportedSQL(sql){
           wcid:            av[27],   // Give/TakeItems/InqOwnsItems read wcid
           weenie_class_id: av[27],   // nestBlocks fallback
           stackSize:       av[28],
+          // Location fields (Teleport types 87,63,99,100)
+          cell:            av[32],
+          ox:              av[33], oy: av[34], oz: av[35],
+          aw:              av[36], ax: av[37], ay: av[38], az: av[39],
         };
       }).filter(function(a){ return a.type!==null; });
     }
@@ -4415,13 +4580,21 @@ function _buildActionFields(fdefs, a, i, j, aType, actRef){
   };
   if(STAT_MAP[aType]){
     const[stats,label]=STAT_MAP[aType];
-    const statSel=buildSearchSelect('ea_stat_'+pid,stats,a.stat||'',_s('stat'),'Search stats…');
+    // Use a standard <select> — the buildSearchSelect listbox was unreliable
+    // with _emoteDelegate. Regular <select> fires 'change' which delegates correctly.
+    const curStat=parseInt(a.stat)||0;
+    const statOpts='<option value="">-- '+label+' --</option>'+
+      stats.map(s=>'<option value="'+s[0]+'"'+(parseInt(s[0])===curStat?' selected':'')+'>'+s[0]+' · '+s[1]+'</option>').join('');
+    const statSel='<select '+_si('stat')+'>'+statOpts+'</select>';
     const valFd=fdefs.find(f=>f.f==='wcid'||f.f==='amount'||f.f==='stackSize');
     const valHtml=valFd?'<div class="fg"><div class="fl">Value</div><input type="text" value="'+(a[valFd.f]||'')+'" placeholder="e.g. 1" '+_s(valFd.f)+'></div>':'';
     const isInqT=[35,36,37,38,39,40,41,42,43,44,45,46,114].includes(aType);
-    const mmHtml=isInqT?
-      '<div class="fg"><div class="fl">Min</div><input type="number" value="'+(a.min||0)+'" '+_s('min')+'"></div>'+
-      '<div class="fg"><div class="fl">Max</div><input type="number" value="'+(a.max||1)+'" '+_s('max')+'"></div>':'';
+    const isFloat=[37,118].includes(aType);
+    const mmHtml=isInqT?(isFloat?
+      '<div class="fg"><div class="fl">Min (float)</div><input type="number" step="any" value="'+(a.minDbl!=null?a.minDbl:0)+'" '+_sf('minDbl')+'"></div>'+
+      '<div class="fg"><div class="fl">Max (float)</div><input type="number" step="any" value="'+(a.maxDbl!=null?a.maxDbl:1)+'" '+_sf('maxDbl')+'"></div>':
+      '<div class="fg"><div class="fl">Min</div><input type="number" value="'+(a.min!=null?a.min:0)+'" '+_s('min')+'"></div>'+
+      '<div class="fg"><div class="fl">Max</div><input type="number" value="'+(a.max!=null?a.max:1)+'" '+_s('max')+'"></div>'):'';
     return '<div class="fg" style="grid-column:span '+(isInqT?3:2)+'"><div class="fl">'+label+'</div>'+statSel+'</div>'+mmHtml+valHtml;
   }
   if(aType===33||aType===32){
@@ -4686,7 +4859,7 @@ function buildAdvanced(){
       var valCtrl;
       if(isCreatureType){
         var opts=CREATURE_TYPES.map(function(ct){return '<option value="'+ct[0]+'"'+(parseInt(r.value)===ct[0]?' selected':'')+'>'+ct[0]+' · '+ct[1]+'</option>';}).join('');
-        valCtrl='<select onchange="updateExtraProp(\'extraInt\','+i+',this.value);onCTypeChange()" style="flex-shrink:0;max-width:240px;font-family:\'Source Code Pro\',monospace;font-size:11px;border-bottom:1px solid var(--border);background:transparent;color:var(--ink)">'+opts+'</select>';
+        valCtrl='<select onchange="updateExtraProp(\'extraInt\','+i+',this.value);onCTypeChange()" style="flex-shrink:0;max-width:200px;font-family:\'Source Code Pro\',monospace;font-size:11px;border-bottom:1px solid var(--border);background:transparent;color:var(--ink)">'+opts+'</select>';
       } else if(arrRef==='extraInt' && PROP_DROPDOWNS[String(r.type)]){
         var ddOpts=PROP_DROPDOWNS[String(r.type)].map(function(opt){return '<option value="'+opt[0]+'"'+(parseInt(r.value)===opt[0]?' selected':'')+'>'+opt[0]+' · '+opt[1]+'</option>';}).join('');
         valCtrl='<select onchange="updateExtraProp(\''+arrRef+'\','+i+',this.value)" style="flex-shrink:0;max-width:200px;font-family:\'Source Code Pro\',monospace;font-size:11px;border-bottom:1px solid var(--border);background:transparent;color:var(--ink)">'+ddOpts+'</select>';
@@ -5735,6 +5908,7 @@ function buildSQL(){
     const _n=v=>(v!==undefined&&v!==''&&v!==null)?v:'NULL';
     const _q=v=>v?`'${String(v).replace(/'/g,"''")}'`:'NULL';
     const STAT_SQL_TYPES=new Set([35,36,37,38,39,40,41,42,43,44,45,46,53,54,55,69,110,115,118]);
+    const FLOAT_STAT_TYPES=new Set([37,118]);
     const LOC_SQL_TYPES =new Set([87,63,99,100]);
 
     function _actionRowSQL(a, order, prefix){
@@ -5744,11 +5918,13 @@ function buildSQL(){
       const max64=(at===49&&a.percent)?'0':'NULL';
       const motV=(a.motion&&a.motion!=='')?_n(a.motion):'NULL';
       const wcV =(a.wcid &&a.wcid !=='')?a.wcid :'NULL';
-      const stV =STAT_SQL_TYPES.has(at)&&a.stat&&a.stat!==''?_n(a.stat):'NULL';
+      const stV    =STAT_SQL_TYPES.has(at)&&a.stat!=null&&a.stat!==''?_n(a.stat):'NULL';
+      const minDblV=FLOAT_STAT_TYPES.has(at)&&a.minDbl!=null?a.minDbl:'NULL';
+      const maxDblV=FLOAT_STAT_TYPES.has(at)&&a.maxDbl!=null?a.maxDbl:'NULL';
       const spV =(a.spellId&&a.spellId!=='')?_n(a.spellId):'NULL';
       const isLoc=LOC_SQL_TYPES.has(at);
       const locV=k=>isLoc&&a[k]?a[k]:'NULL';
-      return `${prefix}(@parent_id, ${order}, ${at} /* ${tn} */, ${_n(a.delay)||0}, ${(a.extent!==undefined&&a.extent!=='')?Number(a.extent):1}, ${motV}, ${_q(a.message)}, ${_q(a.testString)}, ${_n(a.min)}, ${_n(a.max)}, ${min64}, ${max64}, NULL, NULL, ${stV}, NULL, ${_n(a.amount)}, NULL, ${_n(a.heroXP64)}, ${_n(a.percent)}, ${spV}, NULL, NULL, NULL, NULL, NULL, NULL, ${wcV}, ${_n(a.stackSize)}, NULL, NULL, NULL, ${locV('cell')}, ${locV('ox')}, ${locV('oy')}, ${locV('oz')}, ${locV('aw')}, ${locV('ax')}, ${locV('ay')}, ${locV('az')})`;
+      return `${prefix}(@parent_id, ${order}, ${at} /* ${tn} */, ${_n(a.delay)||0}, ${(a.extent!==undefined&&a.extent!=='')?Number(a.extent):1}, ${motV}, ${_q(a.message)}, ${_q(a.testString)}, ${_n(a.min)}, ${_n(a.max)}, ${min64}, ${max64}, ${minDblV}, ${maxDblV}, ${stV}, NULL, ${_n(a.amount)}, NULL, ${_n(a.heroXP64)}, ${_n(a.percent)}, ${spV}, NULL, NULL, NULL, NULL, NULL, NULL, ${wcV}, ${_n(a.stackSize)}, NULL, NULL, NULL, ${locV('cell')}, ${locV('ox')}, ${locV('oy')}, ${locV('oz')}, ${locV('aw')}, ${locV('ax')}, ${locV('ay')}, ${locV('az')})`;
     }
 
     function _branchKeys(a, ownsCtr){
@@ -6259,12 +6435,52 @@ window.addEventListener('lib_progress',e=>{
 let _aiPollTimer=null;
 function _startAIPoll(){
   if(_aiPollTimer) return;
+  _aiStallCount=0;
+  _aiLastChunkTime=Date.now();
   console.log('[AI] poll started');
   _aiPollTimer=setInterval(function(){
     if(!window.pywebview) return;
     window.pywebview.api.poll_generation().then(function(r){
       if(!r){ console.warn('[AI] poll returned null'); return; }
+      var _hasActivity=r.items&&r.items.length>0;
+      if(_hasActivity) { _aiLastChunkTime=Date.now(); _aiStallCount=0; }
       console.log('[AI] poll: items='+( r.items?r.items.length:0)+' generating='+r.generating);
+      // ── Stall detection ──────────────────────────────────────────────
+      if(aiGenerating&&!r.generating&&!_hasActivity){
+        _aiStallCount++;
+        if(_aiStallCount>=4){
+          // Python stopped generating without sending a terminal event
+          console.error('[AI] STALL detected — generating=false, no items, count='+_aiStallCount);
+          _stopAIPoll(); aiGenerating=false;
+          $('aiGenBtn').disabled=false; $('aiStopBtn').style.display='none';
+          var stallMsg='✗ Generation stalled — check debug for errors';
+          $('aiStatus').textContent=stallMsg;
+          $('aiStatus').className='ai-status error';
+          // Show a Retry button so the user can regenerate the current file
+          var retryBtn=document.getElementById('aiRetryBtn');
+          if(!retryBtn){
+            retryBtn=document.createElement('button');
+            retryBtn.id='aiRetryBtn';
+            retryBtn.style.cssText='background:var(--crimson);color:#fff;border:none;font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;padding:8px 16px;cursor:pointer;border-radius:2px;margin-left:8px';
+            var sb=$('aiStopBtn'); if(sb&&sb.parentNode) sb.parentNode.insertBefore(retryBtn,sb.nextSibling);
+          }
+          retryBtn.textContent='↺ Retry File '+(_aiPlanIndex+1);
+          retryBtn.style.display='inline-flex';
+          retryBtn.onclick=function(){ retryBtn.style.display='none'; _aiStallCount=0; _generateNextFile(); };
+          _aiStallCount=0;
+          return;
+        }
+      } else if(aiGenerating&&_aiLastChunkTime&&(Date.now()-_aiLastChunkTime)>120000){
+        // Hard timeout: 120s with no activity at all
+        console.error('[AI] TIMEOUT — no activity for 120s');
+        _stopAIPoll(); aiGenerating=false;
+        $('aiGenBtn').disabled=false; $('aiStopBtn').style.display='none';
+        $('aiStatus').textContent='✗ Generation timed out (120s)';
+        $('aiStatus').className='ai-status error';
+        _aiLastChunkTime=0;
+        return;
+      }
+      // ── End stall detection ──────────────────────────────────────────
       (r.items||[]).forEach(function(item){
         if(item.type==='chunk'){
           aiFullText+=item.text;
@@ -7362,6 +7578,82 @@ function loreRenameConvo(name){
   });
 }
 
+
+function loreCopyMessage(idx){
+  var msg=_loreMessages[idx];
+  if(!msg) return;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(msg.content).then(function(){toast('\u2713 Response copied');});
+  } else {
+    var ta=document.createElement('textarea');
+    ta.value=msg.content;
+    ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast('\u2713 Response copied');
+  }
+}
+
+// ── LoreForge → AI Mode bridge ───────────────────────────────────────────
+// Trigger phrases in a user message that signal "please write me a prompt"
+var _LORE_INJECT_USER_RE = /(create|build|write|draft|generate|craft|make|give me|design|produce)\s+(?:an?\s+)?(?:aceforge|ai.?mode|ace\s)?\s*(?:prompt|content|weenie|monster|npc|creature|item|weapon|armor|boss|vendor|quest|guard|dungeon|mob)/i;
+
+// Response prefixes that are already ACEForge AI Mode prompts
+var _LORE_INJECT_RESP_RE = /^(?:New\s+(?:Monster|Creature|NPC|Item|Weapon|Armor|Boss|Vendor|Portal|Quest|Guard|Dungeon)|#\s*New|Create a New)/im;
+
+function _loreShouldShowInject(msgIdx){
+  var msg=_loreMessages[msgIdx];
+  if(!msg||msg.role!=='assistant') return false;
+  // Check response starts with known ACE AI-Mode prefix
+  if(_LORE_INJECT_RESP_RE.test(msg.content.trim())) return true;
+  // Check the preceding user turn for trigger phrases
+  var prev=_loreMessages[msgIdx-1];
+  if(prev&&prev.role==='user'&&_LORE_INJECT_USER_RE.test(prev.content)) return true;
+  return false;
+}
+
+function _loreDetectAIType(content){
+  if(/\bnpc\b|non.player|innkeeper|merchant|quest.giver|story.npc/i.test(content)) return 'npc';
+  if(/\bvendor\b|shopkeeper|sells/i.test(content)) return 'vendor';
+  if(/\bmonster\b|\bcreature\b|\bboss\b|\bguard\b|\bdungeon\b|\bmob\b|\benemy\b/i.test(content)) return 'creature';
+  if(/\bquest\b|\bcontract\b|\bkill task\b/i.test(content)) return 'quest';
+  if(/\bweapon\b|\barmor\b|\bitem\b|\bgear\b|\bscroll\b/i.test(content)) return 'item';
+  return null;
+}
+
+function loreInjectToAI(idx){
+  var msg=_loreMessages[idx];
+  if(!msg) return;
+  var content=msg.content.trim();
+
+  // Detect best AI content type from the response
+  var detectedType=_loreDetectAIType(content);
+
+  // Switch to AI Mode
+  var aiBtn=document.querySelector('.mode-tab[onclick*=\'ai\']');
+  switchMode('ai', aiBtn);
+
+  // Inject into the aiPrompt textarea
+  var ta=document.getElementById('aiPrompt');
+  if(ta){
+    ta.value=content;
+    ta.dispatchEvent(new Event('input'));
+    ta.focus();
+    // Scroll to top of textarea
+    ta.scrollTop=0;
+  }
+
+  // Select the detected content type in the AI type tabs if possible
+  if(detectedType){
+    var typeBtn=document.querySelector('#aiTypeTabs button[data-type="'+detectedType+'"]');
+    if(typeBtn) typeBtn.click();
+  }
+
+  toast('✓ Prompt injected into AI Mode — review then click ✨ Generate');
+}
+// ── End LoreForge → AI Mode bridge ───────────────────────────────────────
+
 function loreRenderMessages(){
   const el=document.getElementById('loreMessages');
   if(!el) return;
@@ -7371,13 +7663,112 @@ function loreRenderMessages(){
       +'<div class="lore-empty-sub">Ask about lore, plan a quest, design an NPC,<br>or brainstorm your server\'s unique identity.</div></div>';
     return;
   }
-  el.innerHTML=_loreMessages.map(function(m){
+  el.innerHTML=_loreMessages.map(function(m,i){
+    const canInject=_loreShouldShowInject(i);
     const avatar=m.role==='user'?'&#x2692;':'&#x2726;';
     return '<div class="lore-msg '+m.role+'"><div class="lore-avatar">'+avatar+'</div>'
-      +'<div class="lore-bubble">'+escHtml(m.content)+'</div></div>';
+      +(m.role==='assistant'?'<div class="lore-bubble" style="position:relative">'+escHtml(m.content)+'<button onclick="loreCopyMessage('+i+')" title="Copy" style="position:absolute;top:5px;right:6px;background:none;border:none;cursor:pointer;font-size:12px;color:var(--ink-faint);opacity:.55;padding:1px 4px" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=.55">&#x2398;</button>'+(canInject?'<div style="margin-top:10px"><button onclick="loreInjectToAI('+i+')" title="Send to AI Mode" style="display:inline-flex;align-items:center;gap:5px;background:var(--crimson);border:none;cursor:pointer;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:#fff;padding:5px 12px;border-radius:2px">&#x27A4; Send to AI Mode</button></div>':'')+'</div>':'<div class="lore-bubble">'+escHtml(m.content)+'</div>')+'</div>';
   }).join('');
   el.scrollTop=el.scrollHeight;
 }
+
+
+// ── SERVER IDENTITY ──────────────────────────────────────────────
+var _serverIdentity = {};
+
+function loadServerIdentity() {
+  try {
+    var raw = localStorage.getItem('aceforge_server_identity');
+    _serverIdentity = raw ? JSON.parse(raw) : {};
+  } catch(e) { _serverIdentity = {}; }
+}
+
+function openServerIdentity() {
+  loadServerIdentity();
+  var si = _serverIdentity;
+  // Pre-fill fields
+  var settingsName = (appConfig && appConfig.server_name) || document.getElementById('sServerName')?.value || '';
+  var identityName = si.serverName || settingsName || '';
+  document.getElementById('siServerName').value = identityName;
+  document.getElementById('siHostType').value    = si.hostType    || 'ACE';
+  document.getElementById('siContentType').value = si.contentType || 'End of Retail';
+  document.getElementById('siDatType').value     = si.datType     || 'Standard ACE';
+  document.getElementById('siDatOther').value    = si.datOther    || '';
+  document.getElementById('siDatOther').style.display = (si.datType === 'Other') ? '' : 'none';
+  document.getElementById('siEra').value         = si.era         || 'End of Retail (ToD-era)';
+  document.getElementById('siTone').value        = si.tone        || 'Authentic / Lore-faithful';
+  document.getElementById('siAudience').value    = si.audience    || 'Veterans';
+  document.getElementById('siIntent').value      = si.intent      || '';
+  document.getElementById('siLore').value        = si.lore        || '';
+  document.getElementById('siCharacters').value  = si.characters  || '';
+  siCheckNameSync();
+  var m = document.getElementById('serverIdentityModal');
+  m.style.display = 'flex';
+}
+
+function closeServerIdentity() {
+  document.getElementById('serverIdentityModal').style.display = 'none';
+}
+
+function siDatTypeChange() {
+  var v = document.getElementById('siDatType').value;
+  document.getElementById('siDatOther').style.display = (v === 'Other') ? '' : 'none';
+}
+
+function siCheckNameSync() {
+  var siName = (document.getElementById('siServerName')?.value || '').trim();
+  var settName = (appConfig && appConfig.server_name) || (document.getElementById('sServerName')?.value || '').trim();
+  var mismatch = siName && settName && siName !== settName;
+  document.getElementById('siNameMismatch').style.display = mismatch ? '' : 'none';
+}
+
+function saveServerIdentity() {
+  var siName = (document.getElementById('siServerName').value || '').trim();
+  _serverIdentity = {
+    serverName:  siName,
+    hostType:    document.getElementById('siHostType').value,
+    contentType: document.getElementById('siContentType').value,
+    datType:     document.getElementById('siDatType').value,
+    datOther:    document.getElementById('siDatOther').value.trim(),
+    era:         document.getElementById('siEra').value,
+    tone:        document.getElementById('siTone').value,
+    audience:    document.getElementById('siAudience').value,
+    intent:      document.getElementById('siIntent').value.trim(),
+    lore:        document.getElementById('siLore').value.trim(),
+    characters:  document.getElementById('siCharacters').value.trim(),
+  };
+  localStorage.setItem('aceforge_server_identity', JSON.stringify(_serverIdentity));
+
+  // Sync server name to settings field + appConfig if different
+  if (siName) {
+    var sEl = document.getElementById('sServerName');
+    if (sEl) sEl.value = siName;
+    if (appConfig) appConfig.server_name = siName;
+  }
+
+  closeServerIdentity();
+  toast('✓ Server identity saved — LoreForge will use this context in all conversations.');
+}
+
+function buildServerIdentityContext() {
+  var si = _serverIdentity || {};
+  if (!si.serverName && !si.intent && !si.lore) return '';
+  var lines = ['\n\n=== SERVER IDENTITY ==='];
+  if (si.serverName)  lines.push('Server Name: ' + si.serverName);
+  if (si.hostType)    lines.push('Host Type: ' + si.hostType);
+  if (si.contentType) lines.push('Content Type: ' + si.contentType);
+  var dat = si.datType === 'Other' ? ('Other — ' + (si.datOther || 'unspecified')) : si.datType;
+  if (dat) lines.push('.DAT Type: ' + dat);
+  if (si.era)         lines.push('Era / Timeline: ' + si.era);
+  if (si.tone)        lines.push('Tone: ' + si.tone);
+  if (si.audience)    lines.push('Target Audience: ' + si.audience);
+  if (si.intent)      lines.push('\nServer Intent:\n' + si.intent);
+  if (si.lore)        lines.push('\nCustom Lore / World Notes:\n' + si.lore);
+  if (si.characters)  lines.push('\nKey Custom Characters / NPCs:\n' + si.characters);
+  lines.push('=== END SERVER IDENTITY ===');
+  return lines.join('\n');
+}
+// ── End Server Identity ──────────────────────────────────────────
 
 function loreSend(){
   const inp=document.getElementById('loreInput');
@@ -7399,7 +7790,7 @@ function loreSend(){
   document.getElementById('loreStatus').textContent='Thinking...';
   _loreGenerating=true; _loreCurrentText='';
   if(window.pywebview){
-    window.pywebview.api.lore_chat(_loreActiveId,_loreMessages)
+    window.pywebview.api.lore_chat(_loreActiveId,_loreMessages,buildServerIdentityContext())
       .then(function(r){
         if(r&&!r.success) loreError(r.error||'Failed');
         else _lorePollTimer=setInterval(lorePoll,120);

@@ -123,7 +123,7 @@ class LoreMixin:
 
     # ── Streaming chat ────────────────────────────────────────────────────────
 
-    def lore_chat(self, convo_id: str, messages: list) -> dict:
+    def lore_chat(self, convo_id: str, messages: list, server_identity_context: str = '') -> dict:
         """Start streaming a LoreForge response. Poll with poll_lore()."""
         self._ensure_lore_queue()
         if self._lore_generating:
@@ -154,9 +154,13 @@ class LoreMixin:
             self._lore_queue.put({"type": "error", "message": msg})
 
         try:
+            # Build dynamic system prompt — base + server identity context
+            system_prompt = LORE_SYSTEM_PROMPT
+            if server_identity_context:
+                system_prompt = LORE_SYSTEM_PROMPT + server_identity_context
             threading.Thread(
                 target=self.api_client.stream_generate,
-                args=(LORE_SYSTEM_PROMPT, self._build_lore_prompt(messages),
+                args=(system_prompt, self._build_lore_prompt(messages),
                       on_chunk, on_done, on_error),
                 daemon=True,
             ).start()

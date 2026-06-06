@@ -364,25 +364,39 @@ Start with: /* ===== FILE: {fname} ===== */"""
 
         def _file_done(text: str):
             self._generating = False
-            text = self._process_emote_scripts(text)   # convert WeenieFab blocks → SQL
-            self._last_ai_response = text
-            # Auto-save this file
-            save_result = self._save_single_file(text, fname)
-            self._chunk_queue.put({
-                "type": "file_done",
-                "file_index": file_index,
-                "file_name": fname,
-                "save": save_result,
-                "total": total,
-            })
-            print(f"[FILE] {file_index+1}/{total} done: {fname}", flush=True)
+            save_result = {"success": False, "error": "Unknown error in _file_done"}
+            try:
+                text = self._process_emote_scripts(text)   # convert WeenieFab blocks → SQL
+                self._last_ai_response = text
+                save_result = self._save_single_file(text, fname)
+            except Exception as e:
+                print(f"[FILE] _file_done error (file {file_index+1}/{total}): {e}", flush=True)
+                save_result = {"success": False, "error": str(e)}
+            finally:
+                # Always queue file_done so the JS poll doesn't hang forever
+                self._chunk_queue.put({
+                    "type": "file_done",
+                    "file_index": file_index,
+                    "file_name": fname,
+                    "save": save_result,
+                    "total": total,
+                })
+                print(f"[FILE] {file_index+1}/{total} queued done: {fname}", flush=True)
 
+        def _file_gen_worker():
+            try:
+                self.api_client.stream_generate(
+                    system_prompt, file_prompt, self._on_chunk, _file_done, self._on_error
+                )
+            except Exception as e:
+                print(f"[FILE] Thread crashed: {e}", flush=True)
+                self._generating = False
+                self._chunk_queue.put({
+                    "type": "error",
+                    "message": f"File {file_index+1}/{total} thread crashed: {e}",
+                })
         try:
-            threading.Thread(
-                target=self.api_client.stream_generate,
-                args=(system_prompt, file_prompt, self._on_chunk, _file_done, self._on_error),
-                daemon=True,
-            ).start()
+            threading.Thread(target=_file_gen_worker, daemon=True).start()
         except Exception as e:
             self._generating = False
             return {"success": False, "error": str(e)}
