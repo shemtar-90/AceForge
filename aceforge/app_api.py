@@ -209,36 +209,50 @@ class AppAPI(LoreMixin):
 
         edit_mode = bool(existing_sql and existing_sql.strip())
         system_prompt = f"""You are an ACEmulator content {"editor" if edit_mode else "planner"} for the server "{server_name}".
-The user will describe content they want created. Your job is to plan the SQL files needed.
+Analyze the user request and produce a complete JSON file plan.
 
-Respond with ONLY a valid JSON object — no markdown, no explanation, no code fences.
+CRITICAL INSTRUCTIONS — READ CAREFULLY:
+1. You MUST list EVERY separate SQL file required to fully implement the request.
+2. Do NOT collapse multiple pieces of content into one file. Each distinct weenie, NPC, item, quest, or generator needs its OWN entry.
+3. If the user requests 10 monsters, plan 10 creature files PLUS 10 generator files = 20 entries.
+4. If the user requests a questline, plan every NPC, every item reward, every kill contract, and every generator needed.
+5. Do not summarize or reduce. Be complete. More files is better than fewer.
 
-JSON format:
+Respond with ONLY a valid JSON object. No markdown fences, no explanation, no extra text before or after.
+
+JSON format (use exactly this structure):
 {{
   "summary": "one sentence describing what will be created",
   "files": [
-    {{"index": 0, "name": "WCID Filename.sql", "type": "creature|npc|item|weapon|armor|jewelry|quest|generator", "wcid": 850000, "description": "what this file creates"}}
+    {{"index": 0, "name": "WCID DescriptiveName.sql", "type": "creature", "wcid": 800001, "description": "brief description"}},
+    {{"index": 1, "name": "WCID DescriptiveName Generator.sql", "type": "generator", "wcid": 810001, "description": "spawner for WCID 800001"}}
   ]
 }}
 
 WCID ranges for {server_name}:
-- Creatures: 800000-809999
-- Items/Custom: 810000-819999  
+- Creatures/Mobs: 800000-809999
+- Items/Custom objects: 810000-819999
 - Portals: 820000-829999
 - Bosses: 840000-849999
-- NPCs: 850000-859999
+- NPCs (quest givers, vendors): 850000-859999
 - Kill Contracts: 860000-869999
 - Custom Gear/Jewelry: 870000-879999
-- Generators: target_wcid + 1000000
+- Generators: creature_wcid + 10000 (e.g. creature 800001 → generator 810001)
 
-Rules:
-- Assign realistic WCIDs from the correct range
-- List files in dependency order (items before quests that reference them)
-- Keep file count realistic (typically 1-8 files)
-- Name files as "WCID Descriptive Name.sql"
-- For creature or npc content types, ALWAYS include a companion generator file
-  as a separate entry (type "generator", wcid = creature_wcid + 10000, named
-  "WCID CreatureName Generator.sql") so the creature spawns in the world """
+File planning rules:
+- One file per weenie (creature, NPC, item, weapon, armor, quest, generator)
+- Assign unique WCIDs in the correct range — no duplicates
+- Order files: items/rewards first, then creatures/NPCs, then quests, then generators last
+- Name format: "WCID DescriptiveName.sql"
+- Every creature or NPC MUST have a paired generator file so it spawns in world
+- Generator WCID = creature_wcid + 10000 (if that range is taken, use creature_wcid + 5000)
+
+Think step by step before writing JSON:
+- What distinct creatures/NPCs does this request need?
+- What items or rewards are needed?
+- What quests or kill contracts are needed?
+- What generators are needed (one per creature/NPC)?
+Count all of the above, then write that many entries in the files array."""
 
         self.api_client.update_credentials(
             api_key=self.config.api_key,
@@ -583,6 +597,27 @@ Start with: /* ===== FILE: {fname} ===== */"""
             return []
         except Exception:
             return []
+
+    def build_icon_cats(self):
+        """Run generate_icon_cats.py and return result to JS."""
+        import subprocess, sys, os, re
+        script = os.path.join(os.path.dirname(os.path.dirname(__file__)), "generate_icon_cats.py")
+        if not os.path.exists(script):
+            return {"ok": False, "error": "generate_icon_cats.py not found in ACEForge root."}
+        try:
+            result = subprocess.run(
+                [sys.executable, script],
+                capture_output=True, text=True, timeout=120,
+            )
+            if result.returncode != 0:
+                return {"ok": False, "error": result.stderr.strip() or result.stdout.strip()}
+            m = re.search(r"Unique icon DIDs: (\d+)", result.stdout)
+            return {"ok": True, "count": int(m.group(1)) if m else 0}
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "error": "Timed out after 120 seconds."}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
 
     def get_library_status(self) -> list:
         """Return status of all installable content libraries."""

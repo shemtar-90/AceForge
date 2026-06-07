@@ -206,18 +206,19 @@ class APIClient:
         on_chunk: Callable[[str], None],
         on_done:  Callable[[str], None],
         on_error: Callable[[str], None],
+        temperature: float = 0.7,
     ):
         try:
             if self._provider == PROVIDER_ANTHROPIC:
-                self._stream_anthropic(system_prompt, user_prompt, on_chunk, on_done, on_error)
+                self._stream_anthropic(system_prompt, user_prompt, on_chunk, on_done, on_error, temperature)
             elif self._provider == PROVIDER_GOOGLE:
-                self._stream_google(system_prompt, user_prompt, on_chunk, on_done, on_error)
+                self._stream_google(system_prompt, user_prompt, on_chunk, on_done, on_error, temperature)
             else:
-                self._stream_openai_compat(system_prompt, user_prompt, on_chunk, on_done, on_error)
+                self._stream_openai_compat(system_prompt, user_prompt, on_chunk, on_done, on_error, temperature)
         except Exception as e:
             on_error(f"Unexpected error: {str(e)}")
 
-    def _stream_anthropic(self, system, user, on_chunk, on_done, on_error):
+    def _stream_anthropic(self, system, user, on_chunk, on_done, on_error, temperature=0.7):
         try:
             import anthropic
             client = anthropic.Anthropic(
@@ -226,7 +227,8 @@ class APIClient:
             )
             full = []
             with client.messages.stream(
-                model=self._model, max_tokens=16000,  # increased for longer SQL outputs
+                model=self._model, max_tokens=16000,
+                temperature=temperature,
                 system=system,
                 messages=[{"role": "user", "content": user}],
             ) as stream:
@@ -239,7 +241,7 @@ class APIClient:
         except Exception as e:
             on_error(_friendly_error(e, "anthropic"))
 
-    def _stream_google(self, system, user, on_chunk, on_done, on_error):
+    def _stream_google(self, system, user, on_chunk, on_done, on_error, temperature=0.7):
         """
         Google AI Studio streaming via google-generativeai SDK.
         System prompt is passed as system_instruction (supported in Gemini 1.5+).
@@ -260,7 +262,7 @@ class APIClient:
                 stream=True,
                 generation_config=genai.types.GenerationConfig(
                     max_output_tokens=16000,
-                    temperature=0.7,
+                    temperature=temperature,
                 ),
             )
             for chunk in response:
@@ -301,7 +303,7 @@ class APIClient:
         except Exception as e:
             on_error(_friendly_error(e, "google"))
 
-    def _stream_openai_compat(self, system, user, on_chunk, on_done, on_error):
+    def _stream_openai_compat(self, system, user, on_chunk, on_done, on_error, temperature=0.7):
         try:
             import openai
             client = self._build_openai_client()
@@ -312,6 +314,7 @@ class APIClient:
             kwargs = dict(
                 model=self._model,
                 stream=True,
+                temperature=temperature,
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user",   "content": user},
