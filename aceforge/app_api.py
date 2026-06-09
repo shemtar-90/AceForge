@@ -349,6 +349,16 @@ Description: {fdesc}
 Other files in this sequence (for WCID cross-references if needed):
 {ref_ctx}
 
+EMOTE TRIGGER RULES — STRICTLY ENFORCED:
+Valid top-level emote triggers: Use, GotoSet, ReceiveTalkDirect, HeartBeat, Death,
+Give, Wield, UnWield, PickUp, Drop, Vendor, Activation, Taunt, WoundedTaunt,
+KillTaunt, NewEnemy, Scream, Homesick, ReceiveCritical, ResistSpell, HearChat,
+ReceiveLocalSignal.
+INVALID triggers that DO NOT EXIST — never use: ReceiveGive, ReceiveItem, OnKill,
+OnDeath, OnGive, QuestComplete, PlayerNear.
+Use Give: (not ReceiveGive) when an NPC receives an item. Inside Give:, use
+InqOwnsItems to check which specific item was given.
+
 Output the complete SQL for ONLY this file.
 Start with: /* ===== FILE: {fname} ===== */"""
 
@@ -532,23 +542,35 @@ Start with: /* ===== FILE: {fname} ===== */"""
 
 
     def import_sql(self) -> dict:
-        """Open a file dialog and return SQL file content for import into the builder."""
-        import sys
+        """Open a file dialog and return SQL file content for import into the builder.
+        Uses pywebview native dialog (works in both dev and EXE mode)."""
         from pathlib import Path
         try:
-            import tkinter as tk
-            from tkinter import filedialog
-            root = tk.Tk()
-            root.withdraw()
-            root.lift()
-            root.attributes('-topmost', True)
-            path = filedialog.askopenfilename(
-                title="Import SQL File",
-                filetypes=[("SQL files", "*.sql"), ("All files", "*.*")]
+            if self._window is None:
+                return {"error": "Window not ready — call set_window() first."}
+            result = self._window.create_file_dialog(
+                dialog_type=10,          # OPEN_DIALOG
+                allow_multiple=False,
+                file_types=("SQL Files (*.sql)", "All Files (*.*)")
             )
-            root.destroy()
+            if not result:
+                return {"cancelled": True}
+            path = result[0] if isinstance(result, (list, tuple)) else result
         except Exception as e:
-            return {"error": str(e)}
+            # Fallback: tkinter (dev mode without pywebview window)
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                root = tk.Tk(); root.withdraw()
+                path = filedialog.askopenfilename(
+                    title="Import SQL File",
+                    filetypes=[("SQL files", "*.sql"), ("All files", "*.*")]
+                )
+                root.destroy()
+                if not path:
+                    return {"cancelled": True}
+            except Exception as e2:
+                return {"error": f"File dialog unavailable: {e2}"}
         if not path:
             return {"cancelled": True}
         try:

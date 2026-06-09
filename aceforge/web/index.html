@@ -478,7 +478,10 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
           onblur="loreRenameConvo(this.textContent)">Conversation</span>
         <span style="font-family:'IM Fell English',serif;font-style:italic;font-size:11px;color:var(--ink-faint)" id="loreStatus"></span>
       </div>
-      <div class="lore-messages" id="loreMessages"></div>
+      <div style="position:relative;flex:1;min-height:0;display:flex;flex-direction:column">
+        <div class="lore-messages" id="loreMessages"></div>
+        <button id="loreJumpBtn" onclick="loreJumpToCurrent()" style="display:none;position:absolute;bottom:12px;right:16px;background:var(--crimson);border:none;color:#fff;cursor:pointer;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;padding:6px 14px;border-radius:99px;box-shadow:0 2px 8px rgba(0,0,0,.3);align-items:center;gap:5px;z-index:10">&#x25BC; Jump to Current</button>
+      </div>
       <div class="lore-input-wrap">
         <textarea class="lore-input" id="loreInput" placeholder="Ask about lore, quest design, NPC dialogue, server ideas..." rows="1"
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();loreSend()}"
@@ -538,7 +541,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
       <div style="font-family:'Cinzel',serif;font-size:14px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--crimson)">✨ AI Content Generator</div>
       <div style="font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:13px" id="aiModeDesc">Describe what you want — or import existing SQL to edit it.</div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px" id="aiTypeTabs"></div>
+    <div style="display:none" id="aiTypeTabs"></div>
     <div style="border:1px solid var(--border);background:var(--parch);padding:14px">
       <div style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:8px">Describe your content</div>
       <textarea id="aiPrompt" style="width:100%;height:120px;font-family:'IM Fell English',serif;font-style:italic;font-size:15px;color:var(--ink);background:transparent;border:none;outline:none;resize:none;line-height:1.6;user-select:text" placeholder="e.g. A level 180 ice drudge — or import existing SQL above and describe changes like 'Make this mob stronger for level 250+'."></textarea>
@@ -550,6 +553,10 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
       <button class="ai-gen-btn" id="aiGenBtn" onclick="startAIGeneration()" disabled title="Connect an API key in Settings first">▶ Generate</button>
       <button class="ai-stop-btn" id="aiStopBtn" onclick="stopGeneration()" style="display:none">⏹ Stop</button>
       <button class="ai-gen-btn" onclick="clearAI()" style="background:transparent;border:1px solid var(--border);color:var(--ink-mid)">🗑 Clear</button>
+      <button id="aiAutoBtn" onclick="toggleAutoCreate()" title="Auto-advance to next file after 3 seconds"
+        style="background:transparent;border:1px solid var(--border);color:var(--ink-mid);font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;padding:11px 14px;cursor:pointer;">
+        ⟳ AUTO: OFF
+      </button>
       <span class="ai-status" id="aiStatus"></span>
     </div>
     <div style="flex:1;overflow:hidden;margin-top:12px;border:1px solid var(--border);background:var(--sql);display:flex;flex-direction:column;min-height:200px">
@@ -954,7 +961,7 @@ function toast(msg, duration){
 })();
 
 // ── GLOBAL STATE ──────────────────────────────────────────────────────────────
-let curType       = 'creature';
+let curType       = 'weenie';
 let curSub        = 'properties';
 let appConfig     = {};
 let customPresets = {};
@@ -2348,7 +2355,12 @@ const BODY_PARTS_FLOATING=[
 
 function buildProps(){
   const t=curType;
+  if(t==='weenie'){
+    const _wd=extraInt.length||extraBool.length||extraFloat.length||extraStr.length||extraDID.length||spells.length;
+    return buildWeenieProps() + (_wd ? buildAdvanced() : '');
+  }
   if(t==='quest') return buildQuestProps();
+  if(t==='event') return buildEventProps();
   if(t==='recipe') return buildRecipeProps();
   return buildAdvanced();
   // Legacy form code below kept for reference but no longer rendered:
@@ -2432,6 +2444,51 @@ function buildProps(){
     }
   }
   if(t==='item'){
+
+    h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Quick Preset</div><div class=\"sl\"></div></div>
+    <div style=\"display:flex;gap:8px;align-items:center;margin-bottom:4px\">
+      <select id=\"itemPresetSel\" style=\"flex:1;font-family:var(--ui-font);font-size:11px;padding:6px 8px;border:1px solid var(--border);background:var(--parch);color:var(--ink);\" onchange=\"applyItemPreset(this.value)\">
+        <option value=\"\">— Select a preset —</option>
+        <optgroup label=\"Common Items\">
+          <option value=\"questtoken\">Quest Token</option>
+          <option value=\"stackabletoken\">Stackable Token</option>
+          <option value=\"healingkit\">Healing Kit</option>
+          <option value=\"potion\">Potion (Food)</option>
+          <option value=\"key\">Key</option>
+          <option value=\"lockpick\">Lockpick</option>
+          <option value=\"gem\">Gem</option>
+          <option value=\"manastone\">Mana Stone</option>
+        </optgroup>
+        <optgroup label=\"Ammunition & Combat\">
+          <option value=\"arrow\">Arrow (Ammunition)</option>
+          <option value=\"bolt\">Bolt (Ammunition)</option>
+          <option value=\"atlatl\">Atlatl Dart (Ammunition)</option>
+        </optgroup>
+        <optgroup label=\"Containers & Storage\">
+          <option value=\"chest\">Chest / Loot Box</option>
+          <option value=\"container\">Backpack / Container</option>
+        </optgroup>
+        <optgroup label=\"Crafting\">
+          <option value=\"spellcomp\">Spell Component</option>
+          <option value=\"tinkmaterial\">Tinkering Material</option>
+          <option value=\"salvage\">Salvage Bag</option>
+          <option value=\"alchemybase\">Alchemy Base</option>
+          <option value=\"cookingbase\">Cooking Base</option>
+        </optgroup>
+        <optgroup label=\"Readable\">
+          <option value=\"book\">Book</option>
+          <option value=\"scroll\">Scroll</option>
+          <option value=\"note\">Promissory Note</option>
+        </optgroup>
+        <optgroup label=\"Misc\">
+          <option value=\"coin\">Coin / Pyreals</option>
+          <option value=\"lightsource\">Light Source</option>
+          <option value=\"thrownweapon\">Thrown Weapon (Misc)</option>
+          <option value=\"petdoll\">Pet Doll</option>
+          <option value=\"augstone\">Augmentation Stone</option>
+        </optgroup>
+      </select>
+    </div></div>`;
     h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Item Database Lookup</div><div class=\"sl\"></div></div>
     <div class=\"fg sdrop-wrap\"><div class=\"fl\">Search by name to pre-fill values</div>
       <input type=\"text\" id=\"itemSearch\" placeholder=\"Type item name\" autocomplete=\"off\" onfocus=\"openItemSearch(this.value)\" oninput=\"searchItemFn(this.value)\">
@@ -2557,15 +2614,32 @@ function addCreateListRow(){
   rebuildPanel('properties');
 }
 
+function buildEventProps(){
+  function row(lbl,id,tp,def,fc){
+    const v=g(id,String(def));
+    const inp=`<input type="${tp}" id="${id}" value="${v}" style="width:260px;text-align:right" oninput="regen()">`;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <span style="font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--ink-dim)">${lbl}${fc?` <span class="fc">${fc}</span>`:''}</span>
+      ${inp}</div>`;
+  }
+  return `<div class="sec"><div class="sh"><div class="st">Event Properties</div><div class="sl"></div></div>
+    <p class="note" style="margin-bottom:10px">Event names must be a single word with no spaces. State 3 = Off (default off), 2 = On.</p>
+    ${row('Event Name','fEvtName','text','NewEvent','name')}
+    ${row('Start Time (-1 = any)','fEvtStart','number','-1','start_Time')}
+    ${row('End Time (-1 = any)','fEvtEnd','number','-1','end_Time')}
+    ${row('State (2=On, 3=Off)','fEvtState','number','3','state')}
+    ${row('Last Modified','fEvtModified','text',(function(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');})(),'last_Modified')}
+  </div>`;
+}
+
 function buildQuestProps(){
   return `<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Quest Flag Properties</div><div class=\"sl\"></div></div>
   <p class=\"note\" style=\"margin-bottom:12px\">Quest names must be a single word  no spaces. These insert directly into the <code style=\"font-family:'Source Code Pro',monospace;font-size:13px\">quest</code> table. No ItemType, no Emotes.</p>
-  <div class=\"grid g2\">
-    <div class=\"fg\" style=\"grid-column:span 2\"><div class=\"fl\">Quest Name (one word, no spaces) <span class=\"fc\">name</span></div>
-      <input type=\"text\" id=\"fName\" value=\"NewQuest\" oninput=\"regen()\" style=\"font-family:'Source Code Pro',monospace;font-weight:700\"></div>
-    <div class=\"fg\"><div class=\"fl\">Min Delta (cooldown seconds) <span class=\"fc\">min_Delta</span></div><input type=\"number\" id=\"fMinDelta\" value=\"0\"></div>
-    <div class=\"fg\"><div class=\"fl\">Max Solves (-1 = unlimited) <span class=\"fc\">max_Solves</span></div><input type=\"number\" id=\"fMaxSolves\" value=\"1\"></div>
-    <div class=\"fg\" style=\"grid-column:span 2\"><div class=\"fl\">Message <span class=\"fc\">message</span></div><input type=\"text\" id=\"fMsg\" value=\"NewQuest\"></div>
+  <div style=\"margin-bottom:10px\">
+    ${[['Quest Name (one word)','fName','text','NewQuest','name'],['Cooldown (seconds)','fMinDelta','number','0','min_Delta'],['Max Solves (-1 = unlimited)','fMaxSolves','number','1','max_Solves'],['Message','fMsg','text','NewQuest','message']].map(([lbl,id,tp,def,fc])=>`<div style=\"display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border-lt)\">
+      <span style=\"font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--ink-dim)\">${lbl} <span class=\"fc\">${fc}</span></span>
+      <input type=\"${tp}\" id=\"${id}\" value=\"${def}\" style=\"width:240px;text-align:right\" oninput=\"regen()\">
+    </div>`).join('')}
   </div>
   <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Cooldown Quick-Fill</div><div class=\"sl\"></div></div>
   <div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-top:4px\">
@@ -2649,76 +2723,189 @@ function onArmorTypeChange(){
 }
 
 //  RECIPE PROPS 
-function buildRecipeProps(){
-  function makeReqRows(arr,nm){
-    return arr.map((r,i)=>`
-    <div style=\"display:grid;grid-template-columns:110px 90px 150px 130px 1fr 28px;gap:8px;align-items:end;margin-bottom:6px\">
-      <div class=\"fg\"><div class=\"fl\">Req Type</div><select id=\"${nm}_t_${i}\" onchange=\"${nm}[${i}].type=this.value;regen()\">${opt(REQUIREMENT_TYPE,r.type)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Stat ID</div><input type=\"number\" id=\"${nm}_s_${i}\" value=\"${r.stat}\" oninput=\"${nm}[${i}].stat=this.value;regen()\"></div>
-      <div class=\"fg\"><div class=\"fl\">Value</div><input type=\"text\" id=\"${nm}_v_${i}\" value=\"${r.value||''}\" oninput=\"${nm}[${i}].value=this.value;regen()\"></div>
-      <div class=\"fg\"><div class=\"fl\">Compare</div><select id=\"${nm}_c_${i}\" onchange=\"${nm}[${i}].compare=this.value;regen()\">${opt(COMPARE_TYPE,r.compare)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Message</div><input type=\"text\" id=\"${nm}_m_${i}\" value=\"${r.message||''}\" oninput=\"${nm}[${i}].message=this.value;regen()\"></div>
-      <button class=\"del\" onclick=\"${nm}.splice(${i},1);rebuildPanel('properties')\"></button>
-    </div>`).join('');
-  }
-  const reqRows=makeReqRows(recipeReqs,'recipeReqs');
-  const reqBoolRows=makeReqRows(recipeReqsBool,'recipeReqsBool');
-  const reqFloatRows=makeReqRows(recipeReqsFloat,'recipeReqsFloat');
-  const reqStrRows=makeReqRows(recipeReqsStr,'recipeReqsStr');
-  const modRows=recipeMods.map((m,i)=>`
-    <div style=\"display:grid;grid-template-columns:120px 80px 130px 130px 80px 28px;gap:8px;align-items:end;margin-bottom:6px\">
-      <div class=\"fg\"><div class=\"fl\">Mod Type</div><select id=\"rmod_t_${i}\" onchange=\"recipeMods[${i}].type=this.value;regen()\">${opt(MOD_TYPE,m.type)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Stat ID</div><input type=\"number\" id=\"rmod_s_${i}\" value=\"${m.stat||0}\" oninput=\"recipeMods[${i}].stat=this.value;regen()\"></div>
-      <div class=\"fg\"><div class=\"fl\">Operation</div><select id=\"rmod_o_${i}\" onchange=\"recipeMods[${i}].operation=this.value;regen()\">${opt(MOD_OP,m.operation)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Value</div><input type=\"text\" id=\"rmod_v_${i}\" value=\"${m.value||0}\" oninput=\"recipeMods[${i}].value=this.value;regen()\"></div>
-      <div class=\"fg\"><div class=\"fl\">Source</div><select id=\"rmod_src_${i}\" onchange=\"recipeMods[${i}].source=this.value;regen()\">${opt(RECIPE_SOURCE_TYPE,m.source)}</select></div>
-      <button class=\"del\" onclick=\"recipeMods.splice(${i},1);rebuildPanel('properties')\"></button>
-    </div>`).join('');
-  const cbRows=cookbookEntries.map((e,i)=>`
-    <div style=\"display:grid;grid-template-columns:1fr 1fr 28px;gap:8px;align-items:end;margin-bottom:6px\">
-      <div class=\"fg\"><div class=\"fl\">Source WCID  Name (comment)</div>
-        <div style=\"display:grid;grid-template-columns:80px 1fr;gap:8px\">
-          <input type=\"number\" id=\"cb_src_${i}\" value=\"${e.src||0}\" oninput=\"cookbookEntries[${i}].src=this.value;regen()\">
-          <input type=\"text\" id=\"cb_lbl_${i}\" value=\"${e.srcLabel||''}\" placeholder=\"name comment\" oninput=\"cookbookEntries[${i}].srcLabel=this.value;regen()\">
-        </div>
+
+// ── Weenie Editor ─────────────────────────────────────────────────────────────
+// Import-driven: user imports a SQL file, properties are displayed and editable.
+// Uses the same extraInt/Bool/Float/Str/DID + emote + spellbook infrastructure.
+// No forms — just import, edit via the Properties sub-tabs, export.
+
+function buildWeenieProps(){
+  var hasData = extraInt.length||extraBool.length||extraFloat.length
+    ||extraStr.length||extraDID.length||spells.length;
+
+  if(!hasData){
+    return `<div style="padding:40px 20px;text-align:center">
+      <div style="font-family:'Cinzel',serif;font-size:13px;font-weight:700;
+        color:var(--ink-mid);letter-spacing:.08em;margin-bottom:16px">
+        &#x2692; WEENIE EDITOR
       </div>
-      <div class=\"fg\"><div class=\"fl\">Target WCID</div><input type=\"number\" id=\"cb_tgt_${i}\" value=\"${e.tgt||0}\" oninput=\"cookbookEntries[${i}].tgt=this.value;regen()\"></div>
-      <button class=\"del\" onclick=\"cookbookEntries.splice(${i},1);rebuildPanel('properties')\"></button>
-    </div>`).join('');
-  return `<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Recipe Core</div><div class=\"sl\"></div></div>
-  <div class=\"grid g3\">
-    <div class=\"fg\"><div class=\"fl\">Recipe ID <span class=\"fc\">id</span></div><input type=\"number\" id=\"fWcid\" value=\"600000\" oninput=\"regen()\"></div>
-    <div class=\"fg\"><div class=\"fl\">Skill <span class=\"fc\">skill</span></div><select id=\"fRecipeSkill\">${[...ALL_SKILLS,[[38,'Alchemy'],[39,'Cooking']].flat()].flat().reduce((acc,s,i,arr)=>{if(i%2===0)acc.push(arr.slice(i,i+2));return acc;},[]).map(([v,l])=>`<option value=\"${v}\">${v}  ${l}</option>`).join('')}</select></div>
-    <div class=\"fg\"><div class=\"fl\">Difficulty <span class=\"fc\">difficulty</span></div><input type=\"number\" id=\"fRecipeDiff\" value=\"900\"></div>
-    <div class=\"fg\"><div class=\"fl\">Success WCID <span class=\"fc\">success_W_C_I_D</span></div><input type=\"number\" id=\"fSuccessWcid\" value=\"0\"></div>
-    <div class=\"fg\"><div class=\"fl\">Success Amount <span class=\"fc\">success_Amount</span></div><input type=\"number\" id=\"fSuccessAmt\" value=\"1\"></div>
-    <div class=\"fg\"><div class=\"fl\">Fail WCID <span class=\"fc\">fail_W_C_I_D</span></div><input type=\"number\" id=\"fFailWcid\" value=\"0\"></div>
-    <div class=\"fg\" style=\"grid-column:span 3\"><div class=\"fl\">Success Message</div><input type=\"text\" id=\"fSuccessMsg\" value=\"You apply the recipe successfully.\"></div>
-    <div class=\"fg\" style=\"grid-column:span 3\"><div class=\"fl\">Fail Message</div><input type=\"text\" id=\"fFailMsg\" value=\"You apply the recipe but destroy the target.\"></div>
-    <div class=\"fg\"><div class=\"fl\">Destroy Source (success)</div><input type=\"text\" id=\"fDestroySourceSuccess\" value=\"1\"></div>
-    <div class=\"fg\"><div class=\"fl\">Destroy Target (fail)</div><input type=\"text\" id=\"fDestroyTargetFail\" value=\"1\"></div>
-  </div>
-  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Requirements  Int (recipe_requirements_int)</div><div class=\"sl\"></div></div>
-  ${reqRows}
-  <button class=\"add-btn\" onclick=\"recipeReqs.push({type:0,stat:105,value:1,compare:6,message:'Requirement not met!'});rebuildPanel('properties')\">+ Add Int Requirement</button>
-  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Requirements  Bool (recipe_requirements_bool)</div><div class=\"sl\"></div></div>
-  ${reqBoolRows}
-  <button class=\"add-btn\" onclick=\"recipeReqsBool.push({type:0,stat:1,value:'True',compare:6,message:'Requirement not met!'});rebuildPanel('properties')\">+ Add Bool Requirement</button>
-  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Requirements  Float (recipe_requirements_float)</div><div class=\"sl\"></div></div>
-  ${reqFloatRows}
-  <button class=\"add-btn\" onclick=\"recipeReqsFloat.push({type:0,stat:3,value:'0.0',compare:6,message:'Requirement not met!'});rebuildPanel('properties')\">+ Add Float Requirement</button>
-  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Requirements  String (recipe_requirements_string)</div><div class=\"sl\"></div></div>
-  ${reqStrRows}
-  <button class=\"add-btn\" onclick=\"recipeReqsStr.push({type:0,stat:1,value:'',compare:6,message:'Requirement not met!'});rebuildPanel('properties')\">+ Add String Requirement</button>
-  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Modifications (recipe_mods)</div><div class=\"sl\"></div></div>
-  <p class=\"note\">Values with decimals go to recipe_mods_float, whole numbers to recipe_mods_int.</p>
-  ${modRows}
-  <button class=\"add-btn\" onclick=\"recipeMods.push({type:0,stat:0,operation:2,value:0,source:1});rebuildPanel('properties')\">+ Add Modification</button>
-  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Cook Book (source  target pairs)</div><div class=\"sl\"></div></div>
-  ${cbRows}
-  <button class=\"add-btn\" onclick=\"cookbookEntries.push({src:0,srcLabel:'',tgt:0});rebuildPanel('properties')\">+ Add Source  Target Pair</button>
+      <div style="font-family:var(--ui-font);font-size:11px;color:var(--ink-faint);
+        line-height:1.7;max-width:380px;margin:0 auto 24px">
+        Import any weenie SQL file to load its properties for viewing and editing.
+        All property types are supported — Int, Bool, Float, String, DID,
+        Spellbook, Body Parts, and Emotes.
+      </div>
+      <button onclick="importSQLToBuilder()"
+        style="display:inline-flex;align-items:center;gap:8px;
+          background:var(--crimson);border:none;color:#fff;cursor:pointer;
+          font-family:var(--ui-font);font-size:10px;font-weight:700;
+          letter-spacing:.1em;padding:12px 24px;border-radius:2px">
+        &#x2B06; IMPORT WEENIE SQL
+      </button>
+      <div style="margin-top:16px;font-family:var(--ui-font);font-size:9px;
+        color:var(--ink-faint)">
+        Or use the Properties sub-tabs above to build from scratch.
+      </div>
+    </div>`;
+  }
+
+  // Has data — show a summary of loaded properties
+  var wcid = gi('fWcid',0);
+  var cn   = (document.getElementById('fClassName')||{}).value||'—';
+  var wt   = gi('fWeenieType',0);
+  var wtName = (Object.entries(window._WEENIE_TYPES||{}).find(([k])=>parseInt(k)===wt)||['','Unknown'])[1];
+
+  return `<div style="padding:12px 0">
+    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;
+      padding:10px 14px;background:rgba(200,184,152,.08);
+      border:1px solid var(--border-lt);margin-bottom:16px">
+      <div>
+        <div style="font-family:var(--ui-font);font-size:8px;font-weight:700;
+          letter-spacing:.1em;color:var(--ink-faint)">WCID</div>
+        <div style="font-family:'Source Code Pro',monospace;font-size:14px;
+          font-weight:700;color:var(--ink)">${wcid||'—'}</div>
+      </div>
+      <div>
+        <div style="font-family:var(--ui-font);font-size:8px;font-weight:700;
+          letter-spacing:.1em;color:var(--ink-faint)">CLASS NAME</div>
+        <div style="font-family:'Source Code Pro',monospace;font-size:14px;
+          font-weight:700;color:var(--ink)">${cn}</div>
+      </div>
+      <div>
+        <div style="font-family:var(--ui-font);font-size:8px;font-weight:700;
+          letter-spacing:.1em;color:var(--ink-faint)">WEENIE TYPE</div>
+        <div style="font-family:'Source Code Pro',monospace;font-size:14px;
+          font-weight:700;color:var(--ink)">${wt} · ${wtName}</div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button onclick="importSQLToBuilder()"
+          style="padding:7px 14px;font-family:var(--ui-font);font-size:9px;
+            font-weight:700;letter-spacing:.08em;background:transparent;
+            border:1px solid var(--border);cursor:pointer;color:var(--ink-mid)">
+          &#x21BA; Import New
+        </button>
+      </div>
+    </div>
+    <div style="font-family:var(--ui-font);font-size:10px;color:var(--ink-faint);
+      font-style:italic;text-align:center;padding:8px 0">
+      Edit properties using the INT · BOOL · FLOAT · STRING · DID sub-tabs above.
+      Changes update the Live Preview instantly.
+    </div>
   </div>`;
 }
+
+// Weenie type lookup for display
+window._WEENIE_TYPES = {
+  1:'Generic',2:'Container',4:'Creature',6:'Generic/Item',7:'Food',
+  8:'Book',9:'Stackable',10:'Creature',14:'Key',15:'Lockpick',
+  16:'MeleeWeapon',17:'MissileWeapon',18:'Caster',19:'Clothing',
+  20:'Chest',21:'Container',22:'Key',25:'Vendor',28:'HealingKit',
+  29:'LightSource',30:'Door',34:'Scroll',35:'Jewelry',37:'ManaStone',
+  38:'Gem',39:'TinkerTool',40:'SalvageBag',51:'Stackable',
+};
+
+function buildRecipeProps(){
+  // Single unified requirements list — type dropdown determines which SQL table
+  // Single array — type field routes to correct SQL table in buildRecipeSQL
+  const reqRows=recipeReqs.map((r,i)=>{
+    return `
+    <div style="display:grid;grid-template-columns:120px 80px 150px 140px 1fr 28px;gap:8px;align-items:end;margin-bottom:6px">
+      <div class="fg"><div class="fl">Type</div>
+        <select onchange="recipeReqs[${i}].type=this.value;regen()">${opt(REQUIREMENT_TYPE,r.type)}</select>
+      </div>
+      <div class="fg"><div class="fl">Stat ID</div>
+        <input type="number" value="${r.stat}" oninput="recipeReqs[${i}].stat=this.value;regen()">
+      </div>
+      <div class="fg"><div class="fl">Value</div>
+        <input type="text" value="${r.value||''}" oninput="recipeReqs[${i}].value=this.value;regen()">
+      </div>
+      <div class="fg"><div class="fl">Compare</div>
+        <select onchange="recipeReqs[${i}].compare=this.value;regen()">${opt(COMPARE_TYPE,r.compare)}</select>
+      </div>
+      <div class="fg"><div class="fl">Fail Message</div>
+        <input type="text" value="${r.message||''}" oninput="recipeReqs[${i}].message=this.value;regen()">
+      </div>
+      <button class="del" onclick="recipeReqs.splice(${i},1);rebuildPanel('properties')" title="Remove">&#x2715;</button>
+    </div>`;
+  }).join('');
+
+  const modRows=recipeMods.map((m,i)=>`
+    <div style="display:grid;grid-template-columns:120px 80px 130px 130px 90px 28px;gap:8px;align-items:end;margin-bottom:6px">
+      <div class="fg"><div class="fl">Mod Type</div>
+        <select onchange="recipeMods[${i}].type=this.value;regen()">${opt(MOD_TYPE,m.type)}</select>
+      </div>
+      <div class="fg"><div class="fl">Stat ID</div>
+        <input type="number" value="${m.stat||0}" oninput="recipeMods[${i}].stat=this.value;regen()">
+      </div>
+      <div class="fg"><div class="fl">Operation</div>
+        <select onchange="recipeMods[${i}].operation=this.value;regen()">${opt(MOD_OP,m.operation)}</select>
+      </div>
+      <div class="fg"><div class="fl">Value</div>
+        <input type="text" value="${m.value||0}" oninput="recipeMods[${i}].value=this.value;regen()">
+      </div>
+      <div class="fg"><div class="fl">Source</div>
+        <select onchange="recipeMods[${i}].source=this.value;regen()">${opt(RECIPE_SOURCE_TYPE,m.source)}</select>
+      </div>
+      <button class="del" onclick="recipeMods.splice(${i},1);rebuildPanel('properties')" title="Remove">&#x2715;</button>
+    </div>`).join('');
+
+  const cbRows=cookbookEntries.map((e,i)=>`
+    <div style="display:grid;grid-template-columns:80px 1fr 1fr 28px;gap:8px;align-items:end;margin-bottom:6px">
+      <div class="fg"><div class="fl">Src WCID</div>
+        <input type="number" value="${e.src||0}" oninput="cookbookEntries[${i}].src=this.value;regen()">
+      </div>
+      <div class="fg"><div class="fl">Src Name (comment)</div>
+        <input type="text" value="${e.srcLabel||''}" placeholder="name comment" oninput="cookbookEntries[${i}].srcLabel=this.value;regen()">
+      </div>
+      <div class="fg"><div class="fl">Target WCID</div>
+        <input type="number" value="${e.tgt||0}" oninput="cookbookEntries[${i}].tgt=this.value;regen()">
+      </div>
+      <button class="del" onclick="cookbookEntries.splice(${i},1);rebuildPanel('properties')" title="Remove">&#x2715;</button>
+    </div>`).join('');
+
+  return `<div class="sec"><div class="sh"><div class="st">Recipe Core</div><div class="sl"></div></div>
+  ${[
+    ['Recipe ID','fWcid','number','600000','id'],
+    ['Difficulty','fRecipeDiff','number','900','difficulty'],
+    ['Success WCID','fSuccessWcid','number','0','success_W_C_I_D'],
+    ['Success Amount','fSuccessAmt','number','1','success_Amount'],
+    ['Fail WCID','fFailWcid','number','0','fail_W_C_I_D'],
+    ['Success Message','fSuccessMsg','text','You apply the recipe successfully.','success_Message'],
+    ['Fail Message','fFailMsg','text','You apply the recipe but destroy the target.','fail_Message'],
+    ['Destroy Source on Success','fDestroySourceSuccess','text','1','success_Destroy_Source_Chance'],
+    ['Destroy Target on Fail','fDestroyTargetFail','text','1','fail_Destroy_Target_Chance'],
+  ].map(([lbl,id,tp,def,fc])=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+    <span style="font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--ink-dim)">${lbl} <span class="fc">${fc}</span></span>
+    <input type="${tp}" id="${id}" value="${def}" style="width:240px;text-align:right" oninput="regen()">
+  </div>`).join('')}
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+    <span style="font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--ink-dim)">Skill <span class="fc">skill</span></span>
+    <select id="fRecipeSkill" style="width:240px">${ALL_SKILLS.map(([v,l])=>`<option value="${v}">${v}  ${l}</option>`).join('')}</select>
+  </div>
+  <div class="sh" style="margin-top:14px"><div class="st">Requirements</div><div class="sl"></div></div>
+  <p class="note" style="margin-bottom:8px">The Type dropdown controls which SQL requirements table receives the row (Int/Bool/Float/String).</p>
+  ${reqRows}
+  <button class="add-btn" onclick="recipeReqs.push({type:1,stat:105,value:1,compare:5,message:'Requirement not met!'});rebuildPanel('properties')">+ Add Requirement</button>
+  <div class="sh" style="margin-top:14px"><div class="st">Modifications (recipe_mods)</div><div class="sl"></div></div>
+  <p class="note" style="margin-bottom:8px">Values with decimals go to recipe_mods_float, whole numbers to recipe_mods_int.</p>
+  ${modRows}
+  <button class="add-btn" onclick="recipeMods.push({type:1,stat:0,operation:2,value:0,source:1});rebuildPanel('properties')">+ Add Modification</button>
+  <div class="sh" style="margin-top:14px"><div class="st">Cook Book (source → target pairs)</div><div class="sl"></div></div>
+  ${cbRows}
+  <button class="add-btn" onclick="cookbookEntries.push({src:0,srcLabel:'',tgt:0});rebuildPanel('properties')">+ Add Source → Target Pair</button>
+  </div>`;
+}
+
 
 //  ATTRIBUTES 
 function buildAttrs(){
@@ -2741,6 +2928,10 @@ function buildAttrs(){
 // Core skills always shown; extras added by user
 let CORE_SKILL_IDS=[6,7,15,44]; // default — MeleeDefense,MissileDefense,MagicDefense,HeavyWeapons
 let extraSkills=[]; // [{id,sac,init}]
+let bookPages=[]; // [{author,text}] for weenie_properties_book_page_data
+let bookMeta={maxPages:2,maxChars:1000}; // weenie_properties_book header
+window._weenieTabType=0; // tracks weenieType for the weenie tab (set on import)
+window._weenieSavedState=null; // snapshot of weenie tab state across tab switches
 
 function removeCoreSkill(id){
   var idx=CORE_SKILL_IDS.indexOf(id);
@@ -2897,6 +3088,71 @@ function selectSpell(idx,id,name){
   if(ie)ie.value=id;if(ne)ne.value=decoded;if(dr)dr.classList.remove('open');regen();
 }
 
+
+// ── Book Tab ─────────────────────────────────────────────────────────────────
+function buildBookTab(){
+  return `<div class="sec">
+    <div class="sh"><div class="st">&#x1F4D6; Book</div><div class="sl"></div></div>
+    <p class="note" style="margin-bottom:14px">Defines the book container. Max Pages controls how many pages can be written. Max Chars Per Page limits text length per page.</p>
+    <div class="grid g2" style="max-width:400px">
+      <div class="fg">
+        <div class="fl">Max Pages <span class="fc">max_Num_Pages</span></div>
+        <input type="number" id="bk_maxPages" value="${bookMeta.maxPages||2}" min="1" max="200"
+          oninput="bookMeta.maxPages=parseInt(this.value)||1;regen()">
+      </div>
+      <div class="fg">
+        <div class="fl">Max Chars Per Page <span class="fc">max_Num_Chars_Per_Page</span></div>
+        <input type="number" id="bk_maxChars" value="${bookMeta.maxChars||1000}" min="1" max="10000"
+          oninput="bookMeta.maxChars=parseInt(this.value)||1000;regen()">
+      </div>
+    </div>
+  </div>`;
+}
+
+function buildBookContentTab(){
+  const rows=bookPages.map((pg,i)=>`
+    <div style="border:1px solid var(--border-lt);border-radius:3px;padding:14px;margin-bottom:12px;background:rgba(200,184,152,.04)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-family:'Cinzel',serif;font-size:11px;font-weight:700;color:var(--ink-mid);letter-spacing:.06em">
+          PAGE ${i} <span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint);font-weight:400;letter-spacing:0">&nbsp;·&nbsp;page_Id = ${i}</span>
+        </div>
+        <button class="del" onclick="bookPages.splice(${i},1);rebuildPanel('bookcontent');regen()" title="Remove page">&#x2715;</button>
+      </div>
+      <div class="grid g3" style="margin-bottom:10px">
+        <div class="fg">
+          <div class="fl">Author Name <span class="fc">author_Name</span></div>
+          <input type="text" id="bk_author_${i}" value="${(pg.author||'').replace(/"/g,'&quot;')}"
+            oninput="bookPages[${i}].author=this.value;regen()" placeholder="e.g. F.P.">
+        </div>
+        <div class="fg">
+          <div class="fl">Author Account <span class="fc">author_Account</span></div>
+          <input type="text" id="bk_acct_${i}" value="${(pg.account||'prewritten').replace(/"/g,'&quot;')}"
+            oninput="bookPages[${i}].account=this.value;regen()">
+        </div>
+        <div class="fg">
+          <div class="fl">Ignore Author <span class="fc">ignore_Author</span></div>
+          <select id="bk_ignore_${i}" onchange="bookPages[${i}].ignoreAuthor=this.value==='true';regen()">
+            <option value="false"${!(pg.ignoreAuthor)?'  selected':''}>False</option>
+            <option value="true"${pg.ignoreAuthor?' selected':''}>True</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg">
+        <div class="fl">Page Text <span class="fc">page_Text</span></div>
+        <textarea id="bk_text_${i}" rows="5"
+          style="width:100%;font-family:'IM Fell English',serif;font-size:13px;line-height:1.6;background:var(--parch-light);border:1px solid var(--border);padding:8px;resize:vertical;box-sizing:border-box"
+          oninput="bookPages[${i}].text=this.value;regen()">${(pg.text||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
+      </div>
+    </div>`).join('');
+
+  return `<div class="sec">
+    <div class="sh"><div class="st">&#x1F4DD; Book Content</div><div class="sl"></div></div>
+    <p class="note" style="margin-bottom:14px">Each page maps to a row in <code>weenie_properties_book_page_data</code>. Pages are numbered automatically starting at 0. Author ID is always <code>0xFFFFFFFF</code>.</p>
+    ${rows||'<div style="color:var(--ink-faint);font-style:italic;font-size:13px;padding:8px 0">No pages yet — click Add Page below.</div>'}
+    <button class="add-btn" style="margin-top:8px" onclick="bookPages.push({author:'',account:'prewritten',ignoreAuthor:false,text:''});rebuildPanel('bookcontent');regen()">+ Add Page</button>
+  </div>`;
+}
+
 //  BODY PARTS 
 function buildBodyPartsTab(){
   const cType=gi('cType',31);
@@ -2943,7 +3199,7 @@ function onFieldInput(e){
 function switchSub(sub,btn){
   _d('UI','→ Sub: '+sub+' (was: '+curSub+')');
   // Auto-sync property arrays when switching to properties tab if empty
-  if(sub==='properties' && !extraInt.length && !extraBool.length && curType!=='quest' && curType!=='recipe'){
+  if(sub==='properties' && !extraInt.length && !extraBool.length && curType!=='quest' && curType!=='recipe' && curType!=='weenie'){
     setTimeout(function(){ syncAdvancedFromSQL(true); }, 50);
   }
   // Auto-populate body parts when switching to bodyparts tab if empty
@@ -2967,15 +3223,80 @@ function switchType(type,btn){
     if(btn)btn.classList.add('active');
     return;
   }
+
+  // ── Weenie tab memory: save state when leaving, restore when returning ────
+  var _hasWeenieData = curType==='weenie' &&
+    (extraInt.length||extraBool.length||extraFloat.length||extraStr.length||
+     extraDID.length||spells.length||emotes.length||bookPages.length||
+     window._weenieTabType!==0);
+  if(_hasWeenieData){
+    // Snapshot everything needed to fully restore the weenie tab
+    window._weenieSavedState = {
+      extraInt:   extraInt.map(function(r){return {type:r.type,value:r.value};}),
+      extraBool:  extraBool.map(function(r){return {type:r.type,value:r.value};}),
+      extraFloat: extraFloat.map(function(r){return {type:r.type,value:r.value};}),
+      extraStr:   extraStr.map(function(r){return {type:r.type,value:r.value};}),
+      extraDID:   extraDID.map(function(r){return {type:r.type,value:r.value};}),
+      spells:     spells.map(function(s){return Object.assign({},s);}),
+      emotes:     JSON.parse(JSON.stringify(emotes)),
+      extraSkills:extraSkills.map(function(s){return Object.assign({},s);}),
+      bookPages:  JSON.parse(JSON.stringify(bookPages)),
+      bookMeta:   Object.assign({},bookMeta),
+      createList: JSON.parse(JSON.stringify(createList)),
+      weenieTabType: window._weenieTabType,
+      importedClassName: window._importedClassName,
+      importedTimestamp: window._importedTimestamp,
+      importedEmoteSQL:  window._importedEmoteSQL,
+      importedCreateListSQL: window._importedCreateListSQL,
+      importedBookSQL:   window._importedBookSQL,
+      wcid: (function(){var e=document.getElementById('fWcid');return e?e.value:'0';}()),
+      className: (function(){var e=document.getElementById('fClassName');return e?e.value:'';}()),
+      curSub: curSub
+    };
+    console.log('[SWITCH] weenie state saved');
+  }
+
+  // ── Restore weenie state if returning to weenie tab ───────────────────────
+  if(type==='weenie' && window._weenieSavedState){
+    var s=window._weenieSavedState;
+    curType='weenie';
+    curSub=s.curSub||'properties';
+    extraInt=s.extraInt; extraBool=s.extraBool;
+    extraFloat=s.extraFloat; extraStr=s.extraStr; extraDID=s.extraDID;
+    spells=s.spells; emotes=s.emotes; extraSkills=s.extraSkills;
+    bookPages=s.bookPages; bookMeta=s.bookMeta; createList=s.createList;
+    window._weenieTabType=s.weenieTabType;
+    window._importedClassName=s.importedClassName;
+    window._importedTimestamp=s.importedTimestamp;
+    window._importedEmoteSQL=s.importedEmoteSQL;
+    window._importedCreateListSQL=s.importedCreateListSQL;
+    window._importedBookSQL=s.importedBookSQL;
+    document.querySelectorAll('.itab').forEach(b=>b.classList.remove('active'));
+    if(btn)btn.classList.add('active');
+    buildForm();
+    // Re-apply WCID and class name after buildForm resets idRow
+    setTimeout(function(){
+      var _fw=document.getElementById('fWcid');
+      if(_fw) _fw.value=s.wcid;
+      var _fc=document.getElementById('fClassName');
+      if(_fc) _fc.value=s.className||'';
+      var _ft=document.getElementById('fWeenieType');
+      if(_ft) _ft.value=s.weenieTabType;
+      regen();
+    },0);
+    console.log('[SWITCH] weenie state restored');
+    return;
+  }
+
   curType=type;
   // Preserve current sub-tab if it exists in the new type; else fall back to first
   var _newTabs=TYPE_CFG[type].subTabs;
   curSub=_newTabs.indexOf(curSub)>=0 ? curSub : _newTabs[0];
   spells=[];emotes=[];
-  window._importedClassName=null;window._importedTimestamp=null;extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];window._presetStore=[];
+  window._importedClassName=null;window._importedTimestamp=null;extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];var _fcnClr=document.getElementById('fClassName');if(_fcnClr)_fcnClr.value='';window._presetStore=[];
   // Reset core skills to default (4 core skills) on type switch
   while(CORE_SKILL_IDS.length) CORE_SKILL_IDS.pop();
-  [6,7,15,44].forEach(function(id){CORE_SKILL_IDS.push(id);});window._importedEmoteSQL='';window._importedCreateListSQL='';window._importedBodyParts=null;window._importedCoreSkills=null;;window._importedEmoteSQL='';window._importedCreateListSQL='';window._importedBodyParts=null;window._importedCoreSkills=null;console.log('[SWITCH] arrays cleared, curType now='+curType);
+  [6,7,15,44].forEach(function(id){CORE_SKILL_IDS.push(id);});window._importedEmoteSQL='';window._importedCreateListSQL='';window._importedBookSQL='';window._importedBodyParts=null;window._importedCoreSkills=null;bookPages=[];bookMeta={maxPages:2,maxChars:1000};window._weenieTabType=0;;window._importedEmoteSQL='';window._importedCreateListSQL='';window._importedBookSQL='';window._importedBodyParts=null;window._importedCoreSkills=null;console.log('[SWITCH] arrays cleared, curType now='+curType);
   // Pre-seed ItemType=128 (Misc) for item tab
   if(type==='item') extraInt.push({type:1,value:128});
   // Pre-seed name in extraStr so String tab shows it
@@ -2989,12 +3310,21 @@ function switchType(type,btn){
     const fc=document.getElementById('formContent');
     if(fc) fc.innerHTML='<div style="padding:20px;color:darkred;font-family:monospace;font-size:11px"><b>switchType('+type+') error:</b><br>'+e.message+'<br><pre>'+e.stack+'</pre></div>';
   }
+  // Auto-apply default preset for generator
+  if(type==='generator'){
+    setTimeout(function(){
+      applyPreset({name:'Creature/Object',data:{fGenWeenieType:'1',fGenTimeType:'1',fGenRespawn:'300',fGenInit:'1',fGenMax:'1',fGenWhen:'1',fGenWhere:'2',fGenProb:'1',fGenRegenInterval:'300',fGenRadius:'10',fGenInitDelay:'1',fGenName:'NewCreatureGen'}});
+    }, 80);
+  }
 }
 
 function resetAll(){
-  curType='creature'; curSub='properties';
+  curType='weenie'; curSub='properties';
+  window._weenieSavedState=null; // RESET clears saved state
   spells=[];emotes=[];extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
   recipeReqs=[];recipeReqsBool=[];recipeReqsFloat=[];recipeReqsStr=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];
+  _importedBookSQL='';_importedEmoteSQL='';_importedCreateListSQL='';
+  bookPages=[];bookMeta={maxPages:2,maxChars:1000};window._weenieTabType=0;
   bodyParts=getBodyParts(31);
   buildForm();
   document.querySelectorAll('.itab').forEach(b=>{
@@ -3027,7 +3357,7 @@ function switchEmoteSubTab(tab){
 
 function buildEmotesTab(){
   const t=curType;
-  const hasEmotes=['creature','npc','item','weapon','armor','jewelry'].includes(t);
+  const hasEmotes=['creature','npc','item','weapon','armor','jewelry','weenie'].includes(t);
   if(!hasEmotes) return '<div class="sec"><p style="font-size:12px;color:var(--ink-dim);padding:8px">Emotes not applicable.</p></div>';
 
   // Sub-tab bar (Builder / Script)
@@ -3706,17 +4036,34 @@ function importSQLToBuilder(){
     if(r.error){ toast('Import failed: '+r.error); return; }
     var sql = r.content;
     var info = _parseWeenieSQL(sql);
-    var targetTab = (info && _WEENIE_TYPE_TAB[info.typeNum]) || curType;
+    // If we're already on the weenie tab, stay there (universal import-edit mode).
+    // Only auto-switch type when importing from a different tab.
+    var _fromWeenie = (curType === 'weenie');
+    var targetTab = _fromWeenie ? 'weenie' : ((info && _WEENIE_TYPE_TAB[info.typeNum]) || curType);
 
     // Switch mode to manual if in AI
     var manBtn = document.querySelector('.mode-tab');
     if(manBtn && !document.getElementById('manualWS').classList.contains('active'))
       switchMode('manual', manBtn);
 
-    // Switch to the right tab
+    // Switch to the right tab (skip if staying on weenie)
     if(targetTab !== curType) switchType(targetTab);
 
+    // Pre-clear CORE_SKILL_IDS immediately so switchType's defaults
+    // don't render before the import setTimeout fires
+    while(CORE_SKILL_IDS.length) CORE_SKILL_IDS.pop();
+    extraSkills.length = 0;
+
     setTimeout(function(){
+      // ── Full state reset before import — clears all previous file data ──
+      window._weenieSavedState=null; // new import replaces any saved state
+      extraInt=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];
+      spells=[];emotes=[];extraSkills=[];
+      createList=[];bookPages=[];bookMeta={maxPages:2,maxChars:1000};window._weenieTabType=0;
+      _importedEmoteSQL='';_importedCreateListSQL='';_importedBookSQL='';
+      window._importedClassName=null;window._importedTimestamp=null;
+      window._importedBodyParts=null;window._importedCoreSkills=null;
+      while(CORE_SKILL_IDS.length) CORE_SKILL_IDS.pop();
       // Load SQL into the output panel
       var sqlOut = document.getElementById('sqlOut');
       if(sqlOut){ sqlOut.value = sql; }
@@ -3741,10 +4088,14 @@ function importSQLToBuilder(){
       var _wHdr = sql.match(/INSERT INTO `weenie`[\s\S]+?VALUES\s*\(\s*\d+\s*,\s*'([^']+)'\s*,\s*\d+\s*,\s*'([^']+)'/i);
       window._importedClassName = _wHdr ? _wHdr[1] : null;
       window._importedTimestamp = _wHdr ? _wHdr[2] : null;
+      // Set fClassName from the imported weenie table's class_Name
+      var _fcnEl = document.getElementById('fClassName');
+      if(_fcnEl && window._importedClassName) _fcnEl.value = window._importedClassName;
       // Set weenie sub-type from parsed info
       if(info && info.typeNum){
         var fWT = document.getElementById('fWeenieType');
         if(fWT) fWT.value = info.typeNum;
+        window._weenieTabType = info.typeNum; // cache for buildSubContent tab check
       }
       // Set class_name in fName as initial value (display name overwritten by _syncImportedToFormFields)
       if(info && info.name){
@@ -3773,11 +4124,38 @@ function importSQLToBuilder(){
       if(_ctImport){
         bodyParts = getBodyParts(parseInt(_ctImport.value));
       }
-      // Rebuild all panels
+      // Rebuild form chrome (idRow, sub-tabs) now that arrays are populated.
+      // Must happen AFTER parsing so the chrome-show check sees real data,
+      // and BEFORE rebuildPanel so panels render with correct state.
+      // Safety: ensure core defaults are cleared before rendering skills
+      while(CORE_SKILL_IDS.length) CORE_SKILL_IDS.pop();
+      if(curType==='weenie') buildForm();
+      // Re-apply WCID/className/weenieType after buildForm() resets idRow fields
+      if(_iWcid){
+        var _fw2=document.getElementById('fWcid');
+        if(_fw2) _fw2.value=_iWcid;
+      }
+      if(window._importedClassName){
+        var _fc2=document.getElementById('fClassName');
+        if(_fc2) _fc2.value=window._importedClassName;
+      }
+      if(info && info.typeNum){
+        var _fwt2=document.getElementById('fWeenieType');
+        if(_fwt2) _fwt2.value=info.typeNum;
+        window._weenieTabType = info.typeNum;
+      }
+      // Re-run buildForm so the tab bar recalculates with the correct weenieType
+      // (first buildForm ran before typeNum was set, so book tabs were not shown)
+      if(curType==='weenie') buildForm();
+      // Re-apply fields one more time since buildForm resets idRow
+      if(_iWcid){ var _fw3=document.getElementById('fWcid'); if(_fw3) _fw3.value=_iWcid; }
+      if(window._importedClassName){ var _fc3=document.getElementById('fClassName'); if(_fc3) _fc3.value=window._importedClassName; }
+      if(info&&info.typeNum){ var _fwt3=document.getElementById('fWeenieType'); if(_fwt3) _fwt3.value=info.typeNum; window._weenieTabType=info.typeNum; }
       rebuildPanel('properties');
       rebuildPanel('skills');
       rebuildPanel('spellbook');
       rebuildPanel('emotes');
+      // book/bookcontent panels are inside buildAdvanced — rebuildPanel('properties') covers them
       setTimeout(function(){
         // Skills fully in extraSkills on import — no core skill DOM hydration needed
         if(window._importedBodyParts){
@@ -3939,15 +4317,15 @@ function _syncImportedToFormFields(importedSQL) {
     }
   }
 
-  // ── Skills — populate core skill inputs + extraSkills from SQL ──────────
+  // ── Skills — populate extraSkills from SQL, always clear core defaults ──
+  // Always clear CORE_SKILL_IDS on import regardless of whether skill block is found.
+  // This prevents default skills (MeleeDefense etc.) from persisting after import.
+  while(CORE_SKILL_IDS.length) CORE_SKILL_IDS.pop();
+  extraSkills.length = 0;
   if(importedSQL){
-    var skBlock = importedSQL.match(/INSERT INTO `weenie_properties_skill`[\s\S]+?;\s*\n/i);
+    // Robust regex: handle Windows \r\n, end-of-file, and both old/new semicolon positions
+    var skBlock = importedSQL.match(/INSERT INTO `weenie_properties_skill`[\s\S]+?;\s*(?:\r?\n|$)/i);
     if(skBlock){
-      // Clear default core skills and move ALL imported skills to extraSkills
-      // so every skill gets an X button and none are hardcoded
-      while(CORE_SKILL_IDS.length) CORE_SKILL_IDS.pop();
-      extraSkills.length = 0;
-      window._importedCoreSkills = null; // no longer needed
       var skRe = /\(\s*\d+\s*,\s*(\d+)\s*,\s*\d+\s*,\s*(\d+)\s*,\s*\d+\s*,\s*(\d+)/g, sm;
       while((sm = skRe.exec(skBlock[0])) !== null){
         var skId=parseInt(sm[1]), skSac=parseInt(sm[2]), skInit=parseInt(sm[3]);
@@ -4042,22 +4420,55 @@ function scaleCreatureStats(){
 // ── Imported emote/create-list SQL preservation ──────────────────────────────
 var _importedEmoteSQL = '';
 var _importedCreateListSQL = '';
+var _importedBookSQL = '';
 var _importedWcidForReplace = '';
 
 function _extractImportedSections(sql, importedWcid) {
   _importedWcidForReplace = String(importedWcid || '');
   var emStart = sql.indexOf('INSERT INTO `weenie_properties_emote`');
   var clStart = sql.indexOf('INSERT INTO `weenie_properties_create_list`');
+  var bkStart = sql.indexOf('INSERT INTO `weenie_properties_book`');
   if (emStart >= 0) {
-    var emEnd = clStart >= 0 ? clStart : sql.length;
+    var emEnd = clStart >= 0 ? clStart : (bkStart >= 0 ? bkStart : sql.length);
     _importedEmoteSQL = sql.substring(emStart, emEnd).trim();
   } else {
     _importedEmoteSQL = '';
   }
   if (clStart >= 0) {
-    _importedCreateListSQL = sql.substring(clStart).trim();
+    var clEnd = bkStart >= 0 ? bkStart : sql.length;
+    _importedCreateListSQL = sql.substring(clStart, clEnd).trim();
   } else {
     _importedCreateListSQL = '';
+  }
+  if (bkStart >= 0) {
+    _importedBookSQL = sql.substring(bkStart).trim();
+    // Parse book header
+    var bkHdr = _importedBookSQL.match(/VALUES\s*\(\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i);
+    if (bkHdr) {
+      bookMeta.maxPages = parseInt(bkHdr[1]) || 2;
+      bookMeta.maxChars = parseInt(bkHdr[2]) || 1000;
+    }
+    // Parse book pages — each row: (wcid, pageId, authorId, authorName, account, ignoreAuthor, pageText)
+    // Use a careful regex that captures everything after the 6th comma as pageText
+    bookPages = [];
+    var bkPageSQL = _importedBookSQL.match(/INSERT INTO `weenie_properties_book_page_data`[\s\S]+?;(?=\s*$|\s*INSERT|\s*SET|\s*DELETE)/i);
+    if (bkPageSQL) {
+      // Extract each VALUES row
+      var rowRe = /(?:VALUES|\s*,)\s*\((\d+)\s*,\s*(\d+)\s*,\s*([^,]+)\s*,\s*'((?:[^']|'')*)'\s*,\s*'((?:[^']|'')*)'\s*,\s*(True|False)\s*,\s*'((?:[^']|'')*)'/gi;
+      var rm;
+      while((rm=rowRe.exec(bkPageSQL[0]))!==null){
+        bookPages.push({
+          author: rm[4].replace(/''/g,"'"),
+          account: rm[5].replace(/''/g,"'"),
+          ignoreAuthor: rm[6].toLowerCase()==='true',
+          text: rm[7].replace(/''/g,"'")
+        });
+      }
+    }
+  } else {
+    _importedBookSQL = '';
+    bookPages = [];
+    bookMeta = {maxPages:2, maxChars:1000};
   }
 }
 
@@ -4075,6 +4486,13 @@ function _applyImportedSQLSections(lines, wcid) {
       ? _importedCreateListSQL.replace(new RegExp('\\b'+_importedWcidForReplace+'\\b','g'), wcid)
       : _importedCreateListSQL;
     lines.push(cSQL);
+  }
+  if (_importedBookSQL) {
+    lines.push('');
+    var bSQL = _importedWcidForReplace
+      ? _importedBookSQL.replace(new RegExp('\\b'+_importedWcidForReplace+'\\b','g'), wcid)
+      : _importedBookSQL;
+    lines.push(bSQL);
   }
 }
 
@@ -4378,40 +4796,107 @@ function rebuildPanel(sub){
   panel.querySelectorAll('input,select,textarea').forEach(e=>e.addEventListener('input',onFieldInput));
   regen();
 }
+// ── Generator /loc parser ────────────────────────────────────────────────────
+function _parseGenLoc(v){
+  if(!v) return;
+  // Cell: first hex token e.g. 0xA9B40019
+  var cm=v.match(/0x([0-9A-Fa-f]+)/i);
+  if(cm){
+    var e=document.getElementById('fGenCell');
+    if(e) e.value='0x'+cm[1].toUpperCase();
+  }
+  // Coords: [...] bracket group
+  var pm=v.match(/\[\s*([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s*\]/);
+  if(pm){
+    var ex=document.getElementById('fGenOriginX');
+    var ey=document.getElementById('fGenOriginY');
+    var ez=document.getElementById('fGenOriginZ');
+    if(ex) ex.value=pm[1];
+    if(ey) ey.value=pm[2];
+    if(ez) ez.value=pm[3];
+  }
+  // Quaternion: 4 floats after stripping cell + bracket group
+  var stripped=v.replace(/0x[0-9A-Fa-f]+/i,'').replace(/\[[^\]]*\]/,'').trim();
+  var nums=stripped.split(/\s+/).filter(function(n){ return n!=='' && !isNaN(parseFloat(n)); });
+  if(nums.length>=4){
+    var ew=document.getElementById('fGenAngW');
+    var eax=document.getElementById('fGenAngX');
+    var eay=document.getElementById('fGenAngY');
+    var eaz=document.getElementById('fGenAngZ');
+    if(ew)  ew.value=nums[0];
+    if(eax) eax.value=nums[1];
+    if(eay) eay.value=nums[2];
+    if(eaz) eaz.value=nums[3];
+  }
+  regen();
+}
+
 function buildGeneratorProps(){
-  const whenOpts=[[2,'Always (Respawn)'],[3,'Event'],[4,'Sleeping'],[1,'Once']];
+  const timeTypeOpts=[[1,'Always'],[2,'Absolute'],[3,'Event'],[4,'Timed']];
+  const whenOpts=[[1,'Always'],[2,'On Destruction'],[3,'On Event'],[4,'On Generation']];
+  const whereOpts=[[2,'Scatter'],[4,'Specific Location'],[72,'Contain']];
+  const destrOpts=[[0,'None'],[1,'SetToRegen'],[2,'Destroy'],[3,'Freeze'],[4,'DontRegen']];
+  const curTimeType=parseInt(g('fGenTimeType','1'))||1;
+  const isEvent=curTimeType===3||curTimeType===4;
   const targetWcid=g('fGenTargetWcid','800000');
   const genWcid=targetWcid?(parseInt(targetWcid)+1000000):'';
-  return `<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Spawn Target</div><div class=\"sl\">What this generator creates</div></div>
-    <div class=\"grid g2\">
-      <div class=\"fg\"><div class=\"fl\">Target WCID <span class=\"fc\">the weenie to spawn</span></div><input type=\"text\" id=\"fGenTargetWcid\" value=\"${g('fGenTargetWcid','800000')}\" placeholder=\"e.g. 800000\"></div>
-      <div class=\"fg\"><div class=\"fl\">Generator WCID <span class=\"fc\">auto = Target + 1,000,000</span></div><input type=\"text\" id=\"fGenWcid\" value=\"${genWcid}\" placeholder=\"auto-calculated\" readonly style=\"opacity:.6;cursor:default\"></div>
-      <div class=\"fg\"><div class=\"fl\">Display Name <span class=\"fc\">used in class_Name</span></div><input type=\"text\" id=\"fGenName\" value=\"${g('fGenName','New Creature')}\" placeholder=\"New Creature\"></div>
-      <div class=\"fg\"><div class=\"fl\">Probability <span class=\"fc\">0.0 \\u2013 1.0</span></div><input type=\"text\" id=\"fGenProb\" value=\"${g('fGenProb','1')}\"></div>
-    </div></div>
-  <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Spawn Settings</div><div class=\"sl\">Timing and quantity</div></div>
-    <div class=\"grid g3\">
-      <div class=\"fg\"><div class=\"fl\">Respawn Delay <span class=\"fc\">seconds</span></div><input type=\"text\" id=\"fGenRespawn\" value=\"${g('fGenRespawn','300')}\" placeholder=\"300\"></div>
-      <div class=\"fg\"><div class=\"fl\">Init Create <span class=\"fc\">spawns on load</span></div><input type=\"text\" id=\"fGenInit\" value=\"${g('fGenInit','1')}\"></div>
-      <div class=\"fg\"><div class=\"fl\">Max Create <span class=\"fc\">max simultaneous</span></div><input type=\"text\" id=\"fGenMax\" value=\"${g('fGenMax','1')}\"></div>
+
+  function row(lbl,id,tp,def,fc,extra){
+    const v=g(id,String(def));
+    const inp=tp==='select-when'?`<select id="${id}" style="width:240px" onchange="regen()">${opt(whenOpts,v)}</select>`
+      :tp==='select-where'?`<select id="${id}" style="width:240px" onchange="regen()">${opt(whereOpts,v)}</select>`
+      :tp==='select-time'?`<select id="${id}" style="width:240px" onchange="rebuildPanel('properties');regen()">${opt(timeTypeOpts,v)}</select>`
+      :tp==='select-destr'?`<select id="${id}" style="width:240px" onchange="regen()">${opt(destrOpts,v)}</select>`
+      :`<input type="${tp}" id="${id}" value="${v}" style="width:240px;text-align:right" oninput="${extra||'regen()'}">`;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <span style="font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--ink-dim)">${lbl}${fc?` <span class="fc">${fc}</span>`:''}</span>
+      ${inp}</div>`;
+  }
+
+  const eventRows=isEvent?`
+    ${row('Event Name','fGenEventName','text','EventOne','S-34')}
+    ${row('Destruction Type','fGenDestrType','select-destr',2,'I-103')}
+    ${row('End Destruction Type','fGenEndDestrType','select-destr',2,'I-145')}`:'';
+
+  return `<div class="sec"><div class="sh"><div class="st">Spawn Target</div><div class="sl">What this generator spawns</div></div>
+    ${row('Target WCID','fGenTargetWcid','number','800000','weenie to spawn',"document.getElementById('fGenWcid').value=parseInt(this.value)+1000000;regen()")}
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border-lt)">
+      <span style="font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--ink-dim)">Generator WCID <span class="fc">auto = Target + 1,000,000</span></span>
+      <input type="number" id="fGenWcid" value="${genWcid}" readonly style="width:240px;text-align:right;opacity:.6;cursor:default">
     </div>
-    <div class=\"grid g2\" style=\"margin-top:10px\">
-      <div class=\"fg\"><div class=\"fl\">When Create <span class=\"fc\">spawn condition</span></div>
-        <select id=\"fGenWhen\">${opt(whenOpts,g('fGenWhen','2'))}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Event Name <span class=\"fc\">if Event spawn only</span></div><input type=\"text\" id=\"fGenEventName\" value=\"${g('fGenEventName','')}\" placeholder=\"e.g. HarvestFestival\"></div>
-    </div></div>
-  <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Placement Coordinates</div><div class=\"sl\">Fill these in after placing with a spawn tool</div></div>
-    <div class=\"grid g3\">
-      <div class=\"fg\"><div class=\"fl\">obj_Cell_Id <span class=\"fc\">landcell hex</span></div><input type=\"text\" id=\"fGenCell\" value=\"${g('fGenCell','')}\" placeholder=\"NULL\"></div>
-      <div class=\"fg\"><div class=\"fl\">Origin X</div><input type=\"text\" id=\"fGenOriginX\" value=\"${g('fGenOriginX','')}\" placeholder=\"NULL\"></div>
-      <div class=\"fg\"><div class=\"fl\">Origin Y</div><input type=\"text\" id=\"fGenOriginY\" value=\"${g('fGenOriginY','')}\" placeholder=\"NULL\"></div>
-      <div class=\"fg\"><div class=\"fl\">Origin Z</div><input type=\"text\" id=\"fGenOriginZ\" value=\"${g('fGenOriginZ','')}\" placeholder=\"NULL\"></div>
-      <div class=\"fg\"><div class=\"fl\">Angles W</div><input type=\"text\" id=\"fGenAngW\" value=\"${g('fGenAngW','')}\" placeholder=\"NULL\"></div>
-      <div class=\"fg\"><div class=\"fl\">Angles X</div><input type=\"text\" id=\"fGenAngX\" value=\"${g('fGenAngX','')}\" placeholder=\"NULL\"></div>
-      <div class=\"fg\"><div class=\"fl\">Angles Y</div><input type=\"text\" id=\"fGenAngY\" value=\"${g('fGenAngY','')}\" placeholder=\"NULL\"></div>
-      <div class=\"fg\"><div class=\"fl\">Angles Z</div><input type=\"text\" id=\"fGenAngZ\" value=\"${g('fGenAngZ','')}\" placeholder=\"NULL\"></div>
-    </div></div>`;
+    ${row('Display Name','fGenName','text','NewCreatureGen','class_Name')}
+    ${row('Probability','fGenProb','text','1','0.0 – 1.0')}
+  </div>
+  <div class="sec"><div class="sh"><div class="st">Generator Behavior</div><div class="sl">Timing and quantity</div></div>
+    ${row('Generator Time Type','fGenTimeType','select-time',1,'I-142')}
+    ${row('When Create','fGenWhen','select-when',1,'generator table')}
+    ${row('Where Create','fGenWhere','select-where',2,'generator table')}
+    ${row('Init Create','fGenInit','number','1','spawns on load')}
+    ${row('Max Create','fGenMax','number','1','max simultaneous')}
+    ${row('Respawn Delay (s)','fGenRespawn','number','300','delay in gen table')}
+    ${row('Regen Interval (s)','fGenRegenInterval','number','300','F-41')}
+    ${row('Generator Radius','fGenRadius','number','10','F-43')}
+    ${row('Initial Delay','fGenInitDelay','number','1','F-121')}
+    ${eventRows}
+  </div>
+  <div class="sec"><div class="sh"><div class="st">Placement Coordinates</div><div class="sl">Paste /loc or fill manually</div></div>
+    <div style="padding:6px 0 10px">
+      <div style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.1em;color:var(--ink-dim);margin-bottom:4px">PASTE /LOC OUTPUT</div>
+      <input type="text" id="fGenLocPaste" placeholder="e.g. 0xA9B40019 [84.0 7.1 94.0] 0.997 0.0 0.0 -0.078"
+        style="width:100%;box-sizing:border-box;border:1px dashed var(--border);padding:6px 8px;font-family:'Source Code Pro',monospace;font-size:11px"
+        oninput="_parseGenLoc(this.value)">
+    </div>
+    ${row('obj_Cell_Id','fGenCell','text','','landcell hex')}
+    ${row('Origin X','fGenOriginX','text','','')}
+    ${row('Origin Y','fGenOriginY','text','','')}
+    ${row('Origin Z','fGenOriginZ','text','','')}
+    ${row('Angles W','fGenAngW','text','','')}
+    ${row('Angles X','fGenAngX','text','','')}
+    ${row('Angles Y','fGenAngY','text','','')}
+    ${row('Angles Z','fGenAngZ','text','','')}
+  </div>`;
 }
+
 
 const CREATURE_BODY_MAP={31:'biped',2:'biped',3:'biped',4:'biped',5:'biped',6:'biped',7:'biped',13:'biped',14:'biped',18:'biped',28:'biped',30:'biped',39:'biped',44:'biped',48:'biped',75:'biped',99:'biped',100:'biped',101:'biped',8:'quadruped',15:'quadruped',16:'quadruped',17:'quadruped',23:'quadruped',32:'quadruped',46:'quadruped',1:'insect',38:'biped',60:'biped',61:'biped',19:'floating',20:'floating',22:'floating',29:'floating'};
 
@@ -4437,14 +4922,17 @@ function buildSubContent(){
     spellbook:  buildSpellbook,
     bodyparts:  buildBodyPartsTab,
     emotes:     buildEmotesTab,
-    advanced:   buildAdvanced
+    advanced:   buildAdvanced,
   };
   if(curType==='generator') builders.properties=buildGeneratorProps;
   // Ensure bodyParts is populated before building panels
   if(!bodyParts.length && (curType==='creature'||curType==='npc')){
     bodyParts=getBodyParts(parseInt(gi('cType',31)));
   }
-  fc.innerHTML='';fc.innerHTML=c.subTabs.map(sub=>{
+  const _wNoData=curType==='weenie'&&!(extraInt.length||extraBool.length||extraFloat.length||extraStr.length||extraDID.length||spells.length||bookPages.length||window._weenieTabType===8);
+  if(_wNoData) curSub='properties';
+  var _activeSubs=_wNoData?['properties']:c.subTabs.slice();
+  fc.innerHTML='';fc.innerHTML=_activeSubs.map(sub=>{
     const active=sub===curSub?'active':'';
     const fn=builders[sub]||buildProps;
     let html='';
@@ -4457,6 +4945,41 @@ function buildSubContent(){
       document.querySelectorAll('.sdrop-box.open').forEach(d=>d.classList.remove('open'));
   });
   regen();
+}
+
+
+function onWeenieTypeChange(sel){
+  var v = parseInt(sel.value)||0;
+  window._weenieTabType = v;
+  regen();
+  // Refresh tab bar without rebuilding idRow (avoids destroying the select mid-event)
+  var stabs = document.getElementById('subTabs');
+  if(stabs){
+    var c = TYPE_CFG['weenie'];
+    stabs.innerHTML = c.subTabs.map(function(s){
+      var label = {book:'Book',bookcontent:'Book Content'}[s]||(s.charAt(0).toUpperCase()+s.slice(1));
+      var active = s===curSub?' active':'';
+      return '<button class="ctab'+active+'" data-sub="'+s+'" onclick="switchSub(\''+s+'\',this)">'+label+'</button>';
+    }).join('');
+  }
+  // Re-render formContent panels to include/exclude book panels
+  var fc = document.getElementById('formContent');
+  if(fc){
+    var c = TYPE_CFG['weenie'];
+    var builders = {
+      properties:buildProps, spellbook:buildSpellbook, emotes:buildEmotesTab
+    };
+    fc.innerHTML = c.subTabs.map(function(sub){
+      var active = sub===curSub?' active':'';
+      var fn = builders[sub]||buildProps;
+      var html='';
+      try{ html=fn(); }catch(e){ html='<div style="padding:10px;color:red">'+e.message+'</div>'; }
+      return '<div class="sub-panel'+active+'" data-sub="'+sub+'">'+html+'</div>';
+    }).join('');
+    fc.querySelectorAll('input,select,textarea').forEach(function(e){
+      e.addEventListener('input',onFieldInput);
+    });
+  }
 }
 
 function buildForm(){
@@ -4476,24 +4999,40 @@ function buildForm(){
   if(wf) wf.value=c.wcidFrom||'';
   if(wt) wt.value=c.wcidTo||'';
   // ID row
+  // Weenie tab: hide all chrome until a SQL file is imported
+  const _weenieNoData = curType==='weenie' && !(extraInt.length||extraBool.length||extraFloat.length||extraStr.length||extraDID.length||spells.length||bookPages.length||window._weenieTabType===8);
+
   const idRow=document.getElementById('idRow');
   if(idRow){
-    const wTypeOpts=c.wTypes?c.wTypes.map(w=>'<option value="'+w[0]+'"'+'>'+w[0]+' · '+w[1]+'</option>').join(''):'';
-    idRow.innerHTML=
-      '<div class="fg" style="max-width:90px"><div class="fl">WCID <span class="fc">key</span></div>'+
-      '<input type="number" id="fWcid" value="'+c.wcidFrom+'" oninput="regen()"></div>'+
-      (c.wTypes?'<div class="fg" style="max-width:200px"><div class="fl">Weenie Type <span class="fc">S-1</span></div>'+
-      '<select id="fWeenieType" oninput="regen()">'+wTypeOpts+'</select></div>':'')+
-      '<div class="fg"><div class="fl">Name</div><input type="text" id="fName" value="'+(DEFAULT_NAMES[curType]||'')+'" placeholder="e.g. shadowfiend" oninput="onFieldInput(event)"></div>';
+    if(curType==='event'){
+      idRow.innerHTML=''; // Event tab: name is the key, no WCID
+      idRow.style.display='';
+    } else {
+      // Always render idRow HTML so fWcid/fClassName are in the DOM.
+      // Hide the container visually when weenie tab has no imported data.
+      const wTypeOpts=c.wTypes?c.wTypes.map(w=>'<option value="'+w[0]+'"'+'>'+w[0]+' · '+w[1]+'</option>').join(''):'';
+      idRow.innerHTML=
+        '<div class="fg" style="max-width:90px"><div class="fl">WCID <span class="fc">key</span></div>'+
+        '<input type="number" id="fWcid" value="'+c.wcidFrom+'" oninput="regen()"></div>'+
+        (c.wTypes?'<div class="fg" style="max-width:200px"><div class="fl">Weenie Type <span class="fc">S-1</span></div>'+
+        '<select id="fWeenieType" oninput="onWeenieTypeChange(this)">'+wTypeOpts+'</select></div>':'')+
+        +(curType!=='quest'&&curType!=='event'?'<input type="hidden" id="fName" value="">':'')+
+        '<div class="fg"><div class="fl">Class Name <span class="fc">class_Name</span></div><input type="text" id="fClassName" value="'+(DEFAULT_NAMES[curType]?DEFAULT_NAMES[curType].toLowerCase().replace(/[^a-z0-9]/g,''):'newweenie')+'" placeholder="e.g. archonaAsheron" style="font-family:Source Code Pro,monospace;font-size:13px;font-weight:600" oninput="regen()"></div>';
+      idRow.style.display = _weenieNoData ? 'none' : '';
+    }
   }
   // Sub-tabs
   const stabs=document.getElementById('subTabs');
   if(stabs){
-    stabs.innerHTML=c.subTabs.map((s,i)=>{
-      const label=s.charAt(0).toUpperCase()+s.slice(1);
-      const active=s===curSub?'active':'';
-      return `<button class="ctab ${active}" data-sub="${s}" onclick="switchSub('${s}',this)">${label}</button>`;
-    }).join('');
+    if(_weenieNoData){
+      stabs.innerHTML='';
+    } else {
+      stabs.innerHTML=c.subTabs.map(function(s){
+        const label=s.charAt(0).toUpperCase()+s.slice(1);
+        const active=s===curSub?'active':'';
+        return `<button class="ctab ${active}" data-sub="${s}" onclick="switchSub('${s}',this)">${label}</button>`;
+      }).join('');
+    }
   }
   // Presets row
   const prow=document.getElementById('presetsRow');
@@ -4511,49 +5050,10 @@ function buildForm(){
 
 
 const TYPE_CFG={
-  creature:{label:'Creature',icon:'<img src="creature_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Hostile creatures with combat, loot, and behavior.',
-    wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 \u2013 859,999',
-    wTypes:[[10,'Creature']],
-    subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes'],
-    presets:[]},
-  npc:{label:'NPC',icon:'<img src="npc_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Quest givers, merchants, and interactive characters.',
-    wcidFrom:'850000',wcidTo:'859999',wcidRange:'850,000 \u2013 859,999',
-    wTypes:[[10,'Creature (NPC)'],[12,'Vendor']],
-    subTabs:['properties','attributes','skills','spellbook','bodyparts','emotes'],
-    presets:[
-      {l:'General NPC',d:{fName:'',fLevel:'100',fMaxHealth:'1000',fMaxStamina:'1000',fMaxMana:'500',fDmg:'0',fXp:'0'}},
-      {l:'Quest Giver',d:{fName:'',fLevel:'100',fMaxHealth:'2000',fMaxStamina:'2000',fMaxMana:'1000',fDmg:'0',fXp:'0'}},
-      {l:'Vendor',d:{fName:'',fLevel:'100',fMaxHealth:'2000',fMaxStamina:'2000',fMaxMana:'1000',fDmg:'0',fXp:'0'}}
-    ]},
-  item:{label:'Item',icon:'<img src="item_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Quest tokens, gems, stackables, consumables, and containers.',
-    wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
-    wTypes:[[1,'Generic'],[38,'Gem'],[51,'Stackable'],[18,'Food'],[34,'Scroll'],[22,'Key'],[20,'Chest'],[21,'Container'],[8,'Book'],[29,'LightSource'],[9,'Coin'],[28,'Healer'],[37,'ManaStone'],[32,'SpellComponent']],
-    subTabs:['properties','emotes'],
-    presets:[]},
-  weapon:{label:'Weapon',icon:'<img src="weapon_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Melee weapons, missile launchers, and casters.',
-    wcidFrom:'870000',wcidTo:'879999',wcidRange:'870,000 \u2013 879,999',
-    wTypes:[[6,'MeleeWeapon'],[3,'MissileLauncher'],[35,'Caster'],[4,'Missile']],
-    subTabs:['properties','spellbook','emotes'],
-    presets:[]},
-  armor:{label:'Armor/Clothing',icon:'<img src="armor_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Clothing and armor for all body slots.',
-    wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
-    wTypes:[[2,'Clothing/Armor']],
-    subTabs:['properties','spellbook','emotes'],
-    presets:[]},
-  jewelry:{label:'Jewelry',icon:'<img src="jewelry_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Rings, necklaces, bracelets, and wristlets.',
-    wcidFrom:'810000',wcidTo:'819999',wcidRange:'810,000 \u2013 819,999',
-    wTypes:[[1,'Generic'],[35,'Jewelry'],[38,'Gem (Jewelry)'],[40,'TinkerTool']],
-    subTabs:['properties','emotes'],
-    presets:[]},
-  generator:{label:'Generator',icon:'<img src="generator_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Spawn generators with placement coordinates.',
-    wcidFrom:'1800000',wcidTo:'1899999',wcidRange:'1,800,000+',
-    wTypes:[[7,'7 · Generator'],[1,'1 · Generic']],
-    subTabs:['properties'],
-    presets:[
-      {name:'Creature Respawn',desc:'Standard 5min respawn',data:{fGenWeenieType:'7',fGenTimeType:'1',fGenRespawn:'300',fGenInit:'1',fGenMax:'1',fGenWhen:'1',fGenWhere:'2',fGenProb:'-1',fGenStackSize:'-1'}},
-      {name:'Boss (Rare)',desc:'1hr boss respawn',data:{fGenWeenieType:'7',fGenTimeType:'1',fGenRespawn:'3600',fGenInit:'1',fGenMax:'1',fGenWhen:'1',fGenWhere:'2',fGenProb:'-1',fGenStackSize:'-1'}},
-      {name:'Event Spawn',desc:'Event-driven add generator',data:{fGenWeenieType:'1',fGenTimeType:'3',fGenRespawn:'60',fGenInit:'5',fGenMax:'5',fGenWhen:'1',fGenWhere:'2',fGenProb:'-1',fGenRegenInterval:'5',fGenRadius:'5',fGenInitDelay:'3'}},
-    ]},
+  weenie:{label:'Weenie Editor',icon:'&#x2692;',desc:'Import any weenie SQL to view and edit all properties.',
+    wcidFrom:'0',wcidTo:'',wcidRange:'',
+    wTypes:WEENIE_TYPES,subTabs:['properties','spellbook','emotes'],presets:[]},
+
   recipe:{label:'Recipe',icon:'<img src="recipe_tab_icon.png" style="width:22px;height:22px;vertical-align:middle;object-fit:contain">',desc:'Crafting recipes and material combinations.',
     wcidFrom:'600000',wcidTo:'609999',wcidRange:'600,000 \u2013 609,999',
     wTypes:null,
@@ -4568,24 +5068,75 @@ const TYPE_CFG={
       {l:'Kill Timer',d:{fName:'NewQuestKTTimer',fMinDelta:'72000',fMaxSolves:'-1',fMsg:'NewQuestKTTimer'}},
       {l:'Daily Timer',d:{fName:'NewQuestTimer',fMinDelta:'86400',fMaxSolves:'-1',fMsg:'NewQuestTimer'}},
     ]},
+  event:{label:'Event',icon:'\u{1F525}',desc:'Server events — start/stop conditions and state.',
+    wcidFrom:'',wcidTo:'',wcidRange:'',
+    wTypes:null,
+    subTabs:['properties'],
+    presets:[]},
 };
 
 function extractInsertValues(sql, tableName){
   const re=new RegExp('INSERT INTO `'+tableName+'`[^;]+;','gs');
   const matches=[...sql.matchAll(re)];
   const result={};
-  for(const m of matches){
-    const valRe=/\(([^)]+)\)/g;
-    const vals=[...m[0].matchAll(valRe)].map(v=>v[1].trim());
-    if(vals.length>=2){
-      const cols=vals[0].split(',').map(c=>c.trim().replace(/`/g,''));
-      const rows=vals.slice(1);
-      for(const row of rows){
-        const parts=row.split(',').map(p=>p.trim());
-        const obj={};
-        cols.forEach((c,i)=>{ obj[c]=parts[i]; });
-        result[obj.type||obj.object_Id]={...obj};
+
+  // Quote-aware CSV splitter: respects single-quoted strings (with '' escaping)
+  function splitCSV(s){
+    var parts=[], cur='', inQ=false, i=0;
+    while(i<s.length){
+      var ch=s[i];
+      if(inQ){
+        if(ch==="'" && s[i+1]==="'"){cur+="''";i+=2;continue;} // escaped quote
+        if(ch==="'"){inQ=false;cur+=ch;i++;continue;}
+        cur+=ch;i++;
+      } else {
+        if(ch==="'"){inQ=true;cur+=ch;i++;continue;}
+        if(ch===','){parts.push(cur.trim());cur='';i++;continue;}
+        cur+=ch;i++;
       }
+    }
+    if(cur.trim()!==''||parts.length>0) parts.push(cur.trim());
+    return parts;
+  }
+
+  // Paren-balanced extractor: finds top-level (...) blocks respecting quoted strings
+  function extractParenBlocks(s){
+    var blocks=[], depth=0, start=-1, inQ=false, i=0;
+    while(i<s.length){
+      var ch=s[i];
+      if(inQ){
+        if(ch==="'" && s[i+1]==="'"){i+=2;continue;}
+        if(ch==="'"){inQ=false;}
+        i++;continue;
+      }
+      if(ch==="'"){inQ=true;i++;continue;}
+      if(ch==='('){if(depth===0)start=i+1;depth++;i++;continue;}
+      if(ch===')'){
+        depth--;
+        if(depth===0&&start>=0){blocks.push(s.substring(start,i));start=-1;}
+        i++;continue;
+      }
+      i++;
+    }
+    return blocks;
+  }
+
+  for(const m of matches){
+    var stmt=m[0];
+    // Find the column list (first paren block in the INSERT line)
+    var colMatch=stmt.match(/INSERT INTO[^(]+\(([^)]+)\)/);
+    if(!colMatch) continue;
+    var cols=colMatch[1].split(',').map(c=>c.trim().replace(/`/g,''));
+    // Find VALUES keyword then extract all row paren blocks
+    var valIdx=stmt.search(/\bVALUES\b/i);
+    if(valIdx<0) continue;
+    var valSection=stmt.substring(valIdx+6);
+    var rows=extractParenBlocks(valSection);
+    for(const row of rows){
+      const parts=splitCSV(row);
+      const obj={};
+      cols.forEach(function(c,i){ obj[c]=parts[i]!==undefined?parts[i]:null; });
+      result[obj.type||obj.object_Id]={...obj};
     }
   }
   return result;
@@ -4595,21 +5146,123 @@ function buildInnerTabs(){
   const el=document.getElementById('innerTabs');
   if(!el) return;
   const types=[
-    {k:'creature', icon:'<img src="creature_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'CREATURE'},
-    {k:'npc',      icon:'<img src="npc_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'NPC'},
-    {k:'item',     icon:'<img src="item_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'ITEM'},
-    {k:'weapon',   icon:'<img src="weapon_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'WEAPON'},
-    {k:'armor',    icon:'<img src="armor_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'ARMOR'},
-    {k:'jewelry',  icon:'<img src="jewelry_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'JEWELRY'},
-    {k:'generator',icon:'<img src="generator_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'GENERATOR'},
+    {k:'weenie',   icon:'&#x2692;', label:'WEENIE'},
     {k:'recipe',   icon:'<img src="recipe_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'RECIPE'},
     {k:'quest',    icon:'<img src="quest_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'QUEST'},
+    {k:'event',    icon:'\u{1F525}', label:'EVENT'},
   ];
   const parts=types.map(function(t){
     const active=t.k===curType?' active':'';
     return '<button class="itab'+active+'" data-type="'+t.k+'" onclick="switchType(this.dataset.type,this)"><span style="margin-right:4px">'+t.icon+'</span>'+t.label+'</button>';
   });
   el.innerHTML=parts.join('');
+}
+
+
+
+// ── Item quick presets ────────────────────────────────────────────────────────
+// Presets directly seed extraInt/extraBool/extraStr so the Live Preview
+// updates immediately with real ACE property IDs.
+// PropertyInt: 1=ItemType,5=EncumbranceVal,6=ItemsCapacity,7=ContainersCapacity,
+//   9=ValidLocations,16=ItemUseable,19=Value,25=MaxStackSize,33=Bonded,35=Attuned,93=PhysicsState
+// PropertyBool: 1=Stuck,13=Ethereal,14=GravityStatus
+function applyItemPreset(key){
+  if(!key) return;
+  var P={
+    questtoken:   {wt:1, name:'Quest Token',
+      ints:[[1,128,'ItemType - Misc'],[5,5,'EncumbranceVal'],[16,1,'ItemUseable - Cannot'],[19,0,'Value'],[25,1,'MaxStackSize'],[33,1,'Bonded'],[35,1,'Attuned'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    stackabletoken:{wt:51,name:'Stackable Token',
+      ints:[[1,128,'ItemType - Misc'],[5,5,'EncumbranceVal'],[16,1,'ItemUseable - Cannot'],[19,0,'Value'],[25,100,'MaxStackSize'],[33,1,'Bonded'],[35,1,'Attuned'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    healingkit:   {wt:28,name:'Healing Kit',
+      ints:[[1,128,'ItemType - Misc'],[5,100,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,1000,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    potion:       {wt:18,name:'Potion',
+      ints:[[1,32,'ItemType - Food'],[5,10,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,250,'Value'],[25,10,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    key:          {wt:22,name:'Key',
+      ints:[[1,128,'ItemType - Misc'],[5,25,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,500,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    lockpick:     {wt:15,name:'Lockpick',
+      ints:[[1,128,'ItemType - Misc'],[5,10,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,100,'Value'],[25,25,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    gem:          {wt:38,name:'Gem',
+      ints:[[1,128,'ItemType - Misc'],[5,30,'EncumbranceVal'],[16,1,'ItemUseable - Cannot'],[19,5000,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    manastone:    {wt:37,name:'Mana Stone',
+      ints:[[1,128,'ItemType - Misc'],[5,50,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,500,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    arrow:        {wt:4, name:'Arrow',
+      ints:[[1,4,'ItemType - Ammunition'],[5,1,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,10,'Value'],[25,500,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    bolt:         {wt:4, name:'Bolt',
+      ints:[[1,4,'ItemType - Ammunition'],[5,1,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,10,'Value'],[25,500,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    atlatl:       {wt:4, name:'Atlatl Dart',
+      ints:[[1,4,'ItemType - Ammunition'],[5,2,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,15,'Value'],[25,200,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    chest:        {wt:20,name:'Chest',
+      ints:[[1,128,'ItemType - Misc'],[5,1000,'EncumbranceVal'],[6,-1,'ItemsCapacity'],[7,-1,'ContainersCapacity'],[16,4,'ItemUseable - UsedBy'],[19,0,'Value'],[93,4660,'PhysicsState']],
+      bools:[[1,true,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    container:    {wt:21,name:'Container',
+      ints:[[1,128,'ItemType - Misc'],[5,200,'EncumbranceVal'],[6,-1,'ItemsCapacity'],[7,-1,'ContainersCapacity'],[16,1,'ItemUseable - Cannot'],[19,500,'Value'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    spellcomp:    {wt:32,name:'Spell Component',
+      ints:[[1,128,'ItemType - Misc'],[5,1,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,50,'Value'],[25,999,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    tinkmaterial: {wt:39,name:'Tinkering Material',
+      ints:[[1,128,'ItemType - Misc'],[5,50,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,1000,'Value'],[25,25,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    salvage:      {wt:40,name:'Salvage Bag',
+      ints:[[1,128,'ItemType - Misc'],[5,100,'EncumbranceVal'],[16,1,'ItemUseable - Cannot'],[19,500,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    alchemybase:  {wt:9, name:'Alchemy Base',
+      ints:[[1,128,'ItemType - Misc'],[5,10,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,100,'Value'],[25,50,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    cookingbase:  {wt:9, name:'Cooking Base',
+      ints:[[1,32,'ItemType - Food'],[5,10,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,100,'Value'],[25,50,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    book:         {wt:8, name:'Book',
+      ints:[[1,64,'ItemType - Writable'],[5,100,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,50,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    scroll:       {wt:34,name:'Scroll',
+      ints:[[1,64,'ItemType - Writable'],[5,50,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,200,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    note:         {wt:1, name:'Promissory Note',
+      ints:[[1,128,'ItemType - Misc'],[5,10,'EncumbranceVal'],[16,1,'ItemUseable - Cannot'],[19,0,'Value'],[25,1,'MaxStackSize'],[33,1,'Bonded'],[35,1,'Attuned'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    coin:         {wt:9, name:'Pyreals',
+      ints:[[1,128,'ItemType - Misc'],[5,1,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,1,'Value'],[25,25000,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    lightsource:  {wt:29,name:'Light Source',
+      ints:[[1,128,'ItemType - Misc'],[5,50,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,100,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    thrownweapon: {wt:1, name:'Thrown Weapon',
+      ints:[[1,128,'ItemType - Misc'],[5,40,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,200,'Value'],[25,25,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    petdoll:      {wt:1, name:'Pet Doll',
+      ints:[[1,128,'ItemType - Misc'],[5,50,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,5000,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+    augstone:     {wt:38,name:'Augmentation Stone',
+      ints:[[1,128,'ItemType - Misc'],[5,5,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,10000,'Value'],[25,1,'MaxStackSize'],[35,1,'Attuned'],[93,4660,'PhysicsState']],
+      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
+  };
+  var p=P[key]; if(!p) return;
+  // Set weenie type
+  var wtEl=document.getElementById('fWeenieType'); if(wtEl) wtEl.value=p.wt;
+  // Seed name if not already set
+  var hasName=extraStr.some(function(r){return parseInt(r.type)===1&&r.value;});
+  if(!hasName) extraStr.push({type:'1',value:p.name});
+  // Replace extraInt and extraBool entirely with preset values
+  extraInt.length=0;
+  extraBool.length=0;
+  p.ints.forEach(function(row){ extraInt.push({type:String(row[0]),value:String(row[1]),label:row[2]}); });
+  p.bools.forEach(function(row){ extraBool.push({type:String(row[0]),value:row[1],label:row[2]}); });
+  rebuildPanel('properties');
+  regen();
+  // Reset dropdown
+  var sel=document.getElementById('itemPresetSel'); if(sel) sel.value='';
 }
 
 
@@ -4983,6 +5636,42 @@ function buildEmoteBlock(em,i){
 }
 
 
+// ── DID composite icon preview ───────────────────────────────────────────────
+// Stacks IconUnderlay(52) → Icon(8) → IconOverlay(50) → IconOverlaySecondary(51)
+// exactly as the ACE client renders composite icons.
+function buildDIDIconPreview(){
+  var LAYERS=[
+    {type:52,label:'IconUnderlay'},
+    {type:8, label:'Icon'},
+    {type:50,label:'IconOverlay'},
+    {type:51,label:'IconOverlaySecondary'},
+  ];
+  var hasAny=LAYERS.some(function(l){
+    return extraDID.some(function(r){return parseInt(r.type)===l.type&&parseInt(r.value)>0;});
+  });
+  if(!hasAny) return '';
+  var imgs=LAYERS.map(function(l){
+    var row=extraDID.find(function(r){return parseInt(r.type)===l.type;});
+    var wv=row?(parseInt(row.value)||0):0;
+    if(!wv) return '';
+    return '<img src="icons/'+wv+'.png" '
+      +'style="position:absolute;top:0;left:0;width:64px;height:64px;'
+      +'object-fit:contain;image-rendering:pixelated;" '
+      +'onerror="this.style.display=\'none\'" '
+      +'title="'+l.label+' (DID '+wv+')">'; 
+  }).join('');
+  return '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border-lt)">'
+    +'<div style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.12em;'
+    +'color:var(--ink-faint);margin-bottom:8px">ICON COMPOSITE PREVIEW</div>'
+    +'<div style="position:relative;width:64px;height:64px;'
+    +'background:rgba(0,0,0,0.12);border:1px solid var(--border);flex-shrink:0">'
+    +imgs
+    +'</div>'
+    +'<div style="margin-top:4px;font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);'
+    +'letter-spacing:.04em">Underlay → Icon → Overlay → Overlay 2nd</div>'
+    +'</div>';
+}
+
 function buildAdvanced(){
   // Type IDs already emitted by the form fields — these are managed/read-only in the Properties tab
   const SKIP_INT=new Set([1,2,3,4,5,6,7,9,10,11,12,13,16,19,25,26,27,28,33,40,44,45,47,48,49,93,95,101,106,107,108,109,110,114,126,133,134,146,151,158,159,160,169,204,307,308,313,314,315,317,323,332,370,371,372,373,374,375,376]);
@@ -5020,19 +5709,18 @@ function buildAdvanced(){
         var ddOpts=PROP_DROPDOWNS[String(r.type)].map(function(opt){return '<option value="'+opt[0]+'"'+(parseInt(r.value)===opt[0]?' selected':'')+'>'+opt[0]+' · '+opt[1]+'</option>';}).join('');
         valCtrl='<select onchange="updateExtraProp(\''+arrRef+'\','+i+',this.value)" style="flex-shrink:0;max-width:200px;font-family:\'Source Code Pro\',monospace;font-size:11px;border-bottom:1px solid var(--border);background:transparent;color:var(--ink)">'+ddOpts+'</select>';
       } else {
-        valCtrl='<input type="text" value="'+String(r.value||'').replace(/"/g,'&quot;')+'" oninput="updateExtraProp(\''+arrRef+'\','+i+',this.value)" style="width:110px;text-align:right;font-family:\'Source Code Pro\',monospace;font-size:12px;font-weight:600;border-bottom:1px solid var(--border);flex-shrink:0">';
+        valCtrl='<input type="text" value="'+String(r.value||'').replace(/"/g,'&quot;')+'" oninput="updateExtraProp(\''+arrRef+'\','+i+',this.value)" style="width:120px;text-align:right;font-family:\'Source Code Pro\',monospace;font-size:14px;font-weight:600;border-bottom:1px solid var(--border);flex-shrink:0">';
       }
-      if(arrRef==='extraDID'&&(new Set([8,36,37,38])).has(parseInt(r.type))){
-        var _wv=parseInt(r.value)||0;
-        var _it=_wv?'<img src="icons/'+_wv+'.png" style="width:32px;height:32px;object-fit:contain;border:1px solid var(--border);background:rgba(255,255,255,0.15);image-rendering:pixelated;flex-shrink:0" onerror="this.style.opacity=.2" title="WCID '+_wv+'">'
-          :'<span style="width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:1px dashed var(--border);color:var(--ink-faint);font-size:8px;flex-shrink:0">?</span>';
-        valCtrl='<div style="display:flex;align-items:center;gap:4px;">'
-          +'<button onclick="_pickIconDID('+i+')" style="padding:3px 10px;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.05em;background:transparent;border:1px solid var(--border);cursor:pointer;color:var(--ink-dim);flex-shrink:0;white-space:nowrap">Icon Picker</button>'
-          +valCtrl+_it+'</div>';
+      if(arrRef==='extraDID'&&(new Set([8,50,51,52])).has(parseInt(r.type))){
+        // 8=Icon  50=IconOverlay  51=IconOverlaySecondary  52=IconUnderlay
+        // Full composite preview appears below the + Add row — just show button here
+        valCtrl='<div style="display:flex;align-items:center;gap:6px;">'
+          +'<button onclick="_pickIconDID('+i+')" style="padding:3px 10px;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.05em;background:transparent;border:1px solid var(--border);cursor:pointer;color:var(--ink-dim);flex-shrink:0;white-space:nowrap">&#x1F3A8; Pick</button>'
+          +valCtrl+'</div>';
       }
-      return '<div style="display:flex;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-lt)">'
-        +'<div style="width:36px;font-family:\'Source Code Pro\',monospace;font-size:10px;color:var(--ink-faint);flex-shrink:0">'+r.type+'</div>'
-        +'<div style="flex:1;font-family:\'Cinzel\',serif;font-size:9px;font-weight:700;color:var(--ink-mid);text-transform:uppercase;letter-spacing:.04em">'+name+'</div>'
+      return '<div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-lt)">'
+        +'<div style="width:42px;font-family:\'Source Code Pro\',monospace;font-size:13px;color:var(--ink-faint);flex-shrink:0">'+r.type+'</div>'
+        +'<div style="flex:1;font-family:\'Cinzel\',serif;font-size:12px;font-weight:700;color:var(--ink-mid);text-transform:uppercase;letter-spacing:.04em">'+name+'</div>'
         +valCtrl
         +'<button class="del" style="flex-shrink:0;opacity:.5" onclick="removeExtraProp(\''+arrRef+'\','+i+')">&#x2715;</button>'
         +'</div>';
@@ -5066,6 +5754,7 @@ function buildAdvanced(){
     </div>
     <div class="prop-subtab-bar">
       ${['int','bool','float','str','did'].map(function(t){return '<button class="prop-stab'+(_curPropType===t?' active':'')+'" onclick="switchPropType(\''+t+'\',this)">'+{int:'INT',bool:'BOOL',float:'FLOAT',str:'STRING',did:'DID'}[t]+'</button>';}).join('')}
+      ${(curType==='weenie'&&(window._weenieTabType===8||bookPages.length>0))?('<button class="prop-stab'+((_curPropType==="book")?" active":"")+'" onclick="switchPropType(\'book\',this)">BOOK</button>'+'<button class="prop-stab'+((_curPropType==="bookcontent")?" active":"")+'" onclick="switchPropType(\'bookcontent\',this)">BOOK CONTENT</button>'):""}
     </div>
     ${`<div class="prop-stab-panel${_curPropType==='int'?' active':''}" id="pst_int">`}
       <div id="adv_int">${extraRows('extraInt',PROP_INT)||none}</div>
@@ -5086,7 +5775,15 @@ function buildAdvanced(){
     ${`<div class="prop-stab-panel${_curPropType==='did'?' active':''}" id="pst_did">`}
       <div id="adv_did">${extraRows('extraDID',PROP_DID)||none}</div>
       ${addRowUI('extraDID',PROP_DID,'0x00000000','did')}
+      ${buildDIDIconPreview()}
     </div>
+    ${(curType==='weenie'&&(window._weenieTabType===8||bookPages.length>0))?`
+    <div class="prop-stab-panel${_curPropType==='book'?' active':''}" id="pst_book">
+      ${buildBookTab()}
+    </div>
+    <div class="prop-stab-panel${_curPropType==='bookcontent'?' active':''}" id="pst_bookcontent">
+      ${buildBookContentTab()}
+    </div>`:''}
   </div>`;
 }
 
@@ -5283,6 +5980,18 @@ function applyPreset(p){
       if(e) e.value=entry[1];
     });
     regen();
+    // Rebuild generator panel so conditional sections (Event fields) appear
+    if(curType==='generator'){
+      rebuildPanel('properties');
+      // Re-apply after rebuild since fields got recreated
+      setTimeout(function(){
+        Object.entries(d).forEach(function(entry){
+          var e2=$(entry[0]);
+          if(e2) e2.value=entry[1];
+        });
+        regen();
+      }, 60);
+    }
     toast('Preset applied');
   }, 50);
 }
@@ -5328,7 +6037,9 @@ function regen(){
       did:   extractInsertValues(sql,'weenie_properties_d_i_d'),
     };
     // Auto-populate sub-sub tab arrays if they're empty (fresh type load)
-    if(!extraInt.length&&!extraBool.length&&curType!=='quest'&&curType!=='recipe'){
+    // Skip for weenie tab — it's import-only; populating from default SQL output
+    // causes the full editor to appear before any file is imported.
+    if(!extraInt.length&&!extraBool.length&&curType!=='quest'&&curType!=='recipe'&&curType!=='weenie'){
       function _mi(arr,src,stripQ){
         Object.values(src||{}).forEach(function(row){
           var t=String(row.type||'');var v=String(row.value||'');
@@ -5480,7 +6191,7 @@ function buildSQL(){
     const genWcid    = gi('fGenWcid',802253);
     const targetWcid = gi('fGenTargetWcid',800000);
     const genName    = g('fGenName','NewGen').replace(/[^a-zA-Z0-9]/g,'');
-    const weenieType = gi('fGenWeenieType',7);
+    const weenieType = gi('fGenWeenieType',1);
     const timeType   = gi('fGenTimeType',1);
     const prob       = g('fGenProb','-1')||'-1';
     const initCreate = gi('fGenInit',1);
@@ -5515,10 +6226,18 @@ function buildSQL(){
     lines.push(`VALUES (${genWcid}, '${genName}', ${weenieType}, '2025-01-01 00:00:00') /* Generator */;`);
     lines.push('');
     // INT properties
-    const intProps=[[81,maxCreate,'MaxGeneratedObjects'],[82,initCreate,'InitGeneratedObjects'],[93,1044,'PhysicsState - Ethereal, IgnoreCollisions, Gravity']];
-    if(isEvent||isTimed) intProps.push([103,destrType,'GeneratorDestructionType'],[142,timeType,'GeneratorTimeType - '+timeNames[timeType]],[145,endDestr,'GeneratorEndDestructionType']);
-    else intProps.push([93,1044,'PhysicsState - Ethereal, IgnoreCollisions, Gravity']);
-    // Remove duplicates
+    // Always include CheckpointStatus(66), base properties
+    const intProps=[];
+    intProps.push([66,1,'CheckpointStatus']);
+    intProps.push([81,maxCreate,'MaxGeneratedObjects']);
+    intProps.push([82,initCreate,'InitGeneratedObjects']);
+    intProps.push([93,1044,'PhysicsState - Ethereal, IgnoreCollisions, Gravity']);
+    if(isEvent||isTimed){
+      intProps.push([103,destrType,'GeneratorDestructionType - Destroy']);
+      intProps.push([142,timeType,'GeneratorTimeType - '+timeNames[timeType]]);
+      intProps.push([145,endDestr,'GeneratorEndDestructionType - Destroy']);
+    }
+    // Remove duplicates (preserve order, first wins)
     const seen=new Set(); const deduped=intProps.filter(r=>{if(seen.has(r[0]))return false;seen.add(r[0]);return true;});
     lines.push(`INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)`);
     deduped.forEach((r,i)=>{
@@ -5557,8 +6276,8 @@ function buildSQL(){
     lines.push('');
     // DID
     lines.push(`INSERT INTO \`weenie_properties_d_i_d\` (\`object_Id\`, \`type\`, \`value\`)`);
-    lines.push(`VALUES (${genWcid},   1,   33555051) /* Setup */`);
-    lines.push(`     , (${genWcid},   8,  100667494); /* Icon */`);
+    lines.push(`VALUES (${genWcid},   1, 0x0200026B) /* Setup */`);
+    lines.push(`     , (${genWcid},   8, 0x06001066); /* Icon */`);
     lines.push('');
     // GENERATOR table
     lines.push(`INSERT INTO \`weenie_properties_generator\` (\`object_Id\`, \`probability\`, \`weenie_Class_Id\`, \`delay\`, \`init_Create\`, \`max_Create\`, \`when_Create\`, \`where_Create\`, \`stack_Size\`, \`palette_Id\`, \`shade\`, \`obj_Cell_Id\`, \`origin_X\`, \`origin_Y\`, \`origin_Z\`, \`angles_W\`, \`angles_X\`, \`angles_Y\`, \`angles_Z\`)`);
@@ -5568,14 +6287,36 @@ function buildSQL(){
   }
 
   // ── RECIPE ───────────────────────────────────────────────────────────────────
+  // ── EVENT ────────────────────────────────────────────────────────────────────
+  // t==='weenie' falls through to the standard WEENIE CONTENT emitter below
+  // (same path as creature/npc but with isCreature=false, so no creature-specific blocks)
+  if(t==='event'){
+    const evtName=g('fEvtName','NewEvent').replace(/\s+/g,'');
+    const start=gi('fEvtStart',-1);
+    const end=gi('fEvtEnd',-1);
+    const state=gi('fEvtState',3);
+    const modified=g('fEvtModified','2020-05-24 00:00:00');
+    const lines=[
+      `DELETE FROM \`event\` WHERE \`name\` = '${evtName}';`,
+      '',
+      `INSERT INTO \`event\` (\`name\`, \`start_Time\`, \`end_Time\`, \`state\`, \`last_Modified\`)`,
+      `VALUES ('${evtName}', ${start}, ${end}, ${state}, '${modified}');`,
+    ];
+    writeSQLOut(lines.join('\n'));
+    return;
+  }
+
   if(t==='recipe'){buildRecipeSQL();return;}
 
   // ── WEENIE CONTENT ───────────────────────────────────────────────────────────
   const wcid=gi('fWcid',850000);
-  const name=g('fName','New Weenie');
-  const wType=gi('fWType',10);
-  // Use original class_Name and timestamp if available from import
-  const className=window._importedClassName||name.toLowerCase().replace(/[^a-z0-9]/g,'');
+  // Display name: String sub-tab (extraStr type 1) is the sole source
+  const _nameRow=extraStr.find(function(r){return parseInt(r.type)===1;});
+  const name=_nameRow?_nameRow.value:(DEFAULT_NAMES[curType]||'New Weenie');
+  const wType=gi('fWeenieType',10);
+  // class_Name: fClassName field > imported value > slug of display name
+  const _fcn=document.getElementById('fClassName');
+  const className=(_fcn&&_fcn.value.trim())||window._importedClassName||name.toLowerCase().replace(/[^a-z0-9_\-]/g,'');
   const now=window._importedTimestamp||'2025-01-01 00:00:00';
   const isCreature=t==='creature'||t==='npc';
 
@@ -5602,38 +6343,51 @@ function buildSQL(){
   function emitInt(rows){
     emitBlock('weenie_properties_int','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
       const comment=c?` /* ${c} */`:'';
-      return `(${wcid}, ${tp}, ${v})${isLast?';':''}${comment}`;
+      const ts=String(tp).padStart(3,' ');
+      const vs=String(v).padStart(9,' ');
+      return `(${wcid}, ${ts}, ${vs})${comment}${isLast?';':''}`;
     });
   }
   function emitBool(rows){
     emitBlock('weenie_properties_bool','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
       const comment=c?` /* ${c} */`:'';
-      return `(${wcid}, ${tp}, ${v})${isLast?';':''}${comment}`;
+      const ts=String(tp).padStart(3,' ');
+      // Pad True to match False length for alignment
+      const bv=String(v)===String(true)||String(v)==='True'?'True ':'False';
+      return `(${wcid}, ${ts}, ${bv})${comment}${isLast?';':''}`;
     });
   }
   function emitFloat(rows){
     emitBlock('weenie_properties_float','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
       const comment=c?` /* ${c} */`:'';
-      const vs=Number.isInteger(v)?v.toFixed(1):parseFloat(v).toString();
-      return `(${wcid}, ${tp}, ${vs})${isLast?';':''}${comment}`;
+      const ts=String(tp).padStart(3,' ');
+      // Use minimal representation (drop .0) right-aligned
+      const fv=parseFloat(v);
+      const vs=Number.isInteger(fv)?String(fv):String(fv);
+      const vsp=vs.padStart(7,' ');
+      return `(${wcid}, ${ts}, ${vsp})${comment}${isLast?';':''}`;
     });
   }
   function emitStr(rows){
     emitBlock('weenie_properties_string','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
       const comment=c?` /* ${c} */`:'';
+      const ts=String(tp).padStart(3,' ');
       const escaped=String(v).replace(/'/g,"''");
-      return `(${wcid}, ${tp}, '${escaped}')${isLast?';':''}${comment}`;
+      return `(${wcid}, ${ts}, '${escaped}')${comment}${isLast?';':''}`;
     });
   }
   function emitDID(rows){
     emitBlock('weenie_properties_d_i_d','`object_Id`, `type`, `value`',rows,([tp,v,c],isLast)=>{
       const comment=c?` /* ${c} */`:'';
-      return `(${wcid}, ${tp}, ${v})${isLast?';':''}${comment}`;
+      const ts=String(tp).padStart(3,' ');
+      return `(${wcid}, ${ts}, ${v})${comment}${isLast?';':''}`;
     });
   }
 
   // ── Build property arrays ─────────────────────────────────────────────────
-  let IR=[],BR=[],FR=[],SR=[[1,name,'Name']],DR=[];
+  // String type 1 (Name) is managed exclusively via the String sub-tab (extraStr)
+  // It is NOT auto-emitted from any form field — user adds it there directly
+  let IR=[],BR=[],FR=[],SR=[],DR=[];
 
   if(isCreature){
     const ct=gi('cType',31);
@@ -5850,7 +6604,6 @@ function buildSQL(){
       [9, vl, 'ValidLocations'],
       [16, 1, 'ItemUseable - No'],
       [19, gi('fValue',50000), 'Value'],
-      [26, 1, 'AccountRequirements - AsheronsCall_Subscription'],
       [33, gi('fBonded',0), 'Bonded'],
       [93, 1044, 'PhysicsState - Ethereal, IgnoreCollisions, Gravity'],
       [106, gi('fSpellcraft',350), 'ItemSpellcraft'],
@@ -5969,14 +6722,16 @@ function buildSQL(){
     attrs.forEach(([tp,n],i)=>{
       const v=gi('attr_'+tp,260);
       const prefix=i===0?'VALUES ':'     , ';
-      lines.push(`${prefix}(${wcid}, ${tp}, ${v}, 0, 0)${i===attrs.length-1?';':''} /* ${n} */`);
+      const ats=String(tp).padStart(3,' ');const avs=String(v).padStart(4,' ');
+      lines.push(`${prefix}(${wcid}, ${ats}, ${avs}, 0, 0) /* ${n} */${i===attrs.length-1?';':''}`);
     });
     lines.push('');
     const vits=[[1,'MaxHealth',gi('vital_1',2000)],[3,'MaxStamina',gi('vital_3',2000)],[5,'MaxMana',gi('vital_5',800)]];
     lines.push(`INSERT INTO \`weenie_properties_attribute_2nd\` (\`object_Id\`, \`type\`, \`init_Level\`, \`level_From_C_P\`, \`c_P_Spent\`, \`current_Level\`)`);
     vits.forEach(([tp,n,v],i)=>{
       const prefix=i===0?'VALUES ':'     , ';
-      lines.push(`${prefix}(${wcid}, ${tp}, ${v}, 0, 0, ${v})${i===vits.length-1?';':''} /* ${n} */`);
+      const vts=String(tp).padStart(3,' ');const vvs=String(v).padStart(5,' ');
+      lines.push(`${prefix}(${wcid}, ${vts}, ${vvs}, 0, 0, ${vvs}) /* ${n} */${i===vits.length-1?';':''}`);
     });
     lines.push('');
   }
@@ -6000,7 +6755,8 @@ function buildSQL(){
       allSkills.forEach((sk,i)=>{
         const name=ALL_SKILLS.find(([sid])=>sid===sk.id)?.[1]||'Skill';
         const prefix=i===0?'VALUES ':'     , ';
-        lines.push(`${prefix}(${wcid}, ${sk.id}, 0, ${sk.sac}, 0, ${sk.init}, 0, 0)${i===allSkills.length-1?';':''} /* ${name} — ${lookupName(SKILL_SAC,sk.sac)} */`);
+        const sks=String(sk.id).padStart(2,' ');const ski=String(sk.init).padStart(3,' ');
+        lines.push(`${prefix}(${wcid}, ${sks}, 0, ${sk.sac}, 0, ${ski}, 0, 0) /* ${name} — ${lookupName(SKILL_SAC,sk.sac)} */${i===allSkills.length-1?';':''}`);
       });
       lines.push('');
     }
@@ -6016,7 +6772,7 @@ function buildSQL(){
       // Column-aligned format matching ACE SQL export: wcid, padded spellId, padded prob
       const spId=String(sp.id).padStart(5);
       const spPr=String(sp.prob!==undefined&&sp.prob!==''?sp.prob:2.0).padStart(7);
-      lines.push(`${prefix}(${wcid}, ${spId}, ${spPr})${i===validSpells.length-1?';':''}${name}`);
+      lines.push(`${prefix}(${wcid}, ${spId}, ${spPr})${name}${i===validSpells.length-1?';':''}`);
     });
     lines.push('');
   }
@@ -6039,7 +6795,7 @@ function buildSQL(){
       const el = _ibp ? parseInt(_ibp.el) : gi('bp_el_'+i,80);
       const nt = _ibp ? parseInt(_ibp.nt) : gi('bp_nt_'+i,0);
       const prefix=i===0?'VALUES ':'     , ';
-      lines.push(`${prefix}(${wcid}, ${bp.k}, ${dt}, ${dv}, 0, ${al}, ${sl}, ${pi}, ${bl}, ${co}, ${fi}, ${ac}, ${el}, ${nt}, 1, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0)${i===bodyParts.length-1?';':''} /* ${bp.name||bp.k} */`);
+      lines.push(`${prefix}(${wcid}, ${bp.k}, ${dt}, ${dv}, 0, ${al}, ${sl}, ${pi}, ${bl}, ${co}, ${fi}, ${ac}, ${el}, ${nt}, 1, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0) /* ${bp.name||bp.k} */${i===bodyParts.length-1?';':''}`);
     });
     lines.push('');
   }
@@ -6148,10 +6904,54 @@ function buildSQL(){
 
   // Generator is now its own content type tab
 
-  // Inject preserved emote/create_list SQL from imported file
+  // ── Book (weenie_properties_book + book_page_data) ──────────────────
+  // When bookPages has native data, emit directly and skip _importedBookSQL.
+  var _hasNativeBook = bookPages.length > 0;
+  if(_hasNativeBook){
+    lines.push('');
+    lines.push(`INSERT INTO \`weenie_properties_book\` (\`object_Id\`, \`max_Num_Pages\`, \`max_Num_Chars_Per_Page\`)`);
+    lines.push(`VALUES (${wcid}, ${bookMeta.maxPages||2}, ${bookMeta.maxChars||1000});`);
+    lines.push('');
+    lines.push(`INSERT INTO \`weenie_properties_book_page_data\` (\`object_Id\`, \`page_Id\`, \`author_Id\`, \`author_Name\`, \`author_Account\`, \`ignore_Author\`, \`page_Text\`)`);
+    bookPages.forEach(function(pg,i){
+      var prefix=i===0?'VALUES ':'     , ';
+      var esc=function(s){return String(s||'').replace(/'/g,"''");};
+      var ignoreVal=pg.ignoreAuthor?'True ':'False';
+      var pageText=pg.text||'';
+      // Preserve trailing newline inside the SQL string as ACE expects it
+      var escapedText=pageText.replace(/'/g,"''");
+      lines.push(prefix+`(${wcid}, ${i}, 0xFFFFFFFF, '${esc(pg.author)}', '${esc(pg.account||'prewritten')}', ${ignoreVal}, '${escapedText}')${i===bookPages.length-1?';':''}`);
+    });
+    lines.push('');
+  }
+
+  // Inject preserved emote/create_list/book SQL from imported file
+  // (book is skipped when native bookPages data is present)
+  if(_hasNativeBook) _importedBookSQL='';
   _applyImportedSQLSections(lines, wcid);
   writeSQLOut(lines.join('\n'));
 }
+
+// ── Recipe constants — arrays of [id, label] for opt() and lookupName() ──
+const REQUIREMENT_TYPE = [
+  [0,'None'],[1,'IntStat'],[2,'BoolStat'],[3,'FloatStat'],
+  [4,'StringStat'],[5,'SkillTrained'],[6,'SkillSpecialized'],[7,'MinItems'],
+];
+const COMPARE_TYPE = [
+  [0,'None'],[1,'Equal'],[2,'NotEqual'],[3,'LessThan'],
+  [4,'LessThanOrEqual'],[5,'GreaterThan'],[6,'GreaterThanOrEqual'],
+];
+const MOD_TYPE = [
+  [0,'None'],[1,'Int'],[2,'Float'],[3,'Bool'],[4,'String'],[5,'DID'],[6,'IID'],
+];
+const MOD_OP = [
+  [0,'None'],[1,'SetValue'],[2,'Add'],[3,'Subtract'],[4,'Multiply'],[5,'Divide'],
+  [6,'AttemptedTinker'],[7,'AddSpell'],[8,'RemoveSpell'],
+];
+const RECIPE_SOURCE_TYPE = [
+  [0,'None'],[1,'Source'],[2,'Target'],[3,'Both'],[4,'Creation'],[5,'Player'],
+];
+
 
 function buildRecipeSQL(){
   const rid=gi('fWcid',600000), skill=gi('fRecipeSkill',38), diff=gi('fRecipeDiff',900);
@@ -6180,10 +6980,17 @@ function buildRecipeSQL(){
     });
     lines.push('');
   }
-  emitRecipeReqs(recipeReqs,'recipe_requirements_int',PROP_INT);
-  emitRecipeReqs(recipeReqsBool,'recipe_requirements_bool',PROP_BOOL);
-  emitRecipeReqs(recipeReqsFloat,'recipe_requirements_float',PROP_FLOAT);
-  emitRecipeReqs(recipeReqsStr,'recipe_requirements_string',PROP_STRING);
+  // Route requirements to the correct SQL table based on their type field
+  // type: 1=IntStat, 2=BoolStat, 3=FloatStat, 4=StringStat, 5=SkillTrained, 6=SkillSpecialized, 7=MinItems
+  var _allReqs=[...recipeReqs,...recipeReqsBool,...recipeReqsFloat,...recipeReqsStr];
+  var _intReqs   =_allReqs.filter(function(r){var t=parseInt(r.type);return t===1||t===5||t===6||t===7||t===0;});
+  var _boolReqs  =_allReqs.filter(function(r){return parseInt(r.type)===2;});
+  var _floatReqs =_allReqs.filter(function(r){return parseInt(r.type)===3;});
+  var _strReqs   =_allReqs.filter(function(r){return parseInt(r.type)===4;});
+  emitRecipeReqs(_intReqs,  'recipe_requirements_int',   PROP_INT);
+  emitRecipeReqs(_boolReqs, 'recipe_requirements_bool',  PROP_BOOL);
+  emitRecipeReqs(_floatReqs,'recipe_requirements_float', PROP_FLOAT);
+  emitRecipeReqs(_strReqs,  'recipe_requirements_string',PROP_STRING);
 
   lines.push(`INSERT INTO \`recipe_mod\` (\`recipe_Id\`, \`executes_On_Success\`, \`health\`, \`stamina\`, \`mana\`, \`unknown_7\`, \`data_Id\`, \`unknown_9\`, \`instance_Id\`)`);
   lines.push(`VALUES (${rid}, True, 0, 0, 0, False, 0, 0, 0);`,'');
@@ -6197,18 +7004,20 @@ function buildRecipeSQL(){
     intMods.forEach((m,i)=>{
       const c=`On ${lookupName(RECIPE_SOURCE_TYPE,m.source)}.${lookupName(MOD_TYPE,m.type)} ${lookupName(MOD_OP,m.operation)} ${PROP_INT[m.stat]||m.stat}`;
       const prefix=i===0?'VALUES ':'     , ';
-      lines.push(`${prefix}(@parent_id, ${i}, ${m.stat||0}, ${parseInt(m.value)||0}, ${m.operation}, ${m.source}) /* ${c} */`);
+      const trail=i===intMods.length-1?';':'';
+      lines.push(`${prefix}(@parent_id, ${i}, ${m.stat||0}, ${parseInt(m.value)||0}, ${m.operation}, ${m.source}) /* ${c} */${trail}`);
     });
-    lines.push(';','');
+    lines.push('');
   }
   if(floatMods.length){
     lines.push(`INSERT INTO \`recipe_mods_float\` (\`recipe_Mod_Id\`, \`index\`, \`stat\`, \`value\`, \`enum\`, \`source\`)`);
     floatMods.forEach((m,i)=>{
       const c=`On ${lookupName(RECIPE_SOURCE_TYPE,m.source)}.${lookupName(MOD_TYPE,m.type)} ${lookupName(MOD_OP,m.operation)} ${PROP_FLOAT[m.stat]||m.stat}`;
       const prefix=i===0?'VALUES ':'     , ';
-      lines.push(`${prefix}(@parent_id, ${i}, ${m.stat||0}, ${parseFloat(m.value)||0}, ${m.operation}, ${m.source}) /* ${c} */`);
+      const trail=i===floatMods.length-1?';':'';
+      lines.push(`${prefix}(@parent_id, ${i}, ${m.stat||0}, ${parseFloat(m.value)||0}, ${m.operation}, ${m.source}) /* ${c} */${trail}`);
     });
-    lines.push(';','');
+    lines.push('');
   }
 
   if(cookbookEntries.length){
@@ -6218,9 +7027,9 @@ function buildRecipeSQL(){
     cookbookEntries.forEach((e,i)=>{
       const lbl=e.srcLabel?` /* ${e.srcLabel} */`:'';
       const prefix=i===0?'VALUES ':'     , ';
-      lines.push(`${prefix}(${rid}, ${e.src||0}${lbl}, ${e.tgt||0}, '${now}')`);
+      const trail=i===cookbookEntries.length-1?';':'';
+      lines.push(`${prefix}(${rid}, ${e.src||0}${lbl}, ${e.tgt||0}, '${now}')${trail}`);
     });
-    lines.push(';');
   }
 
   writeSQLOut(lines.join('\n'));
@@ -6655,8 +7464,11 @@ function _startAIPoll(){
           // One planned file complete — show saved result and Next button
           _stopAIPoll();
           aiGenerating=false;
+          _aiStallCount=0;
           $('aiGenBtn').disabled=false;
           $('aiStopBtn').style.display='none';
+          // Clear any stale 'Generating' status immediately
+          $('aiStatus').textContent='';
           _onFileDone(item);
 
         } else if(item.type==='done'){
@@ -7200,6 +8012,35 @@ var _aiPlanIndex=0;        // current file being generated
 var _aiOrigPrompt='';      // original user prompt, needed for each file call
 var _aiSavedFiles=[];      // list of {name, folder} already saved
 
+// ── Autocreate toggle ────────────────────────────────────────────────────────
+var _aiAutoCreate=false;
+var _aiAutoTimer=null;
+function toggleAutoCreate(){
+  _aiAutoCreate=!_aiAutoCreate;
+  var btn=document.getElementById('aiAutoBtn');
+  if(btn){
+    btn.textContent='⟳ AUTO: '+(_aiAutoCreate?'ON':'OFF');
+    btn.style.background=_aiAutoCreate?'var(--crimson)':'transparent';
+    btn.style.color=_aiAutoCreate?'#fff':'var(--ink-mid)';
+    btn.style.borderColor=_aiAutoCreate?'var(--crimson)':'var(--border)';
+  }
+}
+function _scheduleAutoNext(nextIdx){
+  if(!_aiAutoCreate) return;
+  if(_aiAutoTimer) clearTimeout(_aiAutoTimer);
+  $('aiStatus').textContent='⟳ Auto-advancing in 3s…';
+  $('aiStatus').className='ai-status';
+  _aiAutoTimer=setTimeout(function(){
+    _aiAutoTimer=null;
+    if(!aiGenerating && _aiPlan && nextIdx < _aiPlan.files.length){
+      var nextBtn=document.getElementById('aiNextBtn');
+      if(nextBtn) nextBtn.style.display='none';
+      _aiPlanIndex=nextIdx;
+      _generateNextFile();
+    }
+  }, 3000);
+}
+
 function startAIGeneration(){
   if(!window.pywebview) return;
   var promptEl=$('aiPrompt');
@@ -7424,19 +8265,36 @@ function _onFileDone(item){
     nextBtn.textContent='→ GENERATE FILE '+(nextIdx+1)+': '+nextFile.name.split(' ').slice(1).join(' ').replace('.sql','');
     nextBtn.style.display='inline-flex';
     nextBtn.onclick=function(){
+      if(_aiAutoTimer){ clearTimeout(_aiAutoTimer); _aiAutoTimer=null; }
       nextBtn.style.display='none';
       _aiPlanIndex=nextIdx;
       _generateNextFile();
     };
+    // Auto-advance if toggle is on
+    _scheduleAutoNext(nextIdx);
   } else {
-    // Hide next button if it exists
+    // Last file done — clean up all generation state
+    _stopAIPoll();
+    aiGenerating=false;
+    _aiStallCount=0;
     var nb=document.getElementById('aiNextBtn');
     if(nb) nb.style.display='none';
+    var retryBtn=document.getElementById('aiRetryBtn');
+    if(retryBtn) retryBtn.style.display='none';
     $('aiGenBtn').style.display='inline-flex';
     $('aiGenBtn').disabled=false;
     $('aiGenBtn').textContent='▶ NEW GENERATION';
+    $('aiStopBtn').style.display='none';
     var approveBtn=document.getElementById('aiApproveBtn');
     if(approveBtn) approveBtn.style.display='none';
+    // Ensure status shows completion (guard against stall timer override)
+    setTimeout(function(){
+      if(!aiGenerating){
+        var total=_aiSavedFiles.length;
+        $('aiStatus').textContent='✓ Complete — '+total+' file'+(total!==1?'s':'')+' saved';
+        $('aiStatus').className='ai-status done';
+      }
+    }, 100);
   }
   _aiPlanIndex=nextIdx;
 }
@@ -7698,6 +8556,25 @@ function loreInit(){
 function escHtml(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+// Render basic markdown in lore messages (bold, italic, inline code, bullets)
+// Applied AFTER escHtml so HTML injection is already neutralised.
+function loreMd(html){
+  // **bold** and __bold__
+  html=html.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  html=html.replace(/__(.+?)__/g,'<strong>$1</strong>');
+  // *italic* and _italic_
+  html=html.replace(/\*([^\s*][^*]*?)\*/g,'<em>$1</em>');
+  html=html.replace(/_([^\s_][^_]*?)_/g,'<em>$1</em>');
+  // `inline code`
+  html=html.replace(/`([^`]+?)`/g,'<code style="font-family:monospace;font-size:12px;background:rgba(0,0,0,.08);padding:1px 4px;border-radius:2px">$1</code>');
+  // Bullet lines: lines starting with * or - or •
+  html=html.replace(/^[ \t]*[\*\-•][ \t]+(.+)$/gm,'<div style="padding-left:14px;position:relative"><span style="position:absolute;left:2px">•</span>$1</div>');
+  // Numbered list lines: 1. 2. etc.
+  html=html.replace(/^[ \t]*(\d+)\. (.+)$/gm,'<div style="padding-left:18px;position:relative"><span style="position:absolute;left:2px">$1.</span>$2</div>');
+  // Preserve newlines
+  html=html.replace(/\n/g,'<br>');
+  return html;
+}
 
 function loreRenderList(){
   const el=document.getElementById('loreConvoList');
@@ -7729,6 +8606,21 @@ function loreNewConvo(){
   });
 }
 
+// ── LoreForge scroll helpers ─────────────────────────────────────────────
+var _loreScrollListenerAttached = false;
+function _loreAttachScrollListener(el){
+  if(!el) return;
+  el.onscroll = function(){
+    var distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    var btn = document.getElementById('loreJumpBtn');
+    if(btn) btn.style.display = distFromBottom > 120 ? 'flex' : 'none';
+  };
+}
+function loreJumpToCurrent(){
+  var msgs = document.getElementById('loreMessages');
+  if(msgs) msgs.scrollTo({top: msgs.scrollHeight, behavior: 'smooth'});
+}
+
 function loreLoadConvo(id){
   if(!window.pywebview) return;
   _loreActiveId=id;
@@ -7741,6 +8633,11 @@ function loreLoadConvo(id){
       document.getElementById('loreNoSel').style.display='none';
       const chat=document.getElementById('loreChat');
       if(chat){chat.style.display='flex';chat.style.flexDirection='column';}
+      // Scroll to bottom after DOM settles
+      setTimeout(function(){
+        var msgs=document.getElementById('loreMessages');
+        if(msgs) msgs.scrollTop=msgs.scrollHeight;
+      }, 80);
     }
   });
 }
@@ -7862,9 +8759,12 @@ function loreRenderMessages(){
     const canInject=_loreShouldShowInject(i);
     const avatar=m.role==='user'?'&#x2692;':'&#x2726;';
     return '<div class="lore-msg '+m.role+'"><div class="lore-avatar">'+avatar+'</div>'
-      +(m.role==='assistant'?'<div class="lore-bubble" style="position:relative">'+escHtml(m.content)+'<button onclick="loreCopyMessage('+i+')" title="Copy" style="position:absolute;top:5px;right:6px;background:none;border:none;cursor:pointer;font-size:12px;color:var(--ink-faint);opacity:.55;padding:1px 4px" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=.55">&#x2398;</button>'+(canInject?'<div style="margin-top:10px"><button onclick="loreInjectToAI('+i+')" title="Send to AI Mode" style="display:inline-flex;align-items:center;gap:5px;background:var(--crimson);border:none;cursor:pointer;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:#fff;padding:5px 12px;border-radius:2px">&#x27A4; Send to AI Mode</button></div>':'')+'</div>':'<div class="lore-bubble">'+escHtml(m.content)+'</div>')+'</div>';
+      +(m.role==='assistant'?'<div class="lore-bubble" style="position:relative;white-space:normal">'+loreMd(escHtml(m.content))+'<button onclick="loreCopyMessage('+i+')" title="Copy" style="position:absolute;top:5px;right:6px;background:none;border:none;cursor:pointer;font-size:12px;color:var(--ink-faint);opacity:.55;padding:1px 4px" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=.55">&#x2398;</button>'+(canInject?'<div style="margin-top:10px"><button onclick="loreInjectToAI('+i+')" title="Send to AI Mode" style="display:inline-flex;align-items:center;gap:5px;background:var(--crimson);border:none;cursor:pointer;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:#fff;padding:5px 12px;border-radius:2px">&#x27A4; Send to AI Mode</button></div>':'')+'</div>':'<div class="lore-bubble" style="white-space:pre-wrap">'+escHtml(m.content)+'</div>')+'</div>';
   }).join('');
+  // Scroll to bottom (most recent message)
   el.scrollTop=el.scrollHeight;
+  // Attach scroll listener for 'Jump to Current' button
+  _loreAttachScrollListener(el);
 }
 
 

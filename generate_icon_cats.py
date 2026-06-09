@@ -58,9 +58,9 @@ CREATURE_SUBDIRS = {
 NPC_TOPS = {'AdvocateFane','AllegianceBindstone','Vendor'}
 
 CATEGORY_ORDER = [
-    'Weapons','Armor','Clothing','Scrolls','Gems','Food',
+    'Weapons','Armor','Clothing','Jewelry','Scrolls','Gems','Food',
     'Keys','Tools','Stackables','Containers','Foci',
-    'Items','Creatures','NPCs','Structures','Misc',
+    'Items','Creatures','NPCs','Services','Structures','Misc',
 ]
 
 def main():
