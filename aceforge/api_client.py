@@ -206,7 +206,7 @@ class APIClient:
         on_chunk: Callable[[str], None],
         on_done:  Callable[[str], None],
         on_error: Callable[[str], None],
-        temperature: float = 0.2,  # Low temp for structured SQL — reduces schema drift
+        temperature: float = 0.7,  # Default; override per call (0.2 for SQL, 0.7 for planning)
     ):
         try:
             if self._provider == PROVIDER_ANTHROPIC:
@@ -218,7 +218,7 @@ class APIClient:
         except Exception as e:
             on_error(f"Unexpected error: {str(e)}")
 
-    def _stream_anthropic(self, system, user, on_chunk, on_done, on_error, temperature=0.2):
+    def _stream_anthropic(self, system, user, on_chunk, on_done, on_error, temperature=0.7):
         try:
             import anthropic
             client = anthropic.Anthropic(
@@ -241,7 +241,7 @@ class APIClient:
         except Exception as e:
             on_error(_friendly_error(e, "anthropic"))
 
-    def _stream_google(self, system, user, on_chunk, on_done, on_error, temperature=0.2):
+    def _stream_google(self, system, user, on_chunk, on_done, on_error, temperature=0.7):
         """
         Google AI Studio streaming via google-generativeai SDK.
         System prompt is passed as system_instruction (supported in Gemini 1.5+).
@@ -303,7 +303,7 @@ class APIClient:
         except Exception as e:
             on_error(_friendly_error(e, "google"))
 
-    def _stream_openai_compat(self, system, user, on_chunk, on_done, on_error, temperature=0.2):
+    def _stream_openai_compat(self, system, user, on_chunk, on_done, on_error, temperature=0.7):
         try:
             import openai
             client = self._build_openai_client()

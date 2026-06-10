@@ -399,7 +399,7 @@ Use these exact class_name values when referencing these WCIDs in emotes, create
             error[0] = msg
             done_evt.set()
 
-        self._api.stream_generate(system, user, on_chunk, on_done, on_error)
+        self._api.stream_generate(system, user, on_chunk, on_done, on_error, 0.2)  # 0.2 for SQL precision
         done_evt.wait(timeout=300)   # 5-minute per-file timeout
 
         if error[0]:

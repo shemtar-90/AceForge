@@ -464,7 +464,7 @@ Start with: /* ===== FILE: {fname} ===== */
         import threading
         threading.Thread(
             target=self.api_client.stream_generate,
-            args=(system, user, _chunk, _done, _err),
+            args=(system, user, _chunk, _done, _err, 0.2),  # 0.2 = precise SQL generation
             daemon=True,
         ).start()
         return {"success": True}
