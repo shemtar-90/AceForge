@@ -7427,9 +7427,11 @@ function _startAIPoll(){
       if(_hasActivity) { _aiLastChunkTime=Date.now(); _aiStallCount=0; }
       console.log('[AI] poll: items='+( r.items?r.items.length:0)+' generating='+r.generating);
       // ── Stall detection ──────────────────────────────────────────────
+      // Suppress stall detection briefly after a file transition
+      // (Python thread may not have set _generating=true yet)
       if(aiGenerating&&!r.generating&&!_hasActivity){
         _aiStallCount++;
-        if(_aiStallCount>=4){
+        if(_aiStallCount>=8){
           // Python stopped generating without sending a terminal event
           console.error('[AI] STALL detected — generating=false, no items, count='+_aiStallCount);
           _stopAIPoll(); aiGenerating=false;
@@ -7491,17 +7493,24 @@ function _startAIPoll(){
           $('aiStatus').textContent='⟳ '+item.message;
           $('aiStatus').className='ai-status';
         } else if(item.type==='file_done'){
-          // One planned file complete — show saved result and Next button
-          _stopAIPoll();
-          aiGenerating=false;
+          // One planned file complete — DON'T stop the poll here.
+          // Keep it running through the file transition to avoid stall detection.
+          // _onFileDone stops the poll only when all files are done.
           _aiStallCount=0;
+          _aiLastChunkTime=Date.now();
+          aiGenerating=false;
           $('aiGenBtn').disabled=false;
           $('aiStopBtn').style.display='none';
-          // Clear any stale 'Generating' status immediately
           $('aiStatus').textContent='';
           _onFileDone(item);
 
         } else if(item.type==='done'){
+          // In plan→approve→generate mode, 'file_done' is the terminal event.
+          // Ignore stray 'done' events to prevent poll from stopping mid-sequence.
+          if(_aiPlan && _aiPlanIndex < (_aiPlan.files ? _aiPlan.files.length : 0)) {
+            // Still in plan mode — ignore 'done', wait for 'file_done'
+            console.warn('[AI] ignoring stray done event during plan generation');
+          } else {
           _stopAIPoll();
           aiGenerating=false;
           $('aiGenBtn').disabled=false;
@@ -7544,6 +7553,7 @@ function _startAIPoll(){
               var o=$('aiOut'); if(o&&o.parentNode) o.parentNode.insertBefore(warn,o);
             }
           }
+          } // end: not in plan mode
         } else if(item.type==='error'){
           _stopAIPoll();
           setAIError(item.message||'Unknown error');
@@ -8125,16 +8135,16 @@ function startAIGeneration(){
       }
     });
   } else {
-    // ── Base: single-shot generation ──────────────────────────────────────
+    // ── Base: same plan→approve→generate flow, no agentic self-review ────
     var el=$('aiFileList');
-    if(el) el.innerHTML='<div style="color:var(--ink-dim);font-style:italic;font-size:11px">Generating…</div>';
-    $('aiStatus').textContent='⟳ Generating…';
+    if(el) el.innerHTML='<div style="color:var(--ink-dim);font-style:italic;font-size:11px">Planning…</div>';
+    $('aiStatus').textContent='⟳ Planning your content…';
     $('aiStatus').className='ai-status';
-    window.pywebview.api.start_generation(prompt, curAIType||'creature').then(function(r){
+    window.pywebview.api.start_planning(prompt, curAIType||'creature', _aiImportedSQL||'').then(function(r){
       if(!r||!r.success){
         _stopAIPoll(); aiGenerating=false;
         $('aiGenBtn').disabled=false; $('aiStopBtn').style.display='none';
-        $('aiStatus').textContent='✗ Generation failed: '+(r?r.error:'null');
+        $('aiStatus').textContent='✗ Planning failed: '+(r?r.error:'null');
         $('aiStatus').className='ai-status error';
       }
     });
@@ -8268,6 +8278,9 @@ function _approvePlan(){
 }
 
 function _generateNextFile(){
+  // Reset stall detector for new file — Python thread needs ~100-200ms to set _generating
+  _aiStallCount=0;
+  _aiLastChunkTime=Date.now();
   if(!_aiPlan||_aiPlanIndex>=_aiPlan.files.length){
     // All done
     var total=_aiSavedFiles.length;
@@ -8289,11 +8302,12 @@ function _generateNextFile(){
   $('aiStatus').className='ai-status';
   aiGenerating=true;
   $('aiStopBtn').style.display='inline-flex';
-  _startAIPoll();
+  // Keep poll running (don't restart if already active)
+  if(!_aiPollTimer) _startAIPoll();
   var el=$('aiFileList');
   if(el) el.innerHTML='<div style="font-family:var(--ui-font);font-size:9px;color:var(--ink-dim);margin-bottom:6px">Generating '+(idx+1)+' of '+total+'…</div>';
   window.pywebview.api.generate_planned_file(
-    JSON.stringify(_aiPlan), idx, _aiOrigPrompt
+    JSON.stringify(_aiPlan), idx, _aiOrigPrompt, _aiImportedSQL||'', _aiGenMode||'base'
   ).then(function(r){
     if(!r||!r.success){
       _stopAIPoll(); aiGenerating=false;
@@ -8644,8 +8658,11 @@ function loreMd(html){
   html=html.replace(/^[ \t]*[\*\-•][ \t]+(.+)$/gm,'<div style="padding-left:14px;position:relative"><span style="position:absolute;left:2px">•</span>$1</div>');
   // Numbered list lines: 1. 2. etc.
   html=html.replace(/^[ \t]*(\d+)\. (.+)$/gm,'<div style="padding-left:18px;position:relative"><span style="position:absolute;left:2px">$1.</span>$2</div>');
-  // Preserve newlines
-  html=html.replace(/\n/g,'<br>');
+  // Convert newlines: blank lines = paragraph break, single newline = space
+  // Split on double-newline first to find paragraph boundaries
+  var paras=html.split(/\n{2,}/);
+  html=paras.map(function(p){ return p.replace(/\n/g,' ').trim(); }).filter(function(p){ return p.length>0; }).join('</p><p style="margin:0 0 10px 0">');
+  html='<p style="margin:0 0 10px 0">'+html+'</p>';
   return html;
 }
 
@@ -8792,30 +8809,57 @@ function loreInjectToAI(idx){
   if(!msg) return;
   var content=msg.content.trim();
 
-  // Detect best AI content type from the response
+  // Convert structured lore content into a direct, paragraph-form AI generation instruction
+  var instruction=_loreContentToInstruction(content);
   var detectedType=_loreDetectAIType(content);
 
   // Switch to AI Mode
   var aiBtn=document.querySelector('.mode-tab[onclick*=\'ai\']');
   switchMode('ai', aiBtn);
 
-  // Inject into the aiPrompt textarea
   var ta=document.getElementById('aiPrompt');
   if(ta){
-    ta.value=content;
+    ta.value=instruction;
     ta.dispatchEvent(new Event('input'));
     ta.focus();
-    // Scroll to top of textarea
     ta.scrollTop=0;
   }
 
-  // Select the detected content type in the AI type tabs if possible
   if(detectedType){
     var typeBtn=document.querySelector('#aiTypeTabs button[data-type="'+detectedType+'"]');
     if(typeBtn) typeBtn.click();
   }
 
-  toast('✓ Prompt injected into AI Mode — review then click ✨ Generate');
+  toast('✓ Converted to AI instruction and injected — review then click Generate');
+}
+
+function _loreContentToInstruction(content){
+  // Strip markdown formatting (headers, bold, bullets) and collapse into
+  // a single direct paragraph-form instruction for the AI generator.
+  var lines=content.split('\n');
+  var parts=[];
+  var stageName='';
+  for(var i=0;i<lines.length;i++){
+    var line=lines[i].trim();
+    if(!line) continue;
+    // Skip pure header lines (## Heading) — extract text as context label
+    var hdr=line.match(/^#{1,4}\s*(.+)/);
+    if(hdr){ stageName=hdr[1].replace(/[*_]/g,'').trim(); continue; }
+    // Strip bold/italic markers
+    line=line.replace(/\*\*([^*]+)\*\*/g,'$1').replace(/\*([^*]+)\*/g,'$1').replace(/__([^_]+)__/g,'$1').replace(/_([^_]+)_/g,'$1');
+    // Strip leading bullet/number markers
+    line=line.replace(/^[\-\*•]\s+/,'').replace(/^\d+\.\s+/,'');
+    // Strip label prefixes like 'Stage Name:', 'Objective:', 'Tasks:'
+    line=line.replace(/^[A-Z][A-Za-z ]{1,30}:\s*/,'');
+    if(line.length>3) parts.push(line);
+  }
+  // Join all extracted lines into a coherent paragraph instruction
+  var body=parts.join(' ').replace(/\s{2,}/g,' ').trim();
+  // Prepend a direct generation verb so the AI knows what to do
+  if(!/^(create|generate|make|build|write|implement)/i.test(body)){
+    body='Create the following ACEmulator content: '+body;
+  }
+  return body;
 }
 // ── End LoreForge → AI Mode bridge ───────────────────────────────────────
 

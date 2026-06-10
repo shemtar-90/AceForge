@@ -293,8 +293,13 @@ Count all of the above, then write that many entries in the files array."""
         return {"success": True}
 
     def generate_planned_file(self, plan_json: str, file_index: int,
-                              original_prompt: str, existing_sql: str = '') -> dict:
-        """Phase 2 (Agentic): Generate one file using AgentLoop with full context threading."""
+                              original_prompt: str, existing_sql: str = '',
+                              gen_mode: str = 'base') -> dict:
+        """
+        Phase 2: Generate one planned file.
+        gen_mode='base'     → direct single-call generation per file (fast, accurate SQL)
+        gen_mode='advanced' → AgentLoop with self-review, auto-continuation, context threading
+        """
         if self._generating:
             return {"success": False, "error": "Already generating."}
         if not self.config.api_key:
@@ -308,6 +313,11 @@ Count all of the above, then write that many entries in the files array."""
         # Use stored editing SQL from planning phase if not provided
         if not existing_sql:
             existing_sql = getattr(self, "_editing_sql", "")
+
+        # ── Base mode: direct single-call generation per file ─────────────
+        # Same plan/approve/save flow, no AgentLoop overhead.
+        if gen_mode != 'advanced':
+            return self._generate_file_direct(plan_json, file_index, original_prompt, existing_sql)
 
         self.api_client.update_credentials(
             api_key=self.config.api_key,
@@ -352,6 +362,111 @@ Count all of the above, then write that many entries in the files array."""
             self._generating = False
             return {"success": False, "error": "Agent loop already running."}
 
+        return {"success": True}
+
+    def _generate_file_direct(self, plan_json: str, file_index: int,
+                               original_prompt: str, existing_sql: str) -> dict:
+        """Base mode: generate one planned file in a single focused API call."""
+        try:
+            plan = json.loads(plan_json)
+        except Exception as e:
+            return {"success": False, "error": f"Plan parse error: {e}"}
+
+        files = plan.get("files", [])
+        if file_index >= len(files):
+            return {"success": False, "error": "File index out of range."}
+
+        file_entry = files[file_index]
+        fname  = file_entry.get("name", f"file_{file_index}.sql")
+        ftype  = file_entry.get("type", "creature")
+        wcid   = file_entry.get("wcid", 800000)
+        fdesc  = file_entry.get("description", "")
+        total  = len(files)
+        server = self.config.server_name or "Shattered Dawn"
+        is_local = (self.config.get('provider','anthropic') == 'ollama'
+                    or bool(self.config.get('ollama_mode', False)))
+
+        # Other files in the plan for cross-reference context
+        other_ctx = "\n".join(
+            f"  - File {i+1}: WCID {f['wcid']} | {f['name']} | {f['description']}"
+            for i, f in enumerate(files) if i != file_index
+        ) or "  (none)"
+
+        try:
+            weenie_ctx = self._build_weenie_context(original_prompt, ftype)
+            system = self.skill_loader.build_system_prompt(
+                content_type=ftype,
+                server_name=server,
+                wcid_ranges=self.config.get_wcid_ranges(),
+                author=self.config.get("author", ""),
+                weenie_context=weenie_ctx,
+                is_local=is_local,
+            )
+        except Exception:
+            system = f"You are an ACEmulator SQL expert for {server}."
+
+        system += f"""
+
+## File Context
+You are generating FILE {file_index + 1} of {total}.
+This file: WCID {wcid} | {fname} | {fdesc}
+
+Other files in this generation set (for WCID cross-references):
+{other_ctx}
+
+Output raw SQL only — no markdown fences, no explanations.
+Start with: /* ===== FILE: {fname} ===== */
+"""
+
+        edit_ctx = (
+            f"EXISTING SQL TO MODIFY:\n```sql\n{existing_sql[:6000]}\n```\n\n"
+            if existing_sql else ""
+        )
+        user = f"{edit_ctx}Generate SQL for: {fdesc}\nOriginal request: {original_prompt}\nWCID: {wcid}"
+
+        self.api_client.update_credentials(
+            api_key=self.config.api_key,
+            model=self.config.model,
+            provider=self.config.provider,
+            base_url=self.config.base_url,
+        )
+
+        self._generating = True
+        while not self._chunk_queue.empty():
+            try: self._chunk_queue.get_nowait()
+            except: break
+
+        def _done(text: str):
+            self._generating = False
+            try:
+                sql = self._process_emote_scripts(text)
+                save = self._save_single_file(sql, fname)
+            except Exception as e:
+                save = {"success": False, "error": str(e)}
+            self._chunk_queue.put({
+                "type": "file_done",
+                "file_index": file_index,
+                "file_name": fname,
+                "save": save,
+                "total": total,
+                "review_issues": [],
+            })
+
+        def _err(msg: str):
+            self._generating = False
+            self._chunk_queue.put({"type": "error", "message": msg})
+
+        self._generating = True  # set before thread starts — prevents stall detection gap
+        # Use a bare chunk handler that always queues — avoids _on_chunk's _generating guard
+        _q = self._chunk_queue
+        def _chunk(text: str):
+            _q.put({"type": "chunk", "text": text})
+        import threading
+        threading.Thread(
+            target=self.api_client.stream_generate,
+            args=(system, user, _chunk, _done, _err),
+            daemon=True,
+        ).start()
         return {"success": True}
 
     def _save_single_file(self, content: str, suggested_name: str) -> dict:
