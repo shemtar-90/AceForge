@@ -392,9 +392,18 @@ Count all of the above, then write that many entries in the files array."""
             for i, f in enumerate(files) if i != file_index
         ) or "  (none)"
 
+        # Load the compact schema block — prepended first so model sees it fresh
+        try:
+            from pathlib import Path
+            import sys
+            _base = Path(sys._MEIPASS) if hasattr(sys, '_MEIPASS') else Path(__file__).parent
+            _schema_block = (_base / 'references' / 'schema_block.md').read_text(encoding='utf-8')
+        except Exception:
+            _schema_block = ''
+
         try:
             weenie_ctx = self._build_weenie_context(original_prompt, ftype)
-            system = self.skill_loader.build_system_prompt(
+            _skill = self.skill_loader.build_system_prompt(
                 content_type=ftype,
                 server_name=server,
                 wcid_ranges=self.config.get_wcid_ranges(),
@@ -402,8 +411,10 @@ Count all of the above, then write that many entries in the files array."""
                 weenie_context=weenie_ctx,
                 is_local=is_local,
             )
+            # Schema block first — critical rules before the large context
+            system = (_schema_block + '\n\n' + _skill) if _schema_block else _skill
         except Exception:
-            system = f"You are an ACEmulator SQL expert for {server}."
+            system = (_schema_block + '\n\n' if _schema_block else '') + f"You are an ACEmulator SQL expert for {server}."
 
         system += f"""
 
@@ -422,7 +433,13 @@ Start with: /* ===== FILE: {fname} ===== */
             f"EXISTING SQL TO MODIFY:\n```sql\n{existing_sql[:6000]}\n```\n\n"
             if existing_sql else ""
         )
-        user = f"{edit_ctx}Generate SQL for: {fdesc}\nOriginal request: {original_prompt}\nWCID: {wcid}"
+        user = (
+            f"{edit_ctx}Generate SQL for: {fdesc}\n"
+            f"Original request: {original_prompt}\n"
+            f"WCID: {wcid}\n\n"
+            f"REMINDER: weenie table has EXACTLY 4 columns (class_Id, class_Name, type, last_Modified). "
+            f"Only insert property rows this weenie actually needs. Stop when complete."
+        )
 
         self.api_client.update_credentials(
             api_key=self.config.api_key,

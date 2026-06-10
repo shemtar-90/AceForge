@@ -297,6 +297,15 @@ class AgentLoop:
         fdesc = file_entry.get("description", "")
         server_name = self._config.server_name or "Shattered Dawn"
 
+        # Load compact schema block
+        try:
+            from pathlib import Path
+            import sys as _sys
+            _base = Path(_sys._MEIPASS) if hasattr(_sys, '_MEIPASS') else Path(__file__).parent.parent
+            _schema_block = (_base / 'references' / 'schema_block.md').read_text(encoding='utf-8')
+        except Exception:
+            _schema_block = ''
+
         # Base skill system prompt for this content type
         try:
             weenie_ctx = self._build_weenie_context(self._orig_prompt, ftype)
@@ -312,6 +321,10 @@ class AgentLoop:
             )
         except Exception:
             skill_sys = f"You are an ACEmulator SQL expert for {server_name}."
+
+        # Prepend schema block so critical rules appear before large context
+        if _schema_block:
+            skill_sys = _schema_block + '\n\n' + skill_sys
 
         # Other files in the plan (cross-reference context)
         other_files_ctx = "\n".join(
@@ -378,7 +391,9 @@ Use these exact class_name values when referencing these WCIDs in emotes, create
             f"{edit_ctx}"
             f"Generate the SQL for: {fdesc}\n"
             f"Original request: {self._orig_prompt}\n"
-            f"File: {fname} | WCID: {wcid}"
+            f"File: {fname} | WCID: {wcid}\n\n"
+            f"REMINDER: weenie table has EXACTLY 4 columns (class_Id, class_Name, type, last_Modified). "
+            f"Only insert property rows this weenie actually needs. Stop when complete."
         )
 
     def _stream_blocking(self, system: str, user: str) -> str:
