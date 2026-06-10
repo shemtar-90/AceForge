@@ -206,7 +206,7 @@ class APIClient:
         on_chunk: Callable[[str], None],
         on_done:  Callable[[str], None],
         on_error: Callable[[str], None],
-        temperature: float = 0.7,
+        temperature: float = 0.2,  # Low temp for structured SQL — reduces schema drift
     ):
         try:
             if self._provider == PROVIDER_ANTHROPIC:
@@ -218,7 +218,7 @@ class APIClient:
         except Exception as e:
             on_error(f"Unexpected error: {str(e)}")
 
-    def _stream_anthropic(self, system, user, on_chunk, on_done, on_error, temperature=0.7):
+    def _stream_anthropic(self, system, user, on_chunk, on_done, on_error, temperature=0.2):
         try:
             import anthropic
             client = anthropic.Anthropic(
@@ -241,7 +241,7 @@ class APIClient:
         except Exception as e:
             on_error(_friendly_error(e, "anthropic"))
 
-    def _stream_google(self, system, user, on_chunk, on_done, on_error, temperature=0.7):
+    def _stream_google(self, system, user, on_chunk, on_done, on_error, temperature=0.2):
         """
         Google AI Studio streaming via google-generativeai SDK.
         System prompt is passed as system_instruction (supported in Gemini 1.5+).
@@ -303,7 +303,7 @@ class APIClient:
         except Exception as e:
             on_error(_friendly_error(e, "google"))
 
-    def _stream_openai_compat(self, system, user, on_chunk, on_done, on_error, temperature=0.7):
+    def _stream_openai_compat(self, system, user, on_chunk, on_done, on_error, temperature=0.2):
         try:
             import openai
             client = self._build_openai_client()
@@ -320,6 +320,25 @@ class APIClient:
                     {"role": "user",   "content": user},
                 ],
             )
+
+            # Ollama-specific options: set context window and repeat penalty.
+            # num_ctx tells Ollama to use the model's full context window (not its
+            # default which is often 4K-8K even for 128K-capable models).
+            # repeat_penalty prevents SQL repetition loops common in local models.
+            is_ollama = (
+                self._provider == PROVIDER_COMPATIBLE
+                and self._base_url
+                and ("localhost" in self._base_url or "127.0.0.1" in self._base_url
+                     or "ollama" in self._base_url.lower())
+            )
+            if is_ollama:
+                kwargs["extra_body"] = {
+                    "options": {
+                        "num_ctx": 32768,   # 32K — fits full ACEForge prompt comfortably
+                        "repeat_penalty": 1.1,  # gentle penalty to prevent SQL loops
+                        "num_predict": 16000,   # max output tokens
+                    }
+                }
             # Try with max_tokens first (works for Groq, Mistral, Ollama, etc.)
             try:
                 kwargs["max_tokens"] = 16000

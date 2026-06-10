@@ -171,10 +171,12 @@ class SkillLoader:
         "example_lottery.md",      # 78K
     }
 
-    # Compact always-load set for local models — core rules only
+    # Compact always-load set for local models — core rules + concrete examples
     LOCAL_ALWAYS_LOAD = [
         "SKILL.md",
+        "emote_format.md",  # 197 lines — critical for emote table structure
         "quest_npcs.md",
+        "local_examples.md",  # compact ACE SQL examples covering all content types
         "enums.md",
         "schema.md",
     ]
@@ -195,10 +197,10 @@ class SkillLoader:
         """
         parts = []
 
-        # Local models get a reduced always-load set to save context space
-        always = self.LOCAL_ALWAYS_LOAD if is_local else ALWAYS_LOAD
-
-        for fname in always:
+        # Both local and API models use the identical prompt.
+        # Modern local models (Llama 3.1, Mistral, etc.) support 32K-128K context
+        # and produce far better output with full examples than with stripped prompts.
+        for fname in ALWAYS_LOAD:
             content = self._read(fname)
             parts.append(content)
             if fname == "SKILL.md":
@@ -206,27 +208,31 @@ class SkillLoader:
 
         extra_files = CONTENT_TYPE_FILES.get(content_type, CONTENT_TYPE_FILES["general"])
         for fname in extra_files:
-            if fname in always:
-                continue
-            # Skip large example files for local models — weenie context replaces them
-            if is_local and fname in self.LOCAL_SKIP_FILES:
+            if fname in ALWAYS_LOAD:
                 continue
             content = self._read(fname)
             if content:
                 parts.append(f"\n\n{'='*60}\n# {fname}\n{'='*60}\n{content}")
 
         # Inject matching base-game weenies as format references
-        # For local models: limit to 2 weenies max to save context
         if weenie_context:
-            # Trim weenie context for local models — keep first 2 weenies only
-            if is_local:
-                sections = weenie_context.split("/* WCID ")
-                trimmed  = "/* WCID ".join(sections[:3])  # preamble + 2 weenies
-                weenie_context = trimmed
             parts.append(f"\n\n{'='*60}\n# BASE GAME WEENIE REFERENCES")
             parts.append("These are actual base-game weenies. Match their property structure exactly.")
             parts.append(f"{'='*60}\n{weenie_context}")
 
+        # For local models: append a final hard constraint block
+        # (local models benefit from seeing rules repeated at end of prompt)
+        if is_local:
+            parts.append(
+                "\n\n" + "="*60 + "\n"
+                "# FINAL RULES — NON-NEGOTIABLE\n"
+                + "="*60 + "\n"
+                "NEVER output CREATE TABLE statements.\n"
+                "NEVER invent column names. Use ONLY: object_Id, type, value (for property tables).\n"
+                "ALWAYS begin each weenie with: DELETE FROM `weenie` WHERE `class_Id` = WCID;\n"
+                "ALWAYS use backtick-quoted ACE table names.\n"
+                "Output raw SQL only. No markdown fences. No explanations."
+            )
         return "\n".join(parts)
 
     def _build_server_block(self, server_name: str, wcid_ranges: dict, author: str) -> str:
