@@ -542,6 +542,19 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
       <div style="font-family:'IM Fell English',serif;font-style:italic;color:var(--ink-dim);font-size:13px" id="aiModeDesc">Describe what you want — or import existing SQL to edit it.</div>
     </div>
     <div style="display:none" id="aiTypeTabs"></div>
+    <!-- Generation Mode Toggle -->
+    <div style="display:flex;align-items:stretch;gap:0;margin-bottom:12px;border:1px solid var(--border);border-radius:3px;overflow:hidden">
+      <button id="aiModeBaseBtn" onclick="setAIGenMode('base')" style="flex:1;padding:9px 14px;font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--crimson);color:#fff;border:none;cursor:pointer;border-right:1px solid var(--border)">
+        ⚡ Base Generation
+      </button>
+      <button id="aiModeAdvBtn" onclick="setAIGenMode('advanced')" style="flex:1;padding:9px 14px;font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:transparent;color:var(--ink-mid);border:none;cursor:pointer">
+        ✦ Advanced Generation
+      </button>
+    </div>
+    <!-- Mode description banner -->
+    <div id="aiGenModeDesc" style="font-family:'IM Fell English',serif;font-style:italic;font-size:12px;color:var(--ink-dim);padding:7px 10px;background:rgba(200,184,152,.06);border:1px solid var(--border-lt);border-radius:2px;margin-bottom:12px;line-height:1.5">
+      Generates all content in a single API call. Fast and token-efficient — best for individual monsters, items, or simple NPCs.
+    </div>
     <div style="border:1px solid var(--border);background:var(--parch);padding:14px">
       <div style="font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:8px">Describe your content</div>
       <textarea id="aiPrompt" style="width:100%;height:120px;font-family:'IM Fell English',serif;font-style:italic;font-size:15px;color:var(--ink);background:transparent;border:none;outline:none;resize:none;line-height:1.6;user-select:text" placeholder="e.g. A level 180 ice drudge — or import existing SQL above and describe changes like 'Make this mob stronger for level 250+'."></textarea>
@@ -3273,17 +3286,12 @@ function switchType(type,btn){
     window._importedBookSQL=s.importedBookSQL;
     document.querySelectorAll('.itab').forEach(b=>b.classList.remove('active'));
     if(btn)btn.classList.add('active');
+    // Inject saved field values into a global so buildForm can apply them
+    // synchronously when it renders idRow — avoids a setTimeout race with regen()
+    window._pendingWeenieRestore={wcid:s.wcid,className:s.className,weenieTabType:s.weenieTabType};
     buildForm();
-    // Re-apply WCID and class name after buildForm resets idRow
-    setTimeout(function(){
-      var _fw=document.getElementById('fWcid');
-      if(_fw) _fw.value=s.wcid;
-      var _fc=document.getElementById('fClassName');
-      if(_fc) _fc.value=s.className||'';
-      var _ft=document.getElementById('fWeenieType');
-      if(_ft) _ft.value=s.weenieTabType;
-      regen();
-    },0);
+    window._pendingWeenieRestore=null;
+    regen();
     console.log('[SWITCH] weenie state restored');
     return;
   }
@@ -3934,7 +3942,7 @@ function openIconPicker(onSelect){
         btn.title=ic[0]+'\n'+ic[1];
         btn.style.cssText='width:52px;height:52px;padding:2px;cursor:pointer;background:var(--parch-dk);border:1px solid '+(isFav?'var(--gold)':'transparent')+';box-sizing:border-box;display:flex;align-items:center;justify-content:center;';
         var img=document.createElement('img');
-        img.src='icons/'+ic[0]+'.png';
+        img.src=_iconsBaseUrl+'/'+ic[0]+'.png';
         img.loading='lazy'; img.decoding='async';
         img.style.cssText='max-width:46px;max-height:46px;object-fit:contain;image-rendering:pixelated;';
         img.onerror=(function(b){ return function(){ b.style.opacity='0.15'; }; })(btn);
@@ -5019,6 +5027,14 @@ function buildForm(){
         +(curType!=='quest'&&curType!=='event'?'<input type="hidden" id="fName" value="">':'')+
         '<div class="fg"><div class="fl">Class Name <span class="fc">class_Name</span></div><input type="text" id="fClassName" value="'+(DEFAULT_NAMES[curType]?DEFAULT_NAMES[curType].toLowerCase().replace(/[^a-z0-9]/g,''):'newweenie')+'" placeholder="e.g. archonaAsheron" style="font-family:Source Code Pro,monospace;font-size:13px;font-weight:600" oninput="regen()"></div>';
       idRow.style.display = _weenieNoData ? 'none' : '';
+      // Restore saved field values synchronously if returning from tab switch
+      if(window._pendingWeenieRestore){
+        var _pr=window._pendingWeenieRestore;
+        var _fw=document.getElementById('fWcid'); if(_fw)_fw.value=_pr.wcid||'0';
+        var _fc=document.getElementById('fClassName'); if(_fc)_fc.value=_pr.className||'';
+        var _ft=document.getElementById('fWeenieType'); if(_ft)_ft.value=_pr.weenieTabType||0;
+        window._weenieTabType=_pr.weenieTabType||0;
+      }
     }
   }
   // Sub-tabs
@@ -5654,7 +5670,7 @@ function buildDIDIconPreview(){
     var row=extraDID.find(function(r){return parseInt(r.type)===l.type;});
     var wv=row?(parseInt(row.value)||0):0;
     if(!wv) return '';
-    return '<img src="icons/'+wv+'.png" '
+    return '<img src="'+_iconsBaseUrl+'/'+wv+'.png" '
       +'style="position:absolute;top:0;left:0;width:64px;height:64px;'
       +'object-fit:contain;image-rendering:pixelated;" '
       +'onerror="this.style.display=\'none\'" '
@@ -7460,6 +7476,20 @@ function _startAIPoll(){
           $('aiStopBtn').style.display='none';
           _showAIPlan(item.text||aiFullText);
 
+        } else if(item.type==='review_warning'){
+          // SQL self-review found issues — show as a non-blocking warning in status
+          var _issues=item.issues||[];
+          if(_issues.length>0){
+            $('aiStatus').textContent='⚠ Review: '+item.file_name+' — '+_issues[0]+((_issues.length>1)?' (+'+ (_issues.length-1)+' more)':'');
+            $('aiStatus').className='ai-status error';
+            // Log all issues to the output panel
+            var _out=$('aiOut');
+            if(_out) _out.innerHTML+=('\n\n⚠ REVIEW WARNINGS for '+item.file_name+':\n'+_issues.map(function(i){return'  • '+i;}).join('\n')+'\n');
+          }
+        } else if(item.type==='continuation'){
+          // Auto-continuation in progress — update status
+          $('aiStatus').textContent='⟳ '+item.message;
+          $('aiStatus').className='ai-status';
         } else if(item.type==='file_done'){
           // One planned file complete — show saved result and Next button
           _stopAIPoll();
@@ -7880,6 +7910,10 @@ function saveSettings(){
 async function init(){
   if(window.pywebview){
     window.pywebview.api.ping().then(r=>console.log('[BOOT] ping:',JSON.stringify(r))).catch(e=>console.warn('[BOOT] ping failed:',e));
+    // Resolve absolute icons path for frozen exe — relative paths break in _MEIPASS
+    window.pywebview.api.get_icons_base_url().then(function(url){
+      if(url){ _iconsBaseUrl=url; console.log('[BOOT] icons base URL:',url); }
+    }).catch(function(e){ console.warn('[BOOT] get_icons_base_url failed:',e); });
   }
   try{ await loadData(); }catch(e){ console.warn('loadData:',e); }
   try{ buildInnerTabs(); }catch(e){ console.warn('buildInnerTabs:',e); }
@@ -8009,7 +8043,9 @@ function showPropDebug(){
 // ── PLANNED FILE-BY-FILE GENERATION ──────────────────────────────────────────
 var _aiPlan=null;          // parsed plan JSON
 var _aiPlanIndex=0;        // current file being generated
-var _aiOrigPrompt='';      // original user prompt, needed for each file call
+var _aiOrigPrompt='';
+var _iconsBaseUrl='icons'; // default relative path; overridden at startup from Python
+var _aiGenMode='base'; // 'base' = single-shot, 'advanced' = plan+approve+generate      // original user prompt, needed for each file call
 var _aiSavedFiles=[];      // list of {name, folder} already saved
 
 // ── Autocreate toggle ────────────────────────────────────────────────────────
@@ -8041,6 +8077,25 @@ function _scheduleAutoNext(nextIdx){
   }, 3000);
 }
 
+
+function setAIGenMode(mode){
+  _aiGenMode = mode;
+  var baseBtn = document.getElementById('aiModeBaseBtn');
+  var advBtn  = document.getElementById('aiModeAdvBtn');
+  var desc    = document.getElementById('aiGenModeDesc');
+  if(mode === 'base'){
+    if(baseBtn){ baseBtn.style.background='var(--crimson)'; baseBtn.style.color='#fff'; }
+    if(advBtn){  advBtn.style.background='transparent';     advBtn.style.color='var(--ink-mid)'; }
+    if(desc) desc.innerHTML='Generates all content in a single API call. Fast and token-efficient &mdash; best for individual monsters, items, or simple NPCs.';
+    if(desc) desc.style.color='var(--ink-dim)';
+  } else {
+    if(advBtn){  advBtn.style.background='var(--crimson)';  advBtn.style.color='#fff'; }
+    if(baseBtn){ baseBtn.style.background='transparent';    baseBtn.style.color='var(--ink-mid)'; }
+    if(desc) desc.innerHTML='<strong style="font-style:normal;color:var(--crimson)">⚠ Higher token usage.</strong> Plans the full file set, presents it for approval, then generates each file in a focused call. Best for quest chains, multi-NPC systems, and complex content.';
+    if(desc) desc.style.color='var(--ink-dim)';
+  }
+}
+
 function startAIGeneration(){
   if(!window.pywebview) return;
   var promptEl=$('aiPrompt');
@@ -8049,23 +8104,41 @@ function startAIGeneration(){
   _aiOrigPrompt=prompt;
   _aiPlan=null; _aiPlanIndex=0; _aiSavedFiles=[];
   aiFullText=''; $('aiOut').textContent='';
-  var el=$('aiFileList');
-  if(el) el.innerHTML='<div style="color:var(--ink-dim);font-style:italic;font-size:11px">Planning…</div>';
-  $('aiStatus').textContent='⟳ Planning your content…';
-  $('aiStatus').className='ai-status';
   $('aiGenBtn').disabled=true;
   $('aiStopBtn').style.display='inline-flex';
   $('aiSaveBtn').disabled=true;
   aiGenerating=true;
   _startAIPoll();
-  window.pywebview.api.start_planning(prompt, curAIType||'creature', _aiImportedSQL||'').then(function(r){
-    if(!r||!r.success){
-      _stopAIPoll(); aiGenerating=false;
-      $('aiGenBtn').disabled=false; $('aiStopBtn').style.display='none';
-      $('aiStatus').textContent='✗ Planning failed: '+(r?r.error:'null');
-      $('aiStatus').className='ai-status error';
-    }
-  });
+
+  if(_aiGenMode === 'advanced'){
+    // ── Advanced: plan first, then generate file-by-file ─────────────────
+    var el=$('aiFileList');
+    if(el) el.innerHTML='<div style="color:var(--ink-dim);font-style:italic;font-size:11px">Planning…</div>';
+    $('aiStatus').textContent='⟳ Planning your content…';
+    $('aiStatus').className='ai-status';
+    window.pywebview.api.start_planning(prompt, curAIType||'creature', _aiImportedSQL||'').then(function(r){
+      if(!r||!r.success){
+        _stopAIPoll(); aiGenerating=false;
+        $('aiGenBtn').disabled=false; $('aiStopBtn').style.display='none';
+        $('aiStatus').textContent='✗ Planning failed: '+(r?r.error:'null');
+        $('aiStatus').className='ai-status error';
+      }
+    });
+  } else {
+    // ── Base: single-shot generation ──────────────────────────────────────
+    var el=$('aiFileList');
+    if(el) el.innerHTML='<div style="color:var(--ink-dim);font-style:italic;font-size:11px">Generating…</div>';
+    $('aiStatus').textContent='⟳ Generating…';
+    $('aiStatus').className='ai-status';
+    window.pywebview.api.start_generation(prompt, curAIType||'creature').then(function(r){
+      if(!r||!r.success){
+        _stopAIPoll(); aiGenerating=false;
+        $('aiGenBtn').disabled=false; $('aiStopBtn').style.display='none';
+        $('aiStatus').textContent='✗ Generation failed: '+(r?r.error:'null');
+        $('aiStatus').className='ai-status error';
+      }
+    });
+  }
 }
 
 function _showAIPlan(rawText){

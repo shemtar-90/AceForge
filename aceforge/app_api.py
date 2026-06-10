@@ -16,6 +16,7 @@ from .config import Config
 from .skill_loader import SkillLoader
 from .api_client import APIClient, KNOWN_ENDPOINTS, DEFAULT_MODELS
 from .sql_parser import parse_and_save_files
+from .ai.agent_loop import AgentLoop
 from .emote_parser import parse_emote_text
 
 
@@ -33,6 +34,7 @@ class AppAPI(LoreMixin):
         self._generating = False
         self._chunk_queue      = queue.Queue()
         self._last_ai_response = ''  # stored Python-side to avoid bridge size limit
+        self._agent_loop = None  # AgentLoop instance for Advanced Generation mode
 
     def set_window(self, window):
         self._window = window
@@ -292,7 +294,7 @@ Count all of the above, then write that many entries in the files array."""
 
     def generate_planned_file(self, plan_json: str, file_index: int,
                               original_prompt: str, existing_sql: str = '') -> dict:
-        """Phase 2: Generate SQL for one specific file from the plan."""
+        """Phase 2 (Agentic): Generate one file using AgentLoop with full context threading."""
         if self._generating:
             return {"success": False, "error": "Already generating."}
         if not self.config.api_key:
@@ -300,73 +302,12 @@ Count all of the above, then write that many entries in the files array."""
 
         try:
             plan = json.loads(plan_json)
-            file_entry = plan["files"][file_index]
         except Exception as e:
             return {"success": False, "error": f"Plan parse error: {e}"}
 
-        server_name = self.config.server_name or "Shattered Dawn"
-        fname = file_entry.get("name", "output.sql")
-        ftype = file_entry.get("type", "creature")
-        wcid  = file_entry.get("wcid", 800000)
-        fdesc = file_entry.get("description", "")
-        total = len(plan.get("files", []))
-
-        # In edit mode, prefer stored SQL from planning phase
+        # Use stored editing SQL from planning phase if not provided
         if not existing_sql:
             existing_sql = getattr(self, "_editing_sql", "")
-
-        # Build context about other files for cross-references
-        other_files = [f for i, f in enumerate(plan["files"]) if i != file_index]
-        ref_ctx = "\n".join(
-            f"- WCID {f['wcid']}: {f['name']} ({f['description']})"
-            for f in other_files
-        ) or "None"
-
-        # Load the skill system prompt for this content type
-        try:
-            weenie_context = self._build_weenie_context(original_prompt, ftype)
-            skill_system = self.skill_loader.build_system_prompt(
-                content_type=ftype,
-                server_name=server_name,
-                wcid_ranges=self.config.get_wcid_ranges(),
-                author=self.config.get("author", ""),
-                weenie_context=weenie_context,
-                is_local=False,
-            )
-        except Exception:
-            skill_system = f"You are an ACEmulator SQL expert for {server_name}."
-
-        system_prompt = f"""{skill_system}
-
-You are generating FILE {file_index + 1} of {total} in a planned sequence.
-Generate ONLY this one file. Do not generate other files.
-
-File to generate: {fname}
-WCID: {wcid}
-Type: {ftype}
-Description: {fdesc}
-
-Other files in this sequence (for WCID cross-references if needed):
-{ref_ctx}
-
-EMOTE TRIGGER RULES — STRICTLY ENFORCED:
-Valid top-level emote triggers: Use, GotoSet, ReceiveTalkDirect, HeartBeat, Death,
-Give, Wield, UnWield, PickUp, Drop, Vendor, Activation, Taunt, WoundedTaunt,
-KillTaunt, NewEnemy, Scream, Homesick, ReceiveCritical, ResistSpell, HearChat,
-ReceiveLocalSignal.
-INVALID triggers that DO NOT EXIST — never use: ReceiveGive, ReceiveItem, OnKill,
-OnDeath, OnGive, QuestComplete, PlayerNear.
-Use Give: (not ReceiveGive) when an NPC receives an item. Inside Give:, use
-InqOwnsItems to check which specific item was given.
-
-Output the complete SQL for ONLY this file.
-Start with: /* ===== FILE: {fname} ===== */"""
-
-        self._generating = True
-        self._last_ai_response = ""
-        while not self._chunk_queue.empty():
-            try: self._chunk_queue.get_nowait()
-            except: break
 
         self.api_client.update_credentials(
             api_key=self.config.api_key,
@@ -375,55 +316,42 @@ Start with: /* ===== FILE: {fname} ===== */"""
             base_url=self.config.base_url,
         )
 
-        edit_ctx = (
-            f"EXISTING WEENIE SQL TO MODIFY:\n```sql\n{existing_sql[:8000]}\n```\n\n"
-            if existing_sql else ""
-        )
-        file_prompt = (
-            edit_ctx
-            + f"Generate the SQL for: {fdesc}\n"
-            + f"Original request: {original_prompt}\n"
-            + f"File name: {fname} | WCID: {wcid}"
-        )
-
-        def _file_done(text: str):
-            self._generating = False
-            save_result = {"success": False, "error": "Unknown error in _file_done"}
-            try:
-                text = self._process_emote_scripts(text)   # convert WeenieFab blocks → SQL
-                self._last_ai_response = text
-                save_result = self._save_single_file(text, fname)
-            except Exception as e:
-                print(f"[FILE] _file_done error (file {file_index+1}/{total}): {e}", flush=True)
-                save_result = {"success": False, "error": str(e)}
-            finally:
-                # Always queue file_done so the JS poll doesn't hang forever
-                self._chunk_queue.put({
-                    "type": "file_done",
-                    "file_index": file_index,
-                    "file_name": fname,
-                    "save": save_result,
-                    "total": total,
-                })
-                print(f"[FILE] {file_index+1}/{total} queued done: {fname}", flush=True)
-
-        def _file_gen_worker():
-            try:
-                self.api_client.stream_generate(
-                    system_prompt, file_prompt, self._on_chunk, _file_done, self._on_error
-                )
-            except Exception as e:
-                print(f"[FILE] Thread crashed: {e}", flush=True)
+        # Create or reuse the AgentLoop for this session.
+        # Reuse if plan hasn't changed (same session); reset if new plan.
+        current_summary = plan.get("summary", "")
+        if (self._agent_loop is None
+                or getattr(self._agent_loop, "_last_plan_summary", None) != current_summary
+                or file_index == 0):
+            def _clear_generating():
                 self._generating = False
-                self._chunk_queue.put({
-                    "type": "error",
-                    "message": f"File {file_index+1}/{total} thread crashed: {e}",
-                })
-        try:
-            threading.Thread(target=_file_gen_worker, daemon=True).start()
-        except Exception as e:
+            self._agent_loop = AgentLoop(
+                api_client=self.api_client,
+                skill_loader=self.skill_loader,
+                config=self.config,
+                chunk_queue=self._chunk_queue,
+                process_emote_scripts=self._process_emote_scripts,
+                save_file=self._save_single_file,
+                on_complete=_clear_generating,
+            )
+            self._agent_loop._last_plan_summary = current_summary
+
+        self._generating = True
+        # Clear stale chunks
+        while not self._chunk_queue.empty():
+            try: self._chunk_queue.get_nowait()
+            except: break
+
+        # Forward _generating state to the loop (it manages its own flag too)
+        started = self._agent_loop.run_file(
+            plan=plan,
+            file_index=file_index,
+            original_prompt=original_prompt,
+            editing_sql=existing_sql,
+        )
+        if not started:
             self._generating = False
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": "Agent loop already running."}
+
         return {"success": True}
 
     def _save_single_file(self, content: str, suggested_name: str) -> dict:
@@ -623,9 +551,15 @@ Start with: /* ===== FILE: {fname} ===== */"""
     def build_icon_cats(self):
         """Run generate_icon_cats.py and return result to JS."""
         import subprocess, sys, os, re
-        script = os.path.join(os.path.dirname(os.path.dirname(__file__)), "generate_icon_cats.py")
+        # In frozen exe mode __file__ is inside _MEIPASS (temp dir).
+        # The script lives beside the exe in the persistent install dir.
+        if getattr(sys, 'frozen', False):
+            exe_dir = os.path.dirname(sys.executable)
+        else:
+            exe_dir = os.path.dirname(os.path.dirname(__file__))
+        script = os.path.join(exe_dir, "generate_icon_cats.py")
         if not os.path.exists(script):
-            return {"ok": False, "error": "generate_icon_cats.py not found in ACEForge root."}
+            return {"ok": False, "error": f"generate_icon_cats.py not found in {exe_dir}"}
         try:
             result = subprocess.run(
                 [sys.executable, script],
@@ -640,6 +574,21 @@ Start with: /* ===== FILE: {fname} ===== */"""
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+
+    def get_icons_base_url(self) -> str:
+        """
+        Return the absolute filesystem path to the icons folder so the webview
+        can construct correct file:// URLs for icon images.
+        In frozen mode the icons live beside the exe, not inside _MEIPASS.
+        """
+        import sys
+        from pathlib import Path
+        if getattr(sys, 'frozen', False):
+            icons_dir = Path(sys.executable).parent / 'aceforge' / 'web' / 'icons'
+        else:
+            icons_dir = Path(__file__).parent / 'web' / 'icons'
+        # Return as a file:// URL string the browser can use directly
+        return icons_dir.as_uri()
 
     def get_library_status(self) -> list:
         """Return status of all installable content libraries."""
@@ -1367,6 +1316,8 @@ Start with: /* ===== FILE: {fname} ===== */"""
             )
 
     def stop_generation(self) -> dict:
+        if self._agent_loop:
+            self._agent_loop.stop()
         self._generating = False
         return {"success": True}
 
