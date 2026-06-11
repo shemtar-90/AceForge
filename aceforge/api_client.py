@@ -105,6 +105,9 @@ class APIClient:
             provider = PROVIDER_COMPATIBLE
             base_url = base_url.strip() or OLLAMA_BASE_URL
             api_key  = api_key or "ollama"
+        elif provider == PROVIDER_GROQ:
+            provider = PROVIDER_COMPATIBLE
+            base_url = base_url.strip() or GROQ_BASE_URL
         self._api_key  = api_key
         self._model    = model
         self._provider = provider
