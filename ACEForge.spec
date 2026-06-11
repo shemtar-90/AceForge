@@ -33,22 +33,39 @@ if icon_file.exists():
 print(f"[spec] Bundling {len(web_datas)} web file(s): {[d[0] for d in web_datas]}")
 print(f"[spec] Bundling {len(ref_datas)} reference file(s)")
 
+# Collect all submodules and data for packages that use dynamic imports
+from PyInstaller.utils.hooks import collect_all, collect_submodules
+openai_datas, openai_binaries, openai_hiddenimports = collect_all('openai')
+anthropic_datas, anthropic_binaries, anthropic_hiddenimports = collect_all('anthropic')
+httpx_datas, httpx_binaries, httpx_hiddenimports = collect_all('httpx')
+httpcore_datas, httpcore_binaries, httpcore_hiddenimports = collect_all('httpcore')
+
 a = Analysis(
     ['aceforge/main.py'],
     pathex=['.'],
-    binaries=[],
-    datas=ref_datas + web_datas + icon_datas,
+    binaries=openai_binaries + anthropic_binaries + httpx_binaries + httpcore_binaries,
+    datas=ref_datas + web_datas + icon_datas + openai_datas + anthropic_datas + httpx_datas + httpcore_datas,
     hiddenimports=[
         'anthropic',
         'openai',
+        'openai.resources',
+        'openai.resources.chat',
+        'openai.resources.chat.completions',
+        'openai._streaming',
+        'openai._client',
         'google.generativeai',
         'google.ai.generativelanguage_v1beta',
+        'httpx',
+        'httpcore',
+        'anyio',
+        'anyio.streams',
+        'anyio.streams.memory',
         'webview',
         'webview.platforms.winforms',
         'webview.platforms.edgechromium',
         'clr',
         'pythonnet',
-    ],
+    ] + openai_hiddenimports + anthropic_hiddenimports + httpx_hiddenimports + httpcore_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

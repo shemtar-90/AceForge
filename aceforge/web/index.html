@@ -654,6 +654,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
         <select id="sProvider" style="width:100%" onchange="onProviderChange()">
           <option value="anthropic">Anthropic (Claude)</option>
           <option value="google">Google AI Studio (Gemini) — Free Tier Available</option>
+          <option value="groq">Groq — Free Tier ⚡ Recommended</option>
           <option value="openai">OpenAI (GPT)</option>
           <option value="ollama">Ollama (Local — Free, No Key Required)</option>
           <option value="compatible">OpenAI-Compatible Endpoint</option>
@@ -7610,17 +7611,20 @@ const MODEL_HINTS={
   openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo'],
   compatible:['mistral-medium','mistral-small','llama-3-70b-instruct','mixtral-8x7b','gemma-7b-it','deepseek-chat','deepseek-coder'],
   ollama:['deepseek-r1:14b','deepseek-r1:7b','llama3.1:8b','llama3.1:70b','llama3.2:3b','mistral:7b','codellama:13b','phi3:medium'],
+  groq:['llama-3.3-70b-versatile','llama-3.1-70b-versatile','llama-3.1-8b-instant','mixtral-8x7b-32768','gemma2-9b-it'],
 };
 
 function onProviderChange(){
   const p=$('sProvider').value;
   const isOllama=p==='ollama';
   const isCompat=p==='compatible';
+  const isGroq=p==='groq';
   $('sBaseUrlField').style.display=(isOllama||isCompat)?'block':'none';
   $('sApiKeyField').style.display=isOllama?'none':'block';
   const note=$('sProviderNote');
   if(p==='google')note.innerHTML='✓ Free tier — get a key at <strong>aistudio.google.com/apikey</strong> &nbsp;·&nbsp; 15 req/min, 1,500/day on flash models';
   else if(isOllama)note.innerHTML='✓ Local &amp; free — no API key needed. <a href="https://ollama.com" style="color:var(--gold)">ollama.com</a> · Run <code>ollama pull deepseek-r1:14b</code> to get started';
+  else if(isGroq)note.innerHTML='✓ Free tier — get a key at <strong><a href="https://console.groq.com" style="color:var(--gold)">console.groq.com</a></strong> &nbsp;·&nbsp; 500K tokens/day free &nbsp;·&nbsp; Llama 3.3 70B runs at 300 tokens/sec &nbsp;·&nbsp; Best free option for ACEForge';
   else note.innerHTML='';
   const hints=MODEL_HINTS[p]||[];
   $('sModelHints').innerHTML=hints.map(m=>`<button onclick="setV('sModel','${m}');regen&&regen()" style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.05em;padding:4px 12px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:10px;margin:2px" onmouseover="this.style.borderColor='var(--crimson)';this.style.color='var(--crimson)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--ink-dim)'">${m}</button>`).join('');
@@ -7632,9 +7636,14 @@ function onProviderChange(){
     // Try to detect installed Ollama models
     detectOllamaModels();
   }
-  const dm={anthropic:'claude-sonnet-4-20250514',google:'gemini-2.5-flash',openai:'gpt-4o',compatible:'mistral-medium',ollama:'deepseek-r1:14b'};
+  // Groq has a fixed base URL — show in the note, no URL field needed
+  if(isGroq && window.pywebview){
+    // Pre-configure Groq base URL in backend automatically
+    window.pywebview.api.set_groq_base_url && window.pywebview.api.set_groq_base_url();
+  }
+  const dm={anthropic:'claude-sonnet-4-20250514',google:'gemini-2.5-flash',openai:'gpt-4o',compatible:'mistral-medium',ollama:'deepseek-r1:14b',groq:'llama-3.3-70b-versatile'};
   if(!$('sModel').value||Object.values(dm).includes($('sModel').value))setV('sModel',dm[p]||'');
-  const kh={anthropic:'sk-ant-…',google:'AIza… (from aistudio.google.com/apikey)',openai:'sk-…',compatible:'Your provider key (or any string for local models)',ollama:'(not required)'};
+  const kh={anthropic:'sk-ant-…',google:'AIza… (from aistudio.google.com/apikey)',openai:'sk-…',compatible:'Your provider key (or any string for local models)',ollama:'(not required)',groq:'gsk_… (from console.groq.com — free)'};
   $('sApiKey').placeholder=kh[p]||'API key';
 }
 

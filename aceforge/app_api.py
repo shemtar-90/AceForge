@@ -17,6 +17,7 @@ from .skill_loader import SkillLoader
 from .api_client import APIClient, KNOWN_ENDPOINTS, DEFAULT_MODELS
 from .sql_parser import parse_and_save_files
 from .ai.agent_loop import AgentLoop
+from .json_to_sql import extract_and_convert as _json_to_sql
 from .emote_parser import parse_emote_text
 
 
@@ -383,7 +384,7 @@ Count all of the above, then write that many entries in the files array."""
         fdesc  = file_entry.get("description", "")
         total  = len(files)
         server = self.config.server_name or "Shattered Dawn"
-        is_local = (self.config.get('provider','anthropic') == 'ollama'
+        is_local = (self.config.get('provider','anthropic') in ('ollama',)
                     or bool(self.config.get('ollama_mode', False)))
 
         # Other files in the plan for cross-reference context
@@ -392,29 +393,23 @@ Count all of the above, then write that many entries in the files array."""
             for i, f in enumerate(files) if i != file_index
         ) or "  (none)"
 
-        # Load the compact schema block — prepended first so model sees it fresh
+        # JSON schema prompt — replaces the large SKILL.md SQL prompt
         try:
             from pathlib import Path
             import sys
             _base = Path(sys._MEIPASS) if hasattr(sys, '_MEIPASS') else Path(__file__).parent
-            _schema_block = (_base / 'references' / 'schema_block.md').read_text(encoding='utf-8')
+            _json_schema = (_base / 'references' / 'ai_json_schema.md').read_text(encoding='utf-8')
+            _emote_fmt   = (_base / 'references' / 'emote_format.md').read_text(encoding='utf-8')
         except Exception:
-            _schema_block = ''
+            _json_schema = 'Output a JSON object describing the ACE content.'
+            _emote_fmt   = ''
 
-        try:
-            weenie_ctx = self._build_weenie_context(original_prompt, ftype)
-            _skill = self.skill_loader.build_system_prompt(
-                content_type=ftype,
-                server_name=server,
-                wcid_ranges=self.config.get_wcid_ranges(),
-                author=self.config.get("author", ""),
-                weenie_context=weenie_ctx,
-                is_local=is_local,
-            )
-            # Schema block first — critical rules before the large context
-            system = (_schema_block + '\n\n' + _skill) if _schema_block else _skill
-        except Exception:
-            system = (_schema_block + '\n\n' if _schema_block else '') + f"You are an ACEmulator SQL expert for {server}."
+        system = (
+            f'You are an ACEmulator content generator for the server "{server}".\n'
+            f'You output ONLY a JSON object. Never write SQL.\n\n'
+            + _json_schema
+            + ('\n\n' + _emote_fmt if _emote_fmt else '')
+        )
 
         system += f"""
 
@@ -434,11 +429,11 @@ Start with: /* ===== FILE: {fname} ===== */
             if existing_sql else ""
         )
         user = (
-            f"{edit_ctx}Generate SQL for: {fdesc}\n"
+            f"{edit_ctx}"
+            f"Generate a JSON object for: {fdesc}\n"
             f"Original request: {original_prompt}\n"
-            f"WCID: {wcid}\n\n"
-            f"REMINDER: weenie table has EXACTLY 4 columns (class_Id, class_Name, type, last_Modified). "
-            f"Only insert property rows this weenie actually needs. Stop when complete."
+            f"WCID: {wcid} | File: {fname}\n"
+            f"Output ONLY the JSON object. No SQL. No explanations."
         )
 
         self.api_client.update_credentials(
@@ -456,7 +451,12 @@ Start with: /* ===== FILE: {fname} ===== */
         def _done(text: str):
             self._generating = False
             try:
-                sql = self._process_emote_scripts(text)
+                # Convert JSON output to SQL, then run emote YAML conversion
+                sql = _json_to_sql(text, fname)
+                if not sql.strip():
+                    # Fallback: treat as raw SQL if no JSON found
+                    sql = text
+                sql = self._process_emote_scripts(sql)
                 save = self._save_single_file(sql, fname)
             except Exception as e:
                 save = {"success": False, "error": str(e)}
@@ -706,6 +706,11 @@ Start with: /* ===== FILE: {fname} ===== */
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+
+    def set_groq_base_url(self) -> dict:
+        """Pre-configure the Groq base URL in config — called when user selects Groq provider."""
+        self.config.set('base_url', GROQ_BASE_URL)
+        return {'ok': True, 'url': GROQ_BASE_URL}
 
     def get_icons_base_url(self) -> str:
         """

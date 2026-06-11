@@ -20,8 +20,10 @@ PROVIDER_GOOGLE     = "google"
 PROVIDER_OPENAI     = "openai"
 PROVIDER_COMPATIBLE = "compatible"
 PROVIDER_OLLAMA     = "ollama"   # local Ollama — maps to compatible at localhost:11434/v1
+PROVIDER_GROQ       = "groq"     # Groq cloud — free tier, maps to compatible
 
 OLLAMA_BASE_URL = "http://localhost:11434/v1"
+GROQ_BASE_URL   = "https://api.groq.com/openai/v1"
 
 KNOWN_ENDPOINTS = {
     "OpenAI (default)":  "https://api.openai.com/v1",
@@ -40,6 +42,7 @@ DEFAULT_MODELS = {
     PROVIDER_OPENAI:     "gpt-4o",
     PROVIDER_COMPATIBLE: "mistral-medium",
     PROVIDER_OLLAMA:     "deepseek-r1:14b",
+    PROVIDER_GROQ:       "llama-3.3-70b-versatile",
 }
 
 # Model suggestions shown as quick-fill buttons in Settings
@@ -80,6 +83,13 @@ MODEL_SUGGESTIONS = {
         "codellama:13b",
         "phi3:medium",
     ],
+    PROVIDER_GROQ: [
+        "llama-3.3-70b-versatile",   # best free model — recommended
+        "llama-3.1-70b-versatile",   # also excellent
+        "llama-3.1-8b-instant",      # fastest, good for simple content
+        "mixtral-8x7b-32768",        # high context window
+        "gemma2-9b-it",              # Google Gemma 2 — free
+    ],
 }
 
 
@@ -114,6 +124,9 @@ class APIClient:
             provider = PROVIDER_COMPATIBLE
             base_url = base_url.strip() or OLLAMA_BASE_URL
             api_key  = api_key or "ollama"  # Ollama ignores the key; must be non-empty
+        elif provider == PROVIDER_GROQ:
+            provider = PROVIDER_COMPATIBLE
+            base_url = base_url.strip() or GROQ_BASE_URL
         self._api_key  = api_key
         self._model    = model
         self._provider = provider
@@ -330,6 +343,7 @@ class APIClient:
                 and self._base_url
                 and ("localhost" in self._base_url or "127.0.0.1" in self._base_url
                      or "ollama" in self._base_url.lower())
+                and "groq" not in self._base_url.lower()  # Groq uses compat but not Ollama options
             )
             if is_ollama:
                 kwargs["extra_body"] = {
@@ -359,7 +373,11 @@ class APIClient:
                     on_chunk(text)
             on_done("".join(full))
         except ImportError:
-            on_error("openai package not installed. Run: pip install openai")
+            on_error(
+                "openai package missing from this build. "
+                "Please report this at github.com/aceforge — include your ACEForge version. "
+                "Workaround: install Python separately and run: pip install openai"
+            )
         except openai.AuthenticationError:
             on_error("Invalid API key. Check your key in Settings.")
         except openai.NotFoundError as e:

@@ -24,6 +24,8 @@ import re
 import json
 import threading
 from typing import Callable, Optional
+import sys as _sys
+from pathlib import Path as _Path
 
 
 # ── SQL structure checks ──────────────────────────────────────────────────────
@@ -185,8 +187,23 @@ class AgentLoop:
         wcid  = file_entry.get("wcid", 800000)
         fdesc = file_entry.get("description", "")
 
+        # Import converter here to avoid circular import at module level
         try:
-            sql = self._generate_with_continuation(file_index, file_entry, total)
+            from aceforge.json_to_sql import extract_and_convert as _j2s
+        except ImportError:
+            try:
+                from json_to_sql import extract_and_convert as _j2s
+            except ImportError:
+                _j2s = None
+
+        try:
+            raw = self._generate_with_continuation(file_index, file_entry, total)
+            if _j2s:
+                sql = _j2s(raw, fname)
+                if not sql.strip():
+                    sql = raw  # fallback to raw if no JSON found
+            else:
+                sql = raw
         except Exception as e:
             self._generating = False
             self._queue.put({
@@ -297,16 +314,17 @@ class AgentLoop:
         fdesc = file_entry.get("description", "")
         server_name = self._config.server_name or "Shattered Dawn"
 
-        # Load compact schema block
+        # Load JSON schema prompt
         try:
-            from pathlib import Path
-            import sys as _sys
-            _base = Path(_sys._MEIPASS) if hasattr(_sys, '_MEIPASS') else Path(__file__).parent.parent
-            _schema_block = (_base / 'references' / 'schema_block.md').read_text(encoding='utf-8')
+            _base = (_Path(_sys._MEIPASS) if hasattr(_sys, '_MEIPASS')
+                     else _Path(__file__).parent.parent)
+            _json_schema = (_base / 'references' / 'ai_json_schema.md').read_text(encoding='utf-8')
+            _emote_fmt   = (_base / 'references' / 'emote_format.md').read_text(encoding='utf-8')
         except Exception:
-            _schema_block = ''
+            _json_schema = 'Output a JSON object describing the ACE content.'
+            _emote_fmt   = ''
 
-        # Base skill system prompt for this content type
+        # Base skill system prompt — now JSON-based
         try:
             weenie_ctx = self._build_weenie_context(self._orig_prompt, ftype)
             _is_local = (self._config.get('provider','anthropic') == 'ollama'
@@ -320,11 +338,15 @@ class AgentLoop:
                 is_local=_is_local,
             )
         except Exception:
-            skill_sys = f"You are an ACEmulator SQL expert for {server_name}."
+            pass
 
-        # Prepend schema block so critical rules appear before large context
-        if _schema_block:
-            skill_sys = _schema_block + '\n\n' + skill_sys
+        # Build JSON-based system prompt
+        skill_sys = (
+            f'You are an ACEmulator content generator for the server "{server_name}".\n'
+            f'You output ONLY a JSON object. Never write SQL.\n\n'
+            + _json_schema
+            + ('\n\n' + _emote_fmt if _emote_fmt else '')
+        )
 
         # Other files in the plan (cross-reference context)
         other_files_ctx = "\n".join(
@@ -389,11 +411,10 @@ Use these exact class_name values when referencing these WCIDs in emotes, create
         )
         return (
             f"{edit_ctx}"
-            f"Generate the SQL for: {fdesc}\n"
+            f"Generate a JSON object for: {fdesc}\n"
             f"Original request: {self._orig_prompt}\n"
-            f"File: {fname} | WCID: {wcid}\n\n"
-            f"REMINDER: weenie table has EXACTLY 4 columns (class_Id, class_Name, type, last_Modified). "
-            f"Only insert property rows this weenie actually needs. Stop when complete."
+            f"File: {fname} | WCID: {wcid}\n"
+            f"Output ONLY the JSON object. No SQL. No explanations."
         )
 
     def _stream_blocking(self, system: str, user: str) -> str:
