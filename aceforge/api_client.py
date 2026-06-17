@@ -14,6 +14,20 @@ Get a free Google AI Studio key at: https://aistudio.google.com/apikey
 
 from typing import Callable
 
+# Runtime openai check — attempts silent pip install if missing in exe builds.
+try:
+    import openai as _oa  # noqa: F401
+except ImportError:
+    try:
+        import subprocess as _sp, sys as _sys
+        _sp.check_call(
+            [_sys.executable, "-m", "pip", "install", "openai>=1.30.0", "--quiet"],
+            stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+        )
+    except Exception:
+        pass  # ImportError surfaces at call time with a user-friendly message
+
+
 
 PROVIDER_ANTHROPIC  = "anthropic"
 PROVIDER_GOOGLE     = "google"
@@ -176,6 +190,18 @@ class APIClient:
             return False, _friendly_error(e, "google")
 
     def _validate_openai_compat(self) -> tuple[bool, str]:
+        # Safety: if Groq key detected but no base URL, auto-set Groq endpoint
+        if not self._base_url and self._api_key and self._api_key.startswith('gsk_'):
+            self._base_url = GROQ_BASE_URL
+
+        # For Groq: validate by key format only — no live API call.
+        # Groq free tier has tight request limits (30 RPM, 1000 RPD).
+        # Spending a request on validation wastes quota and can trigger 429s.
+        if self._api_key and self._api_key.startswith('gsk_'):
+            if len(self._api_key) < 20:
+                return False, "Groq API key looks too short. Get your key at console.groq.com"
+            return True, ""  # Key format valid — no live call needed
+
         try:
             import openai
             client = self._build_openai_client()
@@ -320,6 +346,9 @@ class APIClient:
             on_error(_friendly_error(e, "google"))
 
     def _stream_openai_compat(self, system, user, on_chunk, on_done, on_error, temperature=0.7):
+        # Safety: if this is a Groq key (gsk_) with no base URL, force the Groq endpoint
+        if not self._base_url and self._api_key and self._api_key.startswith('gsk_'):
+            self._base_url = GROQ_BASE_URL
         try:
             import openai
             client = self._build_openai_client()
@@ -383,8 +412,26 @@ class APIClient:
             )
         except openai.AuthenticationError:
             on_error("Invalid API key. Check your key in Settings.")
+        except openai.RateLimitError as e:
+            is_groq = self._base_url and 'groq' in self._base_url.lower()
+            if is_groq:
+                on_error(
+                    "Groq rate limit reached. Free tier: 30 requests/min, 1,000 requests/day, "
+                    "12,000 tokens/min for llama-3.3-70b-versatile. "
+                    "Wait 60 seconds and try again, or switch to llama-3.1-8b-instant (higher TPM)."
+                )
+            else:
+                on_error(f"Rate limit exceeded. Wait a moment and try again. ({_friendly_error(e, 'openai')})") 
         except openai.NotFoundError as e:
-            on_error(f"Model not found: '{self._model}'. Check the model name for your provider.")
+            # Diagnose likely causes
+            url = self._base_url or '(none — defaulting to OpenAI)'
+            if 'openai.com' in url.lower() or not self._base_url:
+                on_error(
+                    f"Model not found — base URL is '{url}'. "
+                    f"For Groq, set base URL to: https://api.groq.com/openai/v1 in Settings → OpenAI-Compatible Endpoint."
+                )
+            else:
+                on_error(f"Model '{self._model}' not found at {url}. Check the model name for your provider.")
         except Exception as e:
             on_error(_friendly_error(e, "openai"))
 

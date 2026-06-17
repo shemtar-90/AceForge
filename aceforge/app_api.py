@@ -14,10 +14,11 @@ from datetime import datetime
 
 from .config import Config
 from .skill_loader import SkillLoader
-from .api_client import APIClient, KNOWN_ENDPOINTS, DEFAULT_MODELS
+from .api_client import APIClient, KNOWN_ENDPOINTS, DEFAULT_MODELS, GROQ_BASE_URL, OLLAMA_BASE_URL
 from .sql_parser import parse_and_save_files
 from .ai.agent_loop import AgentLoop
 from .json_to_sql import extract_and_convert as _json_to_sql
+from .quest_templates import get_all_templates, get_template_fields, run_template
 from .emote_parser import parse_emote_text
 
 
@@ -129,7 +130,11 @@ class AppAPI(LoreMixin):
             out_path.mkdir(parents=True, exist_ok=True)
 
             safe_name = name.lower().replace(" ", "_").replace("'", "")[:40]
-            filename  = f"{wcid} {name}.sql"
+            # If name is already a .sql filename (from import), use it directly
+            if name.lower().endswith('.sql'):
+                filename = name
+            else:
+                filename = f"{wcid} {name}.sql"
             fpath     = out_path / filename
             fpath.write_text(sql_text, encoding="utf-8")
             return {"success": True, "path": str(fpath), "filename": filename}
@@ -644,412 +649,88 @@ Start with: /* ===== FILE: {fname} ===== */
         except Exception as e:
             return {"error": str(e)}
 
-    def get_icons_data(self) -> list:
+    # ── Quest Templates ──────────────────────────────────────────────────
+
+    def get_quest_templates(self) -> list:
+        """Return list of available quest templates for the UI."""
+        return get_all_templates()
+
+    def get_quest_template_fields(self, template_id: str) -> list:
+        """Return field definitions for a specific template."""
+        return get_template_fields(template_id)
+
+    def generate_quest_template(self, template_id: str, params_json: str) -> dict:
         """
-        Return the ICONS array from icons.js for the icon picker.
-        In frozen (.exe) mode sys._MEIPASS is a temp dir that changes each run,
-        so we read from the persistent directory beside the executable instead.
+        Deterministically generate all SQL files for a quest template.
+        Returns {success, files: [{filename, sql, type}], error}
         """
-        import sys, json, re
-        from pathlib import Path
-
-        # Persistent base: next to the .exe when frozen, or next to this file in dev
-        if getattr(sys, 'frozen', False):
-            persistent_base = Path(sys.executable).parent / 'aceforge'
-        else:
-            persistent_base = Path(__file__).parent
-
-        icons_js = persistent_base / 'web' / 'icons.js'
-
-        # Also check next to the exe directly (some install layouts)
-        if not icons_js.exists():
-            icons_js = Path(sys.executable).parent / 'aceforge' / 'web' / 'icons.js'
-        if not icons_js.exists():
-            icons_js = Path(sys.executable).parent / 'web' / 'icons.js'
-
-        if not icons_js.exists():
-            return []
-
         try:
-            text = icons_js.read_text(encoding='utf-8', errors='ignore')
-            # Extract the array literal: const ICONS = [...];
-            m = re.search(r'(?:const|var|let)\s+ICONS\s*=\s*(\[.*?\])\s*;?\s*$', text, re.DOTALL)
-            if m:
-                return json.loads(m.group(1))
-            return []
-        except Exception:
-            return []
-
-    def build_icon_cats(self):
-        """Run generate_icon_cats.py and return result to JS."""
-        import subprocess, sys, os, re
-        # In frozen exe mode __file__ is inside _MEIPASS (temp dir).
-        # The script lives beside the exe in the persistent install dir.
-        if getattr(sys, 'frozen', False):
-            exe_dir = os.path.dirname(sys.executable)
-        else:
-            exe_dir = os.path.dirname(os.path.dirname(__file__))
-        script = os.path.join(exe_dir, "generate_icon_cats.py")
-        if not os.path.exists(script):
-            return {"ok": False, "error": f"generate_icon_cats.py not found in {exe_dir}"}
-        try:
-            result = subprocess.run(
-                [sys.executable, script],
-                capture_output=True, text=True, timeout=120,
-            )
-            if result.returncode != 0:
-                return {"ok": False, "error": result.stderr.strip() or result.stdout.strip()}
-            m = re.search(r"Unique icon DIDs: (\d+)", result.stdout)
-            return {"ok": True, "count": int(m.group(1)) if m else 0}
-        except subprocess.TimeoutExpired:
-            return {"ok": False, "error": "Timed out after 120 seconds."}
+            params = json.loads(params_json)
         except Exception as e:
-            return {"ok": False, "error": str(e)}
+            return {"success": False, "error": f"Invalid params: {e}", "files": []}
 
+        # Enrich item descriptions with emote hints for the AI
+        params = self._enrich_item_descriptions(params)
+
+        try:
+            files = run_template(template_id, params, self.config)
+            # Process emote scripts in each file
+            for f in files:
+                f["sql"] = self._process_emote_scripts(f["sql"])
+            return {"success": True, "files": files, "error": None}
+        except Exception as e:
+            import traceback
+            return {"success": False, "error": str(e), "files": [],
+                    "traceback": traceback.format_exc()}
+
+    def _enrich_item_descriptions(self, params: dict) -> dict:
+        """
+        Scan all reward_N_desc and ms_stageN_reward_M_desc fields.
+        If a description contains emote trigger keywords (Use, Wield, Unwield,
+        Pickup, Drop), append a structured hint so the AI generates the
+        correct WeenieFab emote YAML for that item.
+        """
+        import re
+        EMOTE_KEYWORDS = {
+            r'\bon\s+use\b':      'Use',
+            r'\bon\s+wield\b':    'Wield',
+            r'\bon\s+unwield\b':  'Unwield',
+            r'\bon\s+pickup\b':   'Pickup',
+            r'\bon\s+drop\b':     'Drop',
+            r'\bwhen\s+used\b':   'Use',
+            r'\bwhen\s+wielded\b':'Wield',
+            r'\bwhen\s+picked\b': 'Pickup',
+            r'\bwhen\s+dropped\b':'Drop',
+        }
+        EMOTE_HINT = (
+            ' [ACE EMOTE REQUIRED: Generate a WeenieFab emote YAML block '
+            'for trigger {trigger} that implements: {action}. '
+            'Use valid ACE emote actions: AwardXP, AwardLuminance, CastSpell, '
+            'Tell, Give, TakeItems, DestroyInventoryItem, InqIntStat, InqBoolStat, '
+            'SetIntStat, Motion, Sound, Spawn, FinishBarber, or compound sequences. '
+            'Output the emote block appended after the item SQL.]'
+        )
+        enriched = dict(params)
+        for key, val in params.items():
+            if not key.endswith('_desc') or not isinstance(val, str):
+                continue
+            val_lower = val.lower()
+            for pattern, trigger in EMOTE_KEYWORDS.items():
+                if re.search(pattern, val_lower):
+                    hint = EMOTE_HINT.format(trigger=trigger, action=val)
+                    if hint not in val:
+                        enriched[key] = val + hint
+                    break  # one hint per item
+        return enriched
+
+    def save_quest_file(self, filename: str, sql: str) -> dict:
+        """Save a single quest template output file."""
+        return self._save_single_file(sql, filename)
 
     def set_groq_base_url(self) -> dict:
         """Pre-configure the Groq base URL in config — called when user selects Groq provider."""
         self.config.set('base_url', GROQ_BASE_URL)
         return {'ok': True, 'url': GROQ_BASE_URL}
-
-    def get_icons_base_url(self) -> str:
-        """
-        Return the absolute filesystem path to the icons folder so the webview
-        can construct correct file:// URLs for icon images.
-        In frozen mode the icons live beside the exe, not inside _MEIPASS.
-        """
-        import sys
-        from pathlib import Path
-        if getattr(sys, 'frozen', False):
-            icons_dir = Path(sys.executable).parent / 'aceforge' / 'web' / 'icons'
-        else:
-            icons_dir = Path(__file__).parent / 'web' / 'icons'
-        # Return as a file:// URL string the browser can use directly
-        return icons_dir.as_uri()
-
-    def get_library_status(self) -> list:
-        """Return status of all installable content libraries."""
-        import json
-        from pathlib import Path
-
-        base = Path(__file__).parent
-        refs = base / "references"
-        web  = base / "web"
-
-        libraries = [
-            {
-                "id":     "icons",
-                "name":   "Icon Library",
-                "file":   str(web / "icons.js"),
-                "check":  web / "icons.js",
-                "hint":   "icons.js — contains all game icon DIDs",
-            },
-            {
-                "id":     "weenies",
-                "name":   "Weenie Database",
-                "file":   str(refs / "weenie_index.json"),
-                "check":  refs / "weenie_index.json",
-                "hint":   "weenie_index.json — 29,569 base-game weenie entries",
-            },
-        ]
-
-        result = []
-        for lib in libraries:
-            loaded  = lib["check"].exists()
-            count   = ""
-            if loaded:
-                try:
-                    text = lib["check"].read_text(encoding="utf-8", errors="replace")
-                    if lib["id"] == "icons":
-                        # Count entries — icons.js uses "], [" separator
-                        n = text.count("], [") + text.count("],[") + 1
-                        count = f"{n:,} icons loaded"
-                    elif lib["id"] == "weenies":
-                        data = json.loads(text)
-                        count = f"{len(data):,} weenies loaded"
-                except Exception:
-                    count = "loaded"
-            result.append({
-                "id":     lib["id"],
-                "name":   lib["name"],
-                "loaded": loaded,
-                "status": count if loaded else f"Not installed — load {lib['hint']}",
-            })
-
-        return result
-
-    def browse_and_load_index(self) -> dict:
-        """
-        Open OS file browser. Accepts:
-          - ACEForge_Icons.zip    → extracts icons.js + icons/ to web/
-          - ACEForge_WeenieDB.zip → extracts weenie_index.json + weenies/ to references/
-          - icons.js              → copies to web/
-          - weenie_index.json     → copies to references/ (+ adjacent weenies/ folder)
-        Future index types: add a LIBRARY_MAP entry and a handler block below.
-        """
-        import shutil, zipfile, json, io
-        from pathlib import Path
-
-        if not self._window:
-            return {"success": False, "error": "No window available"}
-
-        try:
-            import webview
-            result = self._window.create_file_dialog(
-                webview.OPEN_DIALOG,
-                allow_multiple=False,
-                file_types=(
-                    "ACEForge Packages (*.zip;*.js;*.json)",
-                    "Zip Package (*.zip)",
-                    "All Files (*.*)",
-                ),
-            )
-        except Exception as e:
-            return {"success": False, "error": f"File dialog error: {e}"}
-
-        if not result:
-            return {"success": False, "cancelled": True}
-
-        src_path = Path(result[0])
-        if not src_path.exists():
-            return {"success": False, "error": "Selected file not found"}
-
-        base  = Path(__file__).parent
-        fname = src_path.name.lower()
-
-        # ── ZIP PACKAGE — auto-extract to correct locations ────────────────
-        if fname.endswith(".zip"):
-            try:
-                with zipfile.ZipFile(src_path, "r") as zf:
-                    names = zf.namelist()
-
-                    # Detect package type from zip contents
-                    has_icons_js      = any(n.endswith("icons.js")          for n in names)
-                    has_weenie_index  = any(n.endswith("weenie_index.json") for n in names)
-                    has_icon_pngs     = any("/icons/" in n or n.startswith("icons/") for n in names)
-                    has_weenie_sql    = any("/weenies/" in n or n.startswith("weenies/") for n in names)
-
-                    if not has_icons_js and not has_weenie_index:
-                        return {"success": False,
-                                "error": "Zip not recognized. Expected ACEForge_Icons.zip or ACEForge_WeenieDB.zip."}
-
-                    # ── ICONS PACKAGE ──────────────────────────────────────
-                    if has_icons_js:
-                        # Use persistent dir (beside .exe) so files survive restarts
-                        import sys as _sys
-                        if getattr(_sys, "frozen", False):
-                            _persistent = Path(_sys.executable).parent / "aceforge"
-                        else:
-                            _persistent = Path(__file__).parent
-                        web_dir  = _persistent / "web"
-                        icon_dst = web_dir / "icons"
-                        icon_dst.mkdir(parents=True, exist_ok=True)
-                        extracted = 0
-                        png_members = [m for m in names
-                                       if "/icons/" in m.lower() or m.lower().startswith("icons/")]
-                        total_pngs = len(png_members)
-                        # First pass: extract icons.js
-                        for member in names:
-                            if member.lower().endswith("icons.js"):
-                                (web_dir / "icons.js").write_bytes(zf.read(member))
-                                self._lib_progress(f"Installing icon library…", 0, total_pngs)
-                                break
-                        # Second pass: extract PNGs with progress
-                        for member in png_members:
-                            pname = Path(member).name
-                            if pname.endswith(".png"):
-                                (icon_dst / pname).write_bytes(zf.read(member))
-                                extracted += 1
-                                if extracted % 500 == 0 or extracted == total_pngs:
-                                    self._lib_progress(
-                                        f"Installing icons… {extracted:,} / {total_pngs:,}",
-                                        extracted, total_pngs
-                                    )
-                        self._lib_progress("Icon library ready", total_pngs, total_pngs)
-                        return {"success": True,
-                                "message": f"Icon library installed — {extracted:,} icons"}
-
-                    # ── WEENIE DATABASE PACKAGE ────────────────────────────
-                    if has_weenie_index:
-                        refs_dir   = base / "references"
-                        weenie_dst = refs_dir / "weenies"
-                        refs_dir.mkdir(parents=True, exist_ok=True)
-                        weenie_dst.mkdir(parents=True, exist_ok=True)
-                        count = 0
-                        sql_count = 0
-                        # Pre-count SQL members for progress
-                        sql_members = [m for m in names
-                                       if not m.endswith("/") and (
-                                           "weenie_index.json" in m or
-                                           m.endswith(".sql")
-                                       )]
-                        total = len(sql_members)
-                        processed = 0
-                        self._lib_progress("Installing weenie database…", 0, total)
-
-                        for member in names:
-                            if member.endswith("/"):
-                                continue
-                            pobj = Path(member)
-                            parts = pobj.parts
-                            rel = None
-                            for i, p in enumerate(parts):
-                                if p == "weenie_index.json" or p == "weenies":
-                                    rel = Path(*parts[i:])
-                                    break
-                            if rel is None:
-                                continue
-                            data = zf.read(member)
-                            dst  = refs_dir / rel
-                            dst.parent.mkdir(parents=True, exist_ok=True)
-                            dst.write_bytes(data)
-                            if rel.name == "weenie_index.json":
-                                try:
-                                    count = len(json.loads(data.decode("utf-8", errors="replace")))
-                                except Exception:
-                                    pass
-                            elif rel.name.endswith(".sql"):
-                                sql_count += 1
-                            processed += 1
-                            if processed % 1000 == 0 or processed == total:
-                                self._lib_progress(
-                                    f"Installing weenies… {processed:,} / {total:,}",
-                                    processed, total
-                                )
-                        try:
-                            self.skill_loader._load_weenie_index()
-                        except Exception:
-                            pass
-                        self._lib_progress("Weenie database ready", total, total)
-                        extra = f" + {sql_count:,} SQL files" if sql_count else ""
-                        return {"success": True,
-                                "message": f"Weenie database installed — {count:,} entries{extra}"}
-
-            except zipfile.BadZipFile:
-                return {"success": False, "error": "Invalid zip file."}
-            except Exception as e:
-                return {"success": False, "error": f"Extraction failed: {e}"}
-
-        # ── INDIVIDUAL FILES (fallback for direct file loading) ────────────
-        elif fname == "icons.js":
-            snippet = src_path.read_bytes()[:500].decode("utf-8", errors="replace")
-            if "ICONS" not in snippet:
-                return {"success": False, "error": "Not a valid icons.js file."}
-            shutil.copy2(src_path, base / "web" / "icons.js")
-            return {"success": True, "message": "Icon index installed (icons.js)"}
-
-        elif fname == "weenie_index.json":
-            try:
-                data = json.loads(src_path.read_text(encoding="utf-8", errors="replace"))
-                if not isinstance(data, list) or not data or "w" not in data[0]:
-                    raise ValueError("wrong format")
-                count = len(data)
-            except Exception:
-                return {"success": False,
-                        "error": "Not a valid weenie_index.json — expected [{w,n,c,t,f},...]."}
-            refs = base / "references"
-            refs.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src_path, refs / "weenie_index.json")
-            # Copy adjacent weenies/ folder if present
-            weenies_src = src_path.parent / "weenies"
-            extra = ""
-            if weenies_src.exists():
-                weenies_dst = refs / "weenies"
-                if weenies_dst.exists():
-                    shutil.rmtree(weenies_dst)
-                shutil.copytree(weenies_src, weenies_dst)
-                extra = " + weenies folder"
-            try:
-                self.skill_loader._load_weenie_index()
-            except Exception:
-                pass
-            return {"success": True, "message": f"Weenie database installed — {count:,} entries{extra}"}
-
-        else:
-            return {"success": False,
-                    "error": f"Unrecognized file: '{src_path.name}'. "
-                             "Select an ACEForge_Icons.zip or ACEForge_WeenieDB.zip package."}
-
-    def unload_library(self, lib_id: str) -> dict:
-        """Remove an installed content library."""
-        import shutil
-        from pathlib import Path
-
-        base  = Path(__file__).parent
-        paths = {
-            "icons":   [base / "web" / "icons.js"],
-            "weenies": [base / "references" / "weenie_index.json",
-                        base / "references" / "weenies"],
-        }
-        targets = paths.get(lib_id, [])
-        if not targets:
-            return {"success": False, "error": f"Unknown library: {lib_id}"}
-
-        for p in targets:
-            try:
-                if p.is_dir():
-                    shutil.rmtree(p)
-                elif p.exists():
-                    p.unlink()
-            except Exception as e:
-                return {"success": False, "error": str(e)}
-
-        # Reload weenie index (now empty)
-        if lib_id == "weenies":
-            try:
-                self.skill_loader._weenie_index = None
-            except Exception:
-                pass
-
-        return {"success": True}
-
-    # ── Auto-Update ────────────────────────────────────────────────────────────
-
-    APP_VERSION = "1.9.2"
-    GITHUB_REPO = "shemtar-90/AceForge"
-
-    def check_for_update(self) -> dict:
-        """
-        Check GitHub releases API for a newer version.
-        Returns {has_update, latest_version, current_version, download_url, release_notes}
-        """
-        import urllib.request, json as _json
-        try:
-            url = f"https://api.github.com/repos/{self.GITHUB_REPO}/releases/latest"
-            req = urllib.request.Request(url, headers={"User-Agent": "ACEForge-Updater/1.0"})
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = _json.loads(resp.read())
-            
-            latest_tag  = data.get("tag_name", "").lstrip("v")
-            release_name = data.get("name", latest_tag)
-            body        = data.get("body", "")[:500]
-            
-            # Find the main zip asset
-            assets = data.get("assets", [])
-            dl_url = next(
-                (a["browser_download_url"] for a in assets
-                 if a["name"].lower().endswith(".zip") and "weenie" not in a["name"].lower()
-                 and "icon" not in a["name"].lower()),
-                data.get("zipball_url", "")
-            )
-            
-            # Semantic version compare
-            def vparse(v):
-                try: return tuple(int(x) for x in v.split("."))
-                except: return (0,)
-            
-            has_update = vparse(latest_tag) > vparse(self.APP_VERSION)
-            
-            return {
-                "has_update":      has_update,
-                "current_version": self.APP_VERSION,
-                "latest_version":  latest_tag,
-                "release_name":    release_name,
-                "release_notes":   body,
-                "download_url":    dl_url,
-            }
-        except Exception as e:
-            return {"has_update": False, "error": str(e), "current_version": self.APP_VERSION}
 
     def download_and_install_update(self, download_url: str) -> dict:
         """
@@ -1549,8 +1230,270 @@ Start with: /* ===== FILE: {fname} ===== */
         return {"items": items, "generating": self._generating}
 
 
+    APP_VERSION = "1.0.0"
+
     def get_version(self) -> str:
-        return "2.1.polling"
+        return self.APP_VERSION
+
+    def check_for_update(self) -> dict:
+        """Check GitHub releases for a newer version of ACEForge."""
+        import urllib.request, json as _json
+        try:
+            url = "https://api.github.com/repos/shemtar-90/aceforge/releases/latest"
+            req = urllib.request.Request(url,
+                headers={"User-Agent": "ACEForge/" + self.APP_VERSION,
+                         "Accept": "application/vnd.github+json"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                data = _json.loads(r.read().decode())
+            latest = data.get("tag_name", "").lstrip("v")
+            notes  = data.get("body", "")
+            assets = data.get("assets", [])
+            dl_url = next((a["browser_download_url"] for a in assets
+                           if a["name"].endswith(".zip")), "")
+            def _ver(v):
+                try: return tuple(int(x) for x in v.split("."))
+                except: return (0,)
+            has_update = bool(latest) and _ver(latest) > _ver(self.APP_VERSION)
+            return {"has_update": has_update,
+                    "latest_version": latest,
+                    "current_version": self.APP_VERSION,
+                    "release_notes": notes,
+                    "download_url": dl_url}
+        except Exception as e:
+            return {"has_update": False, "error": str(e),
+                    "current_version": self.APP_VERSION}
+
+    def convert_json_to_sql(self, json_text: str, filename: str = "") -> dict:
+        """Convert ACE JSON weenie data to ACE-World SQL."""
+        try:
+            from aceforge.json_to_sql import extract_and_convert
+            sql = extract_and_convert(json_text, filename)
+            if not sql:
+                return {"error": "No SQL generated — check JSON format."}
+            return {"sql": sql}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def convert_sql_to_json(self, sql_text: str) -> dict:
+        """Convert ACE-World SQL weenie INSERT statements back to ACE JSON format."""
+        import re, json as _json
+        try:
+            sql = sql_text.strip()
+
+            def _clean_val(v):
+                v = v.strip()
+                if v.upper() == "NULL": return None
+                if v.startswith("'") and v.endswith("'"): return v[1:-1].replace("''", "'")
+                try: return int(v)
+                except ValueError: pass
+                try: return float(v)
+                except ValueError: pass
+                return v
+
+            def _parse_insert(sql_block):
+                """Parse a single INSERT statement into {col: val} dict."""
+                col_m = re.search(r"INSERT INTO `[^`]+`\s*\(([^)]+)\)", sql_block, re.I)
+                val_m = re.search(r"VALUES\s*\(([^;]+?)\)\s*;?", sql_block, re.I | re.S)
+                if not col_m or not val_m: return {}
+                cols = [c.strip().strip('`') for c in col_m.group(1).split(',')]
+                # Quote-aware CSV split
+                raw = val_m.group(1)
+                vals, cur, depth, in_q = [], '', 0, False
+                for ch in raw:
+                    if in_q:
+                        if ch == "'": in_q = False
+                        cur += ch
+                    elif ch == "'": in_q = True; cur += ch
+                    elif ch == ',' and depth == 0: vals.append(cur.strip()); cur = ''
+                    else: cur += ch
+                if cur.strip(): vals.append(cur.strip())
+                return {cols[i]: _clean_val(vals[i]) for i in range(min(len(cols), len(vals)))}
+
+            # Parse all INSERT statements
+            inserts = re.findall(
+                r"INSERT INTO `([^`]+)`[^;]+;",
+                re.sub(r"--[^\n]*", "", sql),
+                re.I | re.S
+            )
+            all_rows = {}
+            for m in re.finditer(r"INSERT INTO `([^`]+)`([^;]+);", re.sub(r"--[^\n]*","",sql), re.I|re.S):
+                table = m.group(1).lower()
+                row = _parse_insert("INSERT INTO `" + m.group(1) + "`" + m.group(2) + ";")
+                if table not in all_rows: all_rows[table] = []
+                all_rows[table].append(row)
+
+            # Build JSON structure
+            weenie_row = (all_rows.get("weenie") or [{}])[0]
+            wcid = weenie_row.get("class_Id") or weenie_row.get("class_id") or 0
+            name = ""
+            desc = ""
+
+            result = {
+                "wcid": wcid,
+                "weenieType": weenie_row.get("type") or weenie_row.get("weenie_Type") or 0,
+                "intStats": {},  "boolStats": {}, "floatStats": {},
+                "stringStats": {}, "didStats": {},
+                "positions": {}, "attributes": {}, "skills": [], "spells": []
+            }
+
+            for row in all_rows.get("weenie_properties_int", []):
+                k = str(row.get("type",""))
+                v = row.get("value")
+                if k and v is not None: result["intStats"][k] = v
+
+            for row in all_rows.get("weenie_properties_bool", []):
+                k = str(row.get("type",""))
+                v = row.get("value")
+                if k and v is not None: result["boolStats"][k] = bool(int(v))
+
+            for row in all_rows.get("weenie_properties_float", []):
+                k = str(row.get("type",""))
+                v = row.get("value")
+                if k and v is not None: result["floatStats"][k] = v
+
+            for row in all_rows.get("weenie_properties_string", []):
+                k = str(row.get("type",""))
+                v = row.get("value") or ""
+                if k: result["stringStats"][k] = v
+                if k == "1": name = v
+                if k == "15": desc = v
+
+            for row in all_rows.get("weenie_properties_d_i_d", []):
+                k = str(row.get("type",""))
+                v = row.get("value")
+                if k and v is not None:
+                    result["didStats"][k] = f"0x{int(v):08x}" if isinstance(v, int) else str(v)
+
+            for row in all_rows.get("weenie_properties_spell_book", []):
+                sp = row.get("spell") or row.get("spell_Id")
+                if sp: result["spells"].append({"id": sp, "prob": row.get("probability", 1.0)})
+
+            result["name"] = name
+            result["description"] = desc
+            return {"json": _json.dumps(result, indent=2)}
+        except Exception as e:
+            import traceback
+            return {"error": str(e), "trace": traceback.format_exc()}
+
+
+    def generate_item_sql(self, params: dict) -> dict:
+        """Generate drop-in SQL for a wieldable, sellable, or droppable item."""
+        try:
+            from aceforge.json_to_sql import (
+                _emit_header, _emit_int_props, _emit_bool_props,
+                _emit_float_props, _emit_str_props, _emit_did_props, _slug
+            )
+
+            def _si(v, default=0):
+                try: return int(str(v).strip()) if str(v).strip() else default
+                except: return default
+            def _sf(v, default=0.0):
+                try: return float(str(v).strip()) if str(v).strip() else default
+                except: return default
+
+            name      = params.get("name","New Item").strip() or "New Item"
+            slug      = _slug(name)
+            wcid      = _si(params.get("wcid",""), 810000)
+            item_type = _si(params.get("item_type",""), 6)
+            icon_raw  = params.get("icon","0x06001036").strip() or "0x06001036"
+            icon_int  = int(icon_raw, 16) if icon_raw.startswith("0x") else _si(icon_raw, 0x06001036)
+            value     = _si(params.get("value",""), 0)
+            encumb    = _si(params.get("encumb",""), 100)
+            desc      = params.get("description","").strip()
+            long_desc = params.get("long_desc","").strip() or desc
+            preset    = params.get("preset","droppable")
+
+            # Core int props
+            int_rows = [(1, item_type, "ItemType")]
+            bool_rows = []
+            float_rows = []
+            str_rows  = [(1, name, "Name"), (15, desc or name, "ShortDesc")]
+            if long_desc: str_rows.append((16, long_desc, "LongDesc"))
+            did_rows  = [
+                (1,  0x02000155, "Setup"),
+                (3,  0x20000014, "SoundTable"),
+                (8,  icon_int,   "Icon"),
+                (22, 0x3400002B, "PhysicsEffectTable"),
+            ]
+
+            if preset == "wieldable":
+                damage   = _si(params.get("damage",""), 20)
+                dmg_type = _si(params.get("damage_type",""), 2)
+                variance = _sf(params.get("damage_variance",""), 0.25)
+                wskill   = _si(params.get("weapon_skill",""), 36)
+                wtime    = _si(params.get("weapon_time",""), 50)
+                valid_loc= _si(params.get("valid_locations",""), 32768)
+                max_stack= _si(params.get("max_stack",""), 1)
+                palette_raw = params.get("palette","").strip()
+                int_rows += [
+                    (9,  damage,    "Damage"),
+                    (10, dmg_type,  "DamageType"),
+                    (19, value,     "Value"),
+                    (5,  encumb,    "EncumbranceVal"),
+                    (8,  max_stack, "MaxStackSize"),
+                    (26, valid_loc, "ValidLocations"),
+                    (74, wskill,    "WeaponSkill"),
+                    (80, wtime,     "WeaponTime"),
+                ]
+                float_rows += [(19, variance, "DamageVariance")]
+                bool_rows  += [(93, True, "Inscribable")]
+                if palette_raw and palette_raw.startswith("0x"):
+                    did_rows.append((4, int(palette_raw, 16), "PaletteBase"))
+
+            elif preset == "sellable":
+                burden   = _si(params.get("burden",""), 100)
+                buy_mult = _sf(params.get("buy_price",""), 1.0)
+                sell_mult= _sf(params.get("sell_price",""), 0.75)
+                max_stack= _si(params.get("max_stack",""), 1)
+                int_rows += [
+                    (5,  burden,    "EncumbranceVal"),
+                    (19, value,     "Value"),
+                    (8,  max_stack, "MaxStackSize"),
+                ]
+                float_rows += [
+                    (20, buy_mult,  "SellPrice"),
+                ]
+                bool_rows  += [
+                    (11, True, "Inscribable"),
+                    (14, True, "Bonded"),
+                ]
+
+            else:  # droppable
+                burden    = _si(params.get("burden",""), 100)
+                max_stack = _si(params.get("max_stack",""), 1)
+                stackable = _si(params.get("stackable",""), 0)
+                int_rows += [
+                    (5,  burden,    "EncumbranceVal"),
+                    (8,  max_stack, "MaxStackSize"),
+                    (19, value,     "Value"),
+                ]
+                if stackable:
+                    int_rows.append((256, max_stack, "StackSize"))
+                bool_rows += [(93, True, "Inscribable")]
+
+            int_rows  += [(93, 1044, "PhysicsState")]
+
+            lines = [
+                f"/* ===== FILE: {wcid}_{slug}.sql ===== */", "",
+                f"DELETE FROM `weenie` WHERE `class_Id` = {wcid};", "",
+                _emit_header(wcid, name, item_type),
+                "", _emit_int_props(wcid, [(r[0], r[1], r[2]) for r in int_rows]),
+            ]
+            if bool_rows:
+                lines += ["", _emit_bool_props(wcid, [(r[0], r[1], r[2]) for r in bool_rows])]
+            if float_rows:
+                lines += ["", _emit_float_props(wcid, [(r[0], r[1], r[2]) for r in float_rows])]
+            if str_rows:
+                lines += ["", _emit_str_props(wcid, [(r[0], r[1], r[2]) for r in str_rows])]
+            if did_rows:
+                lines += ["", _emit_did_props(wcid, [(r[0], r[1], r[2]) for r in did_rows])]
+            lines.append("")
+
+            return {"sql": "\n".join(lines)}
+        except Exception as e:
+            import traceback
+            return {"error": str(e), "trace": traceback.format_exc()}
+
 
     def ping(self) -> dict:
         """Connectivity test — confirms new code is loaded."""

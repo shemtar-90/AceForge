@@ -13,6 +13,81 @@ SQL format: uses LAST_INSERT_ID() / @parent_id pattern, no explicit id column.
 
 from __future__ import annotations
 import re
+
+# ── Motion name → integer ID map (for YAML import) ───────────────────────────
+# Covers all motion values from the ACEForge motion lists
+MOTION_NAME_TO_ID: dict[str, int] = {
+    # Idle / NPC
+    "Ready":             1090519043,
+    "HandCombat":        2147483708,
+    "NonCombat":         2147483709,
+    "ChestBeat":         268435533,
+    "Twitch1":           268435537,
+    "Twitch2":           268435538,
+    "Twitch3":           268435539,
+    "Twitch4":           268435540,
+    # Player emotes
+    "ShakeFist":         318767225,
+    "Beckon":            318767226,
+    "BeSeeingYou":       318767227,
+    "BlowKiss":          318767228,
+    "BowDeep":           318767229,
+    "ClapHands":         318767230,
+    "Cry":               318767231,
+    "Laugh":             318767232,
+    "MimeEat":           318767233,
+    "MimeDrink":         318767234,
+    "Nod":               318767235,
+    "Point":             318767236,
+    "ShakeHead":         318767237,
+    "Shrug":             318767238,
+    "Akimbo":            318767240,
+    "HeartyLaugh":       318767241,
+    "Salute":            318767242,
+    "ScratchHead":       318767243,
+    "SmackHead":         318767244,
+    "TapFoot":           318767245,
+    "WaveHigh":          318767246,
+    "WaveLow":           318767247,
+    "YawnStretch":       318767248,
+    "Cringe":            318767249,
+    "Kneel":             318767250,
+    "Plead":             318767251,
+    "Shiver":            318767252,
+    "Shoo":              318767253,
+    "Slouch":            318767254,
+    "Spit":              318767255,
+    "Surrender":         318767256,
+    "Woah":              318767257,
+    "Winded":            318767258,
+    "YMCA":              301990043,
+    # Monster
+    "SpecialAttack1":    268435661,
+    "SpecialAttack2":    268435662,
+    "SpecialAttack3":    268435663,
+    "MissileAttack1":    268435664,
+    "MissileAttack2":    268435665,
+    "MissileAttack3":    268435666,
+    "CastSpell":         1073742035,
+}
+
+def _motion_name_to_id(name: str) -> int | None:
+    """Convert a motion name string to its integer ID, or None if not found."""
+    # Try direct lookup
+    v = MOTION_NAME_TO_ID.get(name)
+    if v is not None:
+        return v
+    # Try stripping parenthetical suffix e.g. "Ready (0x41000003)"
+    base = name.split('(')[0].strip()
+    v = MOTION_NAME_TO_ID.get(base)
+    if v is not None:
+        return v
+    # Try parsing as integer (hex or decimal)
+    try:
+        return int(name, 0)
+    except (ValueError, TypeError):
+        return None
+
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Tuple
 
@@ -604,9 +679,14 @@ def parse_action_value(name: str, v: str, warnings: List[str]) -> dict:
         try:    attrs['spell_id'] = int(re.sub(r'[,\s]', '', v))
         except: warnings.append(f'Could not parse CastSpell: {v!r}')
 
-    elif name == 'Motion':
-        try:    attrs['motion'] = int(re.sub(r'[,\s]', '', v))
-        except: warnings.append(f'Could not parse Motion: {v!r}')
+    elif name in ('Motion', 'ForceMotion'):
+        v_clean = v.strip()
+        mid = _motion_name_to_id(v_clean)
+        if mid is not None:
+            attrs['motion'] = mid
+        else:
+            try:    attrs['motion'] = int(re.sub(r'[,\s]', '', v_clean))
+            except: warnings.append(f'Could not parse Motion: {v!r}')
 
     elif name == 'Goto':
         attrs['message'] = v

@@ -204,6 +204,12 @@ class AgentLoop:
                     sql = raw  # fallback to raw if no JSON found
             else:
                 sql = raw
+
+            # ── Emote pass: generate WeenieFab YAML separately for NPC types ────
+            if ftype in ('npc', 'vendor', 'quest', 'boss'):
+                emote_sql = self._generate_emotes(wcid, fname, fdesc, file_index, total)
+                if emote_sql.strip():
+                    sql = sql.rstrip() + '\n\n' + emote_sql
         except Exception as e:
             self._generating = False
             self._queue.put({
@@ -261,6 +267,71 @@ class AgentLoop:
         if self._on_complete:
             try: self._on_complete()
             except Exception: pass
+
+
+    def _generate_emotes(self, wcid: int, fname: str, fdesc: str,
+                         file_index: int, total: int) -> str:
+        """
+        Generate WeenieFab YAML emotes for an NPC/vendor in a dedicated focused call.
+        The model only needs to output YAML — no JSON, no SQL schema concerns.
+        Returns an EMOTE SCRIPT block ready for _process_emote_scripts.
+        """
+        try:
+            from pathlib import Path
+            import sys as _sys2
+            _base2 = (Path(_sys2._MEIPASS) if hasattr(_sys2, '_MEIPASS')
+                      else Path(__file__).parent.parent)
+            emote_fmt = (_base2 / 'references' / 'emote_format.md').read_text(encoding='utf-8')
+        except Exception:
+            emote_fmt = ''
+
+        system = (
+            "You are writing WeenieFab emote scripts for ACEmulator NPCs.\n"
+            "Output ONLY a valid WeenieFab emote script block — nothing else.\n"
+            "No JSON. No SQL. No explanations. No markdown.\n\n"
+            + emote_fmt
+        )
+
+        # Derive display name from filename
+        import re as _re2
+        _nm = _re2.match(r'^\d+\s+(.+?)\.sql$', fname, _re2.IGNORECASE)
+        display_name = _nm.group(1) if _nm else fdesc[:40]
+
+        user = (
+            f"Write emote dialogue for: {display_name}\n"
+            f"Description: {fdesc}\n"
+            f"Original request: {self._orig_prompt}\n"
+            f"WCID: {wcid}\n\n"
+            f"Output the script in this exact format:\n"
+            f"-- EMOTE SCRIPT (WCID: {wcid})\n"
+            f"Use:\n"
+            f"    - Tell: <opening line>\n"
+            f"    ...\n"
+            f"-- END EMOTE SCRIPT\n\n"
+            f"Include Use:, GotoSet: branches for quest logic, and Give: handler if appropriate.\n"
+            f"Output ONLY the emote script block. Nothing else."
+        )
+
+        self._queue.put({"type": "chunk", "text": f"\n/* Generating emotes for {display_name}… */\n"})
+
+        try:
+            emote_raw = self._stream_blocking(system, user)
+        except Exception:
+            return ''
+
+        # Validate it has the right markers
+        if '-- EMOTE SCRIPT' in emote_raw and '-- END EMOTE SCRIPT' in emote_raw:
+            return emote_raw.strip()
+
+        # If model didn't add the markers, wrap it
+        script_content = emote_raw.strip()
+        if script_content:
+            return (
+                f"-- EMOTE SCRIPT (WCID: {wcid})\n"
+                f"{script_content}\n"
+                f"-- END EMOTE SCRIPT"
+            )
+        return ''
 
     def _generate_with_continuation(
         self, file_index: int, file_entry: dict, total: int
@@ -392,12 +463,14 @@ Use these exact class_name values when referencing these WCIDs in emotes, create
 {acc_section}
 
 ## Output Rules
-- Start output with: /* ===== FILE: {fname} ===== */
-- Output raw SQL only — no markdown fences, no explanations
-- Use the exact WCID {wcid} for this weenie's class_Id
-- If this is a generator, use the creature WCID from the bindings above
-- INVALID emote triggers (never use): ReceiveGive, ReceiveItem, OnKill, OnDeath, OnGive, QuestComplete, PlayerNear
-- VALID give trigger: Give: (not ReceiveGive)
+- Output ONLY a JSON object. No SQL. No markdown fences. No explanations.
+- Use the exact WCID {wcid} in the wcid field
+- Use the exact name and class_name given in the user prompt
+- For creatures with kill_quest: include the kill_quest field with the quest flag name
+- Do NOT include an emotes field — emotes are generated in a separate dedicated pass
+- If this is a generator: set content_type to \"generator\" and target_wcid from confirmed bindings
+- VALID emote triggers: Use, GotoSet, Give, Death, HeartBeat, Taunt, WoundedTaunt, KillTaunt
+- INVALID emote triggers (never use): ReceiveGive, ReceiveItem, OnKill, OnDeath, QuestComplete
 """
 
     def _build_user_prompt(self, file_index: int, file_entry: dict) -> str:
@@ -409,12 +482,23 @@ Use these exact class_name values when referencing these WCIDs in emotes, create
             f"EXISTING WEENIE SQL TO MODIFY:\n```sql\n{self._editing_sql[:6000]}\n```\n\n"
             if self._editing_sql else ""
         )
+        # Derive display name from filename: "850000 Ulgrim the Unpleasant.sql" → "Ulgrim the Unpleasant"
+        import re as _re
+        _name_match = _re.match(r'^\d+\s+(.+?)\.sql$', fname, _re.IGNORECASE)
+        display_name = _name_match.group(1) if _name_match else fdesc[:40]
+        class_name   = display_name.lower().strip()
+        class_name   = _re.sub(r"[^a-z0-9\s_]", "", class_name)
+        class_name   = _re.sub(r"\s+", "_", class_name)[:64]
+
         return (
             f"{edit_ctx}"
             f"Generate a JSON object for: {fdesc}\n"
-            f"Original request: {self._orig_prompt}\n"
-            f"File: {fname} | WCID: {wcid}\n"
-            f"Output ONLY the JSON object. No SQL. No explanations."
+            f"Original request: {self._orig_prompt}\n\n"
+            f"REQUIRED FIELD VALUES — use these exactly:\n"
+            f"  wcid: {wcid}\n"
+            f"  name: \"{display_name}\"\n"
+            f"  class_name: \"{class_name}\"\n\n"
+            f"Output ONLY the JSON object. No SQL. No explanations. No emotes field."
         )
 
     def _stream_blocking(self, system: str, user: str) -> str:

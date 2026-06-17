@@ -28,6 +28,194 @@ from typing import Any
 
 TIMESTAMP = "2025-01-01 00:00:00"
 
+
+# ── Formatting helpers ────────────────────────────────────────────────────────
+
+def _slug(name: str) -> str:
+    """Convert a display name to a lowercase underscore slug."""
+    import re as _re
+    return _re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_')
+
+
+def _fmt_val(v) -> str:
+    """Format a Python value for SQL output."""
+    if isinstance(v, bool):
+        return "True " if v else "False"
+    if isinstance(v, float):
+        return f"{v:g}"
+    if isinstance(v, int):
+        return str(v)
+    # string
+    escaped = str(v).replace("'", "''")
+    return f"'{escaped}'"
+
+
+def _emit_header(wcid: int, name: str, weenie_type: int) -> str:
+    """Emit DELETE + INSERT INTO weenie header row."""
+    from datetime import datetime
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    TYPE_COMMENT = {
+        2: "Container", 6: "Generic", 7: "Food", 9: "Gem", 10: "Creature",
+        12: "Vendor", 16: "MeleeWeapon", 17: "MissileWeapon", 18: "Caster",
+        19: "Clothing", 20: "Armor", 21: "Scroll", 22: "Stackable",
+        35: "Generator", 38: "Gem", 51: "Stackable",
+    }
+    comment = TYPE_COMMENT.get(weenie_type, f"type={weenie_type}")
+    # class_name: use slug of name
+    class_name = _slug(name)
+    return (
+        f"DELETE FROM `weenie` WHERE `class_Id` = {wcid};\n\n"
+        f"INSERT INTO `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)\n"
+        f"VALUES ({wcid}, '{name}', {weenie_type}, '{ts}') /* {comment} */;"
+    )
+
+
+def _emit_int_props(wcid: int, rows: list) -> str:
+    """rows = [(type_id, value, comment), ...]"""
+    if not rows:
+        return ""
+    lines = ["INSERT INTO `weenie_properties_int` (`object_Id`, `type`, `value`)"]
+    for i, row in enumerate(rows):
+        tid, val, comment = row[0], row[1], row[2] if len(row) > 2 else ""
+        prefix = "VALUES" if i == 0 else "     ,"
+        end = ";" if i == len(rows) - 1 else ""
+        c = f" /* {comment} */" if comment else ""
+        lines.append(f"{prefix} ({wcid}, {tid:4d}, {val:10}){c}{end}")
+    return "\n".join(lines)
+
+
+def _emit_bool_props(wcid: int, rows: list) -> str:
+    """rows = [(type_id, bool_val, comment), ...]"""
+    if not rows:
+        return ""
+    lines = ["INSERT INTO `weenie_properties_bool` (`object_Id`, `type`, `value`)"]
+    for i, row in enumerate(rows):
+        tid, val, comment = row[0], row[1], row[2] if len(row) > 2 else ""
+        prefix = "VALUES" if i == 0 else "     ,"
+        end = ";" if i == len(rows) - 1 else ""
+        v = "True " if val else "False"
+        c = f" /* {comment} */" if comment else ""
+        lines.append(f"{prefix} ({wcid}, {tid:3d}, {v}){c}{end}")
+    return "\n".join(lines)
+
+
+def _emit_float_props(wcid: int, rows: list) -> str:
+    """rows = [(type_id, float_val, comment), ...]"""
+    if not rows:
+        return ""
+    lines = ["INSERT INTO `weenie_properties_float` (`object_Id`, `type`, `value`)"]
+    for i, row in enumerate(rows):
+        tid, val, comment = row[0], row[1], row[2] if len(row) > 2 else ""
+        prefix = "VALUES" if i == 0 else "     ,"
+        end = ";" if i == len(rows) - 1 else ""
+        fv = f"{val:g}" if isinstance(val, float) else str(val)
+        c = f" /* {comment} */" if comment else ""
+        lines.append(f"{prefix} ({wcid}, {tid:4d}, {fv:>8}){c}{end}")
+    return "\n".join(lines)
+
+
+def _emit_str_props(wcid: int, rows: list) -> str:
+    """rows = [(type_id, str_val, comment), ...]"""
+    if not rows:
+        return ""
+    lines = ["INSERT INTO `weenie_properties_string` (`object_Id`, `type`, `value`)"]
+    for i, row in enumerate(rows):
+        tid, val, comment = row[0], row[1], row[2] if len(row) > 2 else ""
+        prefix = "VALUES" if i == 0 else "     ,"
+        end = ";" if i == len(rows) - 1 else ""
+        escaped = str(val).replace("'", "''")
+        c = f" /* {comment} */" if comment else ""
+        lines.append(f"{prefix} ({wcid}, {tid:3d}, '{escaped}'){c}{end}")
+    return "\n".join(lines)
+
+
+def _emit_did_props(wcid: int, rows: list) -> str:
+    """rows = [(type_id, hex_or_int_val, comment), ...]"""
+    if not rows:
+        return ""
+    lines = ["INSERT INTO `weenie_properties_d_i_d` (`object_Id`, `type`, `value`)"]
+    for i, row in enumerate(rows):
+        tid, val, comment = row[0], row[1], row[2] if len(row) > 2 else ""
+        prefix = "VALUES" if i == 0 else "     ,"
+        end = ";" if i == len(rows) - 1 else ""
+        # Format as hex if >= 0x01000000, else decimal
+        if isinstance(val, int) and val >= 0x01000000:
+            vs = f"0x{val:08X}"
+        else:
+            vs = str(val)
+        c = f" /* {comment} */" if comment else ""
+        lines.append(f"{prefix} ({wcid}, {tid:4d}, {vs}){c}{end}")
+    return "\n".join(lines)
+
+
+def _emit_attributes(wcid: int, attrs: dict) -> str:
+    """attrs = {name: init_level, ...} for the 6 primary attributes."""
+    ATTR_IDS = {
+        "strength": 1, "endurance": 2, "quickness": 3,
+        "coordination": 4, "focus": 5, "self": 6,
+    }
+    ATTR_NAMES = {1: "Strength", 2: "Endurance", 3: "Quickness",
+                  4: "Coordination", 5: "Focus", 6: "Self"}
+    cols = "(`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`)"
+    lines = [f"INSERT INTO `weenie_properties_attribute` {cols}"]
+    items = [(ATTR_IDS[k], v) for k, v in attrs.items() if k in ATTR_IDS]
+    items.sort(key=lambda x: x[0])
+    for i, (tid, val) in enumerate(items):
+        prefix = "VALUES" if i == 0 else "     ,"
+        end = ";" if i == len(items) - 1 else ""
+        name = ATTR_NAMES.get(tid, f"attr{tid}")
+        lines.append(f"{prefix} ({wcid}, {tid:4d}, {val:5d}, 0, 0) /* {name} */{end}")
+    return "\n".join(lines)
+
+
+def _emit_vitals(wcid: int, health: int, stamina: int, mana: int) -> str:
+    """Emit weenie_properties_attribute_2nd for MaxHealth/MaxStamina/MaxMana."""
+    cols = "(`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`, `current_Level`)"
+    lines = [f"INSERT INTO `weenie_properties_attribute_2nd` {cols}"]
+    vitals = [
+        (1, health,  "MaxHealth"),
+        (3, stamina, "MaxStamina"),
+        (5, mana,    "MaxMana"),
+    ]
+    for i, (tid, val, name) in enumerate(vitals):
+        prefix = "VALUES" if i == 0 else "     ,"
+        end = ";" if i == len(vitals) - 1 else ""
+        init = max(0, val - 100)  # init_Level approximation
+        lines.append(f"{prefix} ({wcid}, {tid:4d}, {init:6d}, 0, 0, {val:5d}) /* {name} */{end}")
+    return "\n".join(lines)
+
+
+def _emit_skills(wcid: int, rows: list) -> str:
+    """rows = [(skill_id, init_level, comment), ...]
+    s_a_c=2 means Trained."""
+    if not rows:
+        return ""
+    cols = "(`object_Id`, `type`, `level_From_P_P`, `s_a_c`, `p_p`, `init_Level`, `resistance_At_Last_Check`, `last_Used_Time`)"
+    lines = [f"INSERT INTO `weenie_properties_skill` {cols}"]
+    for i, row in enumerate(rows):
+        sid, init, comment = row[0], row[1], row[2] if len(row) > 2 else ""
+        prefix = "VALUES" if i == 0 else "     ,"
+        end = ";" if i == len(rows) - 1 else ""
+        pad = f"{comment:<22}" if comment else ""
+        c = f" /* {pad}Trained */" if comment else ""
+        lines.append(f"{prefix} ({wcid}, {sid:2d}, 0, 2, 0, {init:4d}, 0, 0){c}{end}")
+    return "\n".join(lines)
+
+
+def _int_val(d: dict, key: str, default: int = 0) -> int:
+    try:
+        return int(d.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _float_val(d: dict, key: str, default: float = 0.0) -> float:
+    try:
+        return float(d.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
 # ── Enum lookup tables ────────────────────────────────────────────────────────
 
 WEENIE_TYPE = {
@@ -41,243 +229,91 @@ WEENIE_TYPE = {
     "quest_item": 6,
 }
 
+# Creature type int IDs matching ACE World DB (authoritative from WeenieForge CREATURE_TYPES)
 CREATURE_TYPE = {
-    "human": 1, "lugian": 2, "tumerok": 3, "mosswart": 4,
-    "drudge": 5, "shadow": 6, "undead": 7, "skeleton": 7, "zombie": 7,
-    "olthoi": 8, "cow": 9, "golem": 10, "virindi": 11,
-    "monouga": 12, "tusker": 13, "banderling": 14, "zefir": 15,
-    "phyntos_wasp": 16, "grievver": 17, "gurog": 18, "moarsman": 19,
-    "mite": 20, "mukkir": 21, "carenzi": 22, "doll": 23,
-    "wisp": 24, "gotrok": 25, "slith": 26, "reed_shark": 27,
-    "rat": 28, "remoran": 29, "shreth": 30, "silifi": 31,
-    "fennk": 32, "reedshark": 27,
+    "none":          0,
+    "olthoi":        1,
+    "banderling":    2,
+    "drudge":        3,
+    "mosswart":      4,
+    "lugian":        5,
+    "tumerok":       6,
+    "mite":          7,
+    "tusker":        8,
+    "golem":         13,
+    "undead":        14, "skeleton": 14, "zombie": 14,
+    "gromnie":       15,
+    "reedshark":     16,
+    "armoredillo":   17,
+    "fae":           18,
+    "virindi":       19,
+    "wisp":          20,
+    "shadow":        22,
+    "mattekar":      23,
+    "monouga":       28,
+    "zefir":         29,
+    "shreth":        32,
+    "fireelemental": 38,
+    "snowman":       39,
+    "grievver":      44,
+    "ursuin":        46,
+    "hollowminion":  48,
+    "acidelemental": 60,
+    "frostelemental":61,
+    "burun":         75,
+    "gearknight":    99,
+    "gurog":         100,
+    "anekshay":      101,
+    "human":         31,  # default
 }
 
-DAMAGE_TYPE = {
-    "slash": 1, "pierce": 2, "bludgeon": 4, "cold": 8,
-    "fire": 16, "acid": 32, "electric": 64, "nether": 128,
-    "health": 256, "stamina": 512, "mana": 1024,
+# Body part keys per creature type (from WeenieForge CREATURE_BP_MAP)
+CREATURE_BP_MAP = {
+    0:  [0,1,2,3,4,5,6,7,8],
+    1:  [0,9,14,16,17,18,20],           # Olthoi
+    2:  [0,1,2,3,4,5,6,7,8,9],          # Banderling
+    3:  [0,1,2,3,4,5,6,7,8,9],          # Drudge
+    4:  [0,1,2,3,4,5,6,7,8,9],          # Mosswart
+    5:  [0,1,2,3,4,5,6,7,8],            # Lugian
+    6:  [0,1,2,3,4,5,6,7,8,9],          # Tumerok
+    7:  [0,1,2,3,4,5,6,7,8],            # Mite
+    8:  [0,1,2,3,4,5,6,7,8,9],          # Tusker
+    13: [0,1,2,3,4,5,6,7,8,9],          # Golem
+    14: [0,1,2,3,4,5,6,7,8,9],          # Undead
+    15: [0,1,2,3,4,5,6,7,8,9,20],       # Gromnie
+    16: [0,9,10,12,14],                  # Reedshark
+    17: [0,9,14,15,17],                  # Armoredillo
+    18: [0,1,2,3,4,5,6,7,8],            # Fae
+    19: [0,1,2,3,4,5,9,15],             # Virindi
+    20: [0,9,14,15,19],                  # Wisp
+    22: [0,1,2,3,4,5,6,7,8,9],          # Shadow
+    23: [0,9,10,12,14],                  # Mattekar
+    28: [0,1,2,3,4,5,6,7,8,9],          # Monouga
+    29: [0,9,14,15,19],                  # Zefir
+    30: [0,1,2,3,4,5,6,7,8,9],          # Skeleton
+    31: [0,1,2,3,4,5,6,7,8],            # Human (default)
+    32: [0,1,2,3,4,5,6,7,8,9],          # Shreth
+    38: [0,1,2,3,4,5,6,7,8],            # FireElemental
+    39: [0,1,2,3,4,5,6,7,8],            # Snowman
+    44: [0,9,14,16,17,18,20],           # Grievver
+    46: [0,9,10,12,14],                  # Ursuin
+    48: [0,1,2,3,4,5,9,15],             # HollowMinion
+    60: [0,1,2,3,4,5,6,7,8],            # AcidElemental
+    61: [0,1,2,3,4,5,6,7,8],            # FrostElemental
+    75: [0,1,2,3,4,5,6,7,8,9,18],       # Burun
+    99: [0,1,2,3,4,5,6,7,8,9,10],       # GearKnight
+    100:[0,1,2,3,4,5,6,7,8,9],          # Gurog
+    101:[0,1,2,3,4,5,6,7,8,9],          # Anekshay
 }
 
-SKILL_ID = {
-    "alchemy": 1, "arcane_lore": 2, "armor_tinkering": 3, "assess_creature": 4,
-    "assess_person": 5, "cooking": 6, "creature_enchantment": 7, "fletching": 8,
-    "healing": 9, "item_enchantment": 10, "item_tinkering": 11, "jump": 12,
-    "leadership": 13, "life_magic": 14, "loyalty": 15, "mana_conversion": 16,
-    "melee_defense": 6, "missile_defense": 17, "missile_weapons": 18,
-    "salvaging": 19, "shield": 20, "spell_research": 21, "summoning": 22,
-    "swim": 23, "thrown_weapons": 24, "two_handed_combat": 25, "unarmed_combat": 26,
-    "void_magic": 27, "war_magic": 28, "weapon_tinkering": 29,
-    "finesse_weapons": 30, "heavy_weapons": 44, "light_weapons": 45, "magic_defense": 46,
+# Body part key → name (from WeenieForge BP_KEY_NAMES)
+BP_KEY_NAMES = {
+    0:'Head',    1:'Chest',     2:'Abdomen',   3:'UpperArm',    4:'LowerArm',
+    5:'Hand',    6:'UpperLeg',  7:'LowerLeg',  8:'Foot',        9:'Horn',
+    10:'FrontLeg',11:'FrontFoot',12:'RearLeg', 13:'RearFoot',  14:'Torso',
+    15:'Tail',   16:'Arm',      17:'Leg',      18:'Claw',       19:'Wings',
+    20:'Breath', 21:'Tentacle', 22:'UpperTentacle', 23:'LowerTentacle', 24:'Cloak',
 }
-
-ITEM_TYPE = {
-    "none": 0, "melee_weapon": 1, "armor": 2, "clothing": 4,
-    "jewelry": 8, "creature": 16, "container": 32, "food": 64,
-    "money": 128, "misc": 256, "missile_weapon": 512, "caster": 1024,
-    "mana_stone": 2048, "craft_tool": 4096, "key": 8192,
-    "writable": 8192, "book": 8192,
-    "gem": 16384, "spell_component": 32768, "service": 65536,
-}
-
-PHYSICS_STATE = {
-    "default":   1044,   # Ethereal, IgnoreCollisions, Gravity (most items)
-    "creature":  3080,   # Ethereal, Gravity, Missile
-    "npc":       3076,   # Ethereal, Gravity
-    "generator": 4,      # Ethereal
-}
-
-# DID defaults by content type
-DID_DEFAULTS = {
-    "creature": {
-        "setup":               0x020002A5,
-        "motion_table":        0x09000010,
-        "sound_table":         0x20000009,
-        "icon":                0x0600108A,
-        "physics_effect_table":0x34000026,
-    },
-    "npc": {
-        "setup":               0x0200010D,
-        "motion_table":        0x09000001,
-        "sound_table":         0x20000001,
-        "icon":                0x06001F2E,
-        "physics_effect_table":0x34000004,
-    },
-    "item": {
-        "setup":               0x02000155,
-        "sound_table":         0x20000014,
-        "icon":                0x06001310,
-        "physics_effect_table":0x3400002B,
-    },
-    "generator": {
-        "setup":               0x02000001,
-        "motion_table":        0x09000001,
-        "sound_table":         0x20000001,
-        "icon":                0x06001F2E,
-        "physics_effect_table":0x34000004,
-    },
-}
-
-BODY_PART_KEYS = [
-    "head", "chest", "abdomen", "upper_arm", "lower_arm",
-    "hand", "upper_leg", "lower_leg", "foot"
-]
-
-# ── Formatting helpers ────────────────────────────────────────────────────────
-
-def _slug(name: str) -> str:
-    """Convert display name to ACE class_name slug."""
-    s = name.lower().strip()
-    s = re.sub(r"[^a-z0-9\s_]", "", s)
-    s = re.sub(r"\s+", "_", s)
-    return s[:64]
-
-def _int_val(d: dict, key: str, default: int = 0) -> int:
-    return int(d.get(key, default) or default)
-
-def _float_val(d: dict, key: str, default: float = 0.0) -> float:
-    return float(d.get(key, default) or default)
-
-def _str_val(d: dict, key: str, default: str = "") -> str:
-    return str(d.get(key, default) or default)
-
-def _lookup(table: dict, key: Any, default: int = 0) -> int:
-    if isinstance(key, int):
-        return key
-    if isinstance(key, str):
-        return table.get(key.lower().replace(" ", "_"), default)
-    return default
-
-def _fmt_int(v: int, width: int = 9) -> str:
-    return str(v).rjust(width)
-
-def _fmt_float(v: float) -> str:
-    if v == int(v):
-        return str(int(v)).rjust(7)
-    return f"{v:>7g}"
-
-def _fmt_hex(v: int) -> str:
-    return f"0x{v:08X}"
-
-def _escape_sql(s: str) -> str:
-    return s.replace("'", "''")
-
-
-# ── Per-table emitters ────────────────────────────────────────────────────────
-
-def _emit_header(wcid: int, class_name: str, weenie_type: int) -> str:
-    ts = TIMESTAMP
-    lines = [
-        f"DELETE FROM `weenie` WHERE `class_Id` = {wcid};",
-        "",
-        f"INSERT INTO `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)",
-        f"VALUES ({wcid}, '{class_name}', {weenie_type}, '{ts}');",
-    ]
-    return "\n".join(lines)
-
-
-def _emit_int_props(wcid: int, rows: list[tuple[int, int, str]]) -> str:
-    """rows = [(type_id, value, comment), ...]"""
-    if not rows:
-        return ""
-    lines = [f"INSERT INTO `weenie_properties_int` (`object_Id`, `type`, `value`)"]
-    for i, (t, v, c) in enumerate(rows):
-        prefix = "VALUES" if i == 0 else "     ,"
-        comment = f" /* {c} */" if c else ""
-        end = ";" if i == len(rows) - 1 else ""
-        lines.append(f"{prefix} ({wcid}, {str(t).rjust(3)}, {_fmt_int(v)}){comment}{end}")
-    return "\n".join(lines)
-
-
-def _emit_bool_props(wcid: int, rows: list[tuple[int, bool, str]]) -> str:
-    if not rows:
-        return ""
-    lines = [f"INSERT INTO `weenie_properties_bool` (`object_Id`, `type`, `value`)"]
-    for i, (t, v, c) in enumerate(rows):
-        prefix = "VALUES" if i == 0 else "     ,"
-        comment = f" /* {c} */" if c else ""
-        end = ";" if i == len(rows) - 1 else ""
-        bv = "True " if v else "False"
-        lines.append(f"{prefix} ({wcid}, {str(t).rjust(3)}, {bv}){comment}{end}")
-    return "\n".join(lines)
-
-
-def _emit_float_props(wcid: int, rows: list[tuple[int, float, str]]) -> str:
-    if not rows:
-        return ""
-    lines = [f"INSERT INTO `weenie_properties_float` (`object_Id`, `type`, `value`)"]
-    for i, (t, v, c) in enumerate(rows):
-        prefix = "VALUES" if i == 0 else "     ,"
-        comment = f" /* {c} */" if c else ""
-        end = ";" if i == len(rows) - 1 else ""
-        lines.append(f"{prefix} ({wcid}, {str(t).rjust(3)}, {_fmt_float(v)}){comment}{end}")
-    return "\n".join(lines)
-
-
-def _emit_str_props(wcid: int, rows: list[tuple[int, str, str]]) -> str:
-    if not rows:
-        return ""
-    lines = [f"INSERT INTO `weenie_properties_string` (`object_Id`, `type`, `value`)"]
-    for i, (t, v, c) in enumerate(rows):
-        prefix = "VALUES" if i == 0 else "     ,"
-        comment = f" /* {c} */" if c else ""
-        end = ";" if i == len(rows) - 1 else ""
-        lines.append(f"{prefix} ({wcid}, {str(t).rjust(3)}, '{_escape_sql(v)}'){comment}{end}")
-    return "\n".join(lines)
-
-
-def _emit_did_props(wcid: int, rows: list[tuple[int, int, str]]) -> str:
-    if not rows:
-        return ""
-    lines = [f"INSERT INTO `weenie_properties_d_i_d` (`object_Id`, `type`, `value`)"]
-    for i, (t, v, c) in enumerate(rows):
-        prefix = "VALUES" if i == 0 else "     ,"
-        comment = f" /* {c} */" if c else ""
-        end = ";" if i == len(rows) - 1 else ""
-        lines.append(f"{prefix} ({wcid}, {str(t).rjust(3)}, {_fmt_hex(v)}){comment}{end}")
-    return "\n".join(lines)
-
-
-def _emit_attributes(wcid: int, attrs: dict) -> str:
-    ORDER = [
-        (1, "strength", "Strength"),
-        (2, "endurance", "Endurance"),
-        (3, "quickness", "Quickness"),
-        (4, "coordination", "Coordination"),
-        (5, "focus", "Focus"),
-        (6, "self", "Self"),
-    ]
-    rows = [(tid, _int_val(attrs, key, 100), label) for tid, key, label in ORDER]
-    if not any(r[1] for r in rows):
-        return ""
-    lines = ["INSERT INTO `weenie_properties_attribute` (`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`)"]
-    for i, (t, v, c) in enumerate(rows):
-        prefix = "VALUES" if i == 0 else "     ,"
-        end = ";" if i == len(rows) - 1 else ""
-        lines.append(f"{prefix} ({wcid}, {str(t).rjust(3)}, {_fmt_int(v, 4)}, 0, 0) /* {c} */{end}")
-    return "\n".join(lines)
-
-
-def _emit_vitals(wcid: int, health: int, stamina: int, mana: int) -> str:
-    rows = [(1, health, "MaxHealth"), (3, stamina, "MaxStamina"), (5, mana, "MaxMana")]
-    lines = ["INSERT INTO `weenie_properties_attribute_2nd` (`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`, `current_Level`)"]
-    for i, (t, v, c) in enumerate(rows):
-        prefix = "VALUES" if i == 0 else "     ,"
-        end = ";" if i == len(rows) - 1 else ""
-        lines.append(f"{prefix} ({wcid}, {str(t).rjust(3)}, {_fmt_int(v, 5)}, 0, 0, {_fmt_int(v, 5)}) /* {c} */{end}")
-    return "\n".join(lines)
-
-
-def _emit_skills(wcid: int, skill_rows: list[tuple[int, int, str]]) -> str:
-    """skill_rows = [(skill_id, init_level, comment), ...]  s_a_c=2 (Trained)"""
-    if not skill_rows:
-        return ""
-    lines = ["INSERT INTO `weenie_properties_skill` (`object_Id`, `type`, `level_From_P_P`, `s_a_c`, `p_p`, `init_Level`, `resistance_At_Last_Check`, `last_Used_Time`)"]
-    for i, (t, v, c) in enumerate(skill_rows):
-        prefix = "VALUES" if i == 0 else "     ,"
-        end = ";" if i == len(skill_rows) - 1 else ""
-        lines.append(f"{prefix} ({wcid}, {str(t).rjust(3)}, 0, 2, 0, {_fmt_int(v, 4)}, 0, 0) /* {c} */{end}")
-    return "\n".join(lines)
 
 
 def _emit_body_parts(wcid: int, armor: int = 80, damage_type: int = 4) -> str:
@@ -296,6 +332,98 @@ def _emit_body_parts(wcid: int, armor: int = 80, damage_type: int = 4) -> str:
             f"{prefix} ({wcid}, {key}, {damage_type}, 0, 0, {a}, {a}, {a}, {a}, {a}, {a}, {a}, {a}, 0, "
             f"1, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0) /* {label} */{end}"
         )
+    return "\n".join(lines)
+
+
+def _emit_body_parts_ref(wcid: int, parts=None, armor: int = 100,
+                         creature_type_int: int = None) -> str:
+    """Emit body_part rows.
+    - If `parts` is an int (creature_type_int), auto-build from CREATURE_BP_MAP.
+    - If `parts` is a list of tuples (explicit), emit as-is.
+      Tuple format: (key, d_Type, d_Val, d_Var, base_Armor,
+                     vs_Slash, vs_Pierce, vs_Bludgeon, vs_Cold, vs_Fire, vs_Acid, vs_Electric, vs_Nether,
+                     b_h, hlf, mlf, llf, hrf, mrf, lrf, hlb, mlb, llb, hrb, mrb, lrb)
+    Supports all 35 creature types via CREATURE_BP_MAP.
+    """
+    # Hit-location fractions per key
+    _BP_FRACS = {
+        0:  (1, 0.33, 0,    0,    0.33, 0,    0,    0.33, 0,    0,    0.33, 0,    0   ),  # Head
+        1:  (2, 0.44, 0.17, 0,    0.44, 0.17, 0,    0.44, 0.17, 0,    0.44, 0.17, 0   ),  # Chest
+        2:  (3, 0,    0.17, 0,    0,    0.17, 0,    0,    0.17, 0,    0,    0.17, 0   ),  # Abdomen
+        3:  (1, 0.23, 0.03, 0,    0.23, 0.03, 0,    0.23, 0.03, 0,    0.23, 0.03, 0   ),  # UpperArm
+        4:  (2, 0,    0.3,  0,    0,    0.3,  0,    0,    0.3,  0,    0,    0.3,  0   ),  # LowerArm
+        5:  (2, 0,    0.2,  0,    0,    0.2,  0,    0,    0.2,  0,    0,    0.2,  0   ),  # Hand
+        6:  (3, 0,    0.13, 0.18, 0,    0.13, 0.18, 0,    0.13, 0.18, 0,    0.13, 0.18),  # UpperLeg
+        7:  (3, 0,    0,    0.6,  0,    0,    0.6,  0,    0,    0.6,  0,    0,    0.6 ),  # LowerLeg
+        8:  (3, 0,    0,    0.22, 0,    0,    0.22, 0,    0,    0.22, 0,    0,    0.22),  # Foot
+        9:  (2, 0.5,  0.5,  0,    0.5,  0.5,  0,    0,    0,    0,    0,    0,    0   ),  # Horn
+        10: (2, 0.2,  0.4,  0.5,  0.2,  0.4,  0.5,  0,    0,    0,    0,    0,    0   ),  # FrontLeg
+        11: (3, 0,    0,    0.25, 0,    0,    0.25, 0,    0,    0,    0,    0,    0   ),  # FrontFoot (old key)
+        12: (3, 0,    0,    0.25, 0,    0,    0.25, 0,    0,    0,    0,    0,    0   ),  # RearLeg
+        13: (3, 0,    0,    0.25, 0,    0,    0.25, 0,    0,    0,    0,    0,    0   ),  # RearFoot (old key)
+        14: (2, 0.3,  0.4,  0.25, 0.3,  0.4,  0.25, 0.6,  0.5,  0.25, 0.6,  0.5,  0.25),  # Torso
+        15: (3, 0,    0,    0.5,  0,    0,    0.5,  0,    0,    0,    0,    0,    0   ),  # Tail
+        16: (1, 0.25, 0.5,  0,    0.25, 0.5,  0,    0,    0,    0,    0,    0,    0   ),  # Arm
+        17: (2, 0,    0.25, 0.5,  0,    0.25, 0.5,  0,    0,    0,    0,    0,    0   ),  # Leg
+        18: (2, 0.5,  0.5,  0,    0,    0,    0,    0,    0,    0,    0,    0,    0   ),  # Claw
+        19: (1, 0.5,  0,    0,    0,    0,    0,    0.5,  0,    0,    0,    0,    0   ),  # Wings
+        20: (2, 0.1,  0.1,  0,    0.1,  0.1,  0,    0.1,  0.1,  0,    0.1,  0.1,  0   ),  # Breath
+        21: (2, 0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0,    0,    0,    0,    0,    0   ),  # Tentacle
+        22: (2, 0.5,  0.5,  0,    0.5,  0.5,  0,    0,    0,    0,    0,    0,    0   ),  # UpperTentacle
+        23: (3, 0,    0,    0.5,  0,    0,    0.5,  0,    0,    0,    0,    0,    0   ),  # LowerTentacle
+        24: (1, 0.33, 0,    0,    0.33, 0,    0,    0.33, 0,    0,    0.33, 0,    0   ),  # Cloak
+    }
+    # d_Val/d_Var per key (damage type 4 = Bludgeoning for most)
+    _BP_DVAL = {5: (2, 0.75), 8: (2, 0.75), 9: (4, 0.75),
+                10: (4, 0), 12: (4, 0), 13: (4, 0),
+                15: (4, 0), 17: (4, 0), 18: (4, 0.75), 20: (64, 0.75)}
+
+    if parts is None:
+        parts = creature_type_int if creature_type_int is not None else 31
+    if isinstance(parts, int):
+        creature_type_int = parts
+        keys = CREATURE_BP_MAP.get(creature_type_int, CREATURE_BP_MAP[31])
+        parts = []
+        for key in keys:
+            fracs = _BP_FRACS.get(key, _BP_FRACS[0])
+            dval_pair = _BP_DVAL.get(key, (4, 0))
+            d_Type, d_Val, d_Var = 4, dval_pair[0], dval_pair[1]
+            a = armor
+            vs = a  # armor_Vs_* = base_Armor for creatures
+            parts.append((key, d_Type, d_Val, d_Var, a, vs, vs, vs, vs, vs, vs, vs, 0) + fracs)
+
+    cols = ("(`object_Id`, `key`, `d_Type`, `d_Val`, `d_Var`, `base_Armor`, "
+            "`armor_Vs_Slash`, `armor_Vs_Pierce`, `armor_Vs_Bludgeon`, "
+            "`armor_Vs_Cold`, `armor_Vs_Fire`, `armor_Vs_Acid`, `armor_Vs_Electric`, "
+            "`armor_Vs_Nether`, `b_h`, `h_l_f`, `m_l_f`, `l_l_f`, "
+            "`h_r_f`, `m_r_f`, `l_r_f`, `h_l_b`, `m_l_b`, `l_l_b`, "
+            "`h_r_b`, `m_r_b`, `l_r_b`)")
+    lines = [f"INSERT INTO `weenie_properties_body_part` {cols}"]
+    for i, p in enumerate(parts):
+        key = p[0]
+        label = BP_KEY_NAMES.get(key, f"key{key}")
+        prefix = "VALUES" if i == 0 else "     ,"
+        end    = ";" if i == len(parts) - 1 else ""
+        def _f(v):
+            return f"{v:g}" if isinstance(v, float) else str(v)
+        vals = ", ".join(_f(x) for x in p)
+        lines.append(f"{prefix} ({wcid}, {vals}) /* {label} */{end}")
+    return "\n".join(lines)
+
+
+
+def _emit_spellbook(wcid: int, spells: list) -> str:
+    """Emit spellbook rows.
+    spells = [(spell_id, probability, comment), ...]
+    """
+    cols = "(`object_Id`, `spell`, `probability`)"
+    lines = [f"INSERT INTO `weenie_properties_spell_book` {cols}"]
+    for i, entry in enumerate(spells):
+        sid, prob = entry[0], entry[1]
+        comment = f" /* {entry[2]} */" if len(entry) > 2 else ""
+        prefix = "VALUES" if i == 0 else "     ,"
+        end    = ";" if i == len(spells) - 1 else ""
+        lines.append(f"{prefix} ({wcid}, {sid:5d}, {prob:8}){comment}{end}")
     return "\n".join(lines)
 
 
@@ -319,17 +447,47 @@ def _emit_create_list(wcid: int, items: list[dict]) -> str:
 
 
 def _emit_generator(wcid: int, g: dict) -> str:
+    """Emit generator weenie using the correct Shattered Dawn format.
+    Uses int props 81/82 for counts, float props 41/43 for timing/radius,
+    and weenie_properties_generator with probability=-1 (always spawn)."""
     target = _int_val(g, "target_wcid", 0)
-    delay = _float_val(g, "delay", 300.0)
-    init = _int_val(g, "init_create", 1)
-    maxc = _int_val(g, "max_create", 1)
-    when = _int_val(g, "when_create", 1)
-    where = _int_val(g, "where_create", 1)
-    cols = "(`object_Id`, `probability`, `weenie_Class_Id`, `delay`, `init_Create`, `max_Create`, `when_Create`, `where_Create`, `stack_Size`, `palette_Id`, `shade`, `obj_Cell_Id`, `origin_X`, `origin_Y`, `origin_Z`, `angles_W`, `angles_X`, `angles_Y`, `angles_Z`)"
-    return (
-        f"INSERT INTO `weenie_properties_generator` {cols}\n"
-        f"VALUES ({wcid}, 1.0, {target}, {delay}, {init}, {maxc}, {when}, {where}, -1, 0, 0.0, 0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0);"
-    )
+    delay  = _float_val(g, "delay", 300.0)
+    init   = _int_val(g, "init_create", 1)
+    maxc   = _int_val(g, "max_create", 1)
+    when   = _int_val(g, "when_create", 1)
+    where  = _int_val(g, "where_create", 2)  # 2=Scatter default
+    radius = _float_val(g, "radius", 50.0)
+
+    # Int properties: MaxGeneratedObjects(81), InitGeneratedObjects(82), PhysicsState(93)
+    int_rows = [
+        (81, maxc,  "MaxGeneratedObjects"),
+        (82, init,  "InitGeneratedObjects"),
+        (93, 1044,  "PhysicsState - Ethereal, IgnoreCollisions, Gravity"),
+    ]
+    # Bool properties
+    bool_rows = [
+        (1,  True, "Stuck"),
+        (11, True, "IgnoreCollisions"),
+        (18, True, "Visibility"),
+    ]
+    # Float properties: RegenerationInterval(41), GeneratorRadius(43)
+    float_rows = [
+        (41, delay,  "RegenerationInterval"),
+        (43, radius, "GeneratorRadius"),
+    ]
+    # Generator table row: probability=-1 means always spawn
+    gen_cols = "(`object_Id`, `probability`, `weenie_Class_Id`, `delay`, `init_Create`, `max_Create`, `when_Create`, `where_Create`, `stack_Size`, `palette_Id`, `shade`, `obj_Cell_Id`, `origin_X`, `origin_Y`, `origin_Z`, `angles_W`, `angles_X`, `angles_Y`, `angles_Z`)"
+    gen_comment = f"/* Generate {target} (x{init} up to max of {maxc}) - Regenerate upon Destruction */"
+
+    parts = [
+        _emit_int_props(wcid, int_rows),
+        _emit_bool_props(wcid, bool_rows),
+        _emit_float_props(wcid, float_rows),
+        f"INSERT INTO `weenie_properties_generator` {gen_cols}\n"
+        f"VALUES ({wcid}, -1, {target}, 1, {init}, {maxc}, {when}, {where}, -1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0) {gen_comment};",
+    ]
+    return "\n\n".join(p for p in parts if p)
+
 
 
 def _emit_position(wcid: int, pos: dict) -> str:
@@ -351,14 +509,16 @@ def _emit_position(wcid: int, pos: dict) -> str:
 
 
 def _emit_quest_entry(q: dict) -> str:
-    name = _escape_sql(_str_val(q, "quest_name", "MyQuestFlag"))
-    delta = _int_val(q, "min_delta", 86400)
-    solves = _int_val(q, "max_solves", 1)
-    msg = _escape_sql(_str_val(q, "message", ""))
+    name   = _escape_sql(_str_val(q, "quest_name", "MyQuestFlag"))
+    quest_id = _int_val(q, "quest_id", 0)
+    delta  = _int_val(q, "min_delta", 0)
+    solves = _int_val(q, "max_solves", 100)
+    msg    = _escape_sql(_str_val(q, "message", "kill counter"))
+    id_part = f"id = '{quest_id}' OR " if quest_id else ""
     return (
-        f"DELETE FROM `quest` WHERE `name` = '{name}';\n\n"
-        f"INSERT INTO `quest` (`name`, `min_Delta`, `max_Solves`, `message`, `last_Modified`)\n"
-        f"VALUES ('{name}', {delta}, {solves}, '{msg}', '{TIMESTAMP}');"
+        f"DELETE FROM quest WHERE {id_part}name = '{name}';\n\n"
+        f"INSERT INTO quest (id, name, min_Delta, max_Solves, message)\n"
+        f"VALUES ('{quest_id}', '{name}', '{delta}', '{solves}', '{msg}');"
     )
 
 
@@ -565,13 +725,8 @@ def json_to_sql(data: dict | str, filename: str = "") -> str:
         sections.append("")
         sections.append(_emit_position(wcid, position))
 
-    # ── Emote block (pass-through — handled by emote_parser) ─────────────────
-    emote_yaml = _str_val(data, "emotes", "")
-    if emote_yaml.strip():
-        sections.append("")
-        sections.append(f"-- EMOTE SCRIPT (WCID: {wcid})")
-        sections.append(emote_yaml.strip())
-        sections.append(f"-- END EMOTE SCRIPT")
+    # Emotes are generated separately by AgentLoop._generate_emotes()
+    # and appended after JSON→SQL conversion — not embedded in JSON.
 
     sections.append("")  # trailing newline
     return "\n".join(sections)
