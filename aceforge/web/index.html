@@ -81,11 +81,13 @@ select option{background:#fff;color:#16181d}
 .pill:hover{background:var(--parch-dk);border-color:var(--crimson);color:var(--crimson)}
 .pill.add-preset{border-style:dashed;color:var(--gold);border-color:var(--gold)}
 .pill.add-preset:hover{background:rgba(200,160,64,.1)}
-.form-scroll{flex:1;overflow-y:auto;padding-bottom:74px}
+.form-scroll{flex:1;overflow-y:auto;padding-bottom:74px;scrollbar-color:var(--ink-faint) transparent}
 .sub-panel{display:none}
 .sub-panel.active{display:block}
-.form-scroll::-webkit-scrollbar{width:5px}
-.form-scroll::-webkit-scrollbar-thumb{background:var(--border-lt)}
+.form-scroll::-webkit-scrollbar{width:10px}
+.form-scroll::-webkit-scrollbar-track{background:transparent}
+.form-scroll::-webkit-scrollbar-thumb{background:var(--ink-faint);border-radius:5px;border:2px solid transparent;background-clip:content-box}
+.form-scroll::-webkit-scrollbar-thumb:hover{background:var(--ink-dim);background-clip:content-box}
 .sec{padding:12px 18px}
 .sh{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .st{font-family:var(--ui-font);font-size:12px;font-weight:700;letter-spacing:.01em;text-transform:uppercase;color:var(--ink-mid)}
@@ -314,7 +316,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 
 
 /* ── Property sub-sub tabs ────────────────────────────────────────────────*/
-.prop-subtab-bar{display:flex;gap:2px;margin:12px 0 0;border-bottom:2px solid var(--border);flex-wrap:wrap}
+.prop-subtab-bar{display:flex;gap:2px;margin:12px 0 0;border-bottom:2px solid var(--border);flex-wrap:wrap;position:sticky;top:0;background:var(--parch-lt);z-index:5}
 .prop-stab{font-family:var(--ui-font);font-size:11px;font-weight:700;letter-spacing:.06em;
   text-transform:uppercase;padding:5px 14px;border:1px solid transparent;border-bottom:none;
   background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:3px 3px 0 0;
@@ -2849,7 +2851,7 @@ function buildRecipeProps(){
     </div>`).join('');
 
   const cbRows=cookbookEntries.map((e,i)=>`
-    <div style="display:grid;grid-template-columns:80px 1fr 1fr 28px;gap:8px;align-items:end;margin-bottom:6px">
+    <div style="display:grid;grid-template-columns:70px 1fr 70px 1fr 28px;gap:8px;align-items:end;margin-bottom:6px">
       <div class="fg"><div class="fl">Src WCID</div>
         <input type="number" value="${e.src||0}" oninput="cookbookEntries[${i}].src=this.value;regen()">
       </div>
@@ -2858,6 +2860,9 @@ function buildRecipeProps(){
       </div>
       <div class="fg"><div class="fl">Target WCID</div>
         <input type="number" value="${e.tgt||0}" oninput="cookbookEntries[${i}].tgt=this.value;regen()">
+      </div>
+      <div class="fg"><div class="fl">Target Name (comment)</div>
+        <input type="text" value="${e.tgtLabel||''}" placeholder="name comment" oninput="cookbookEntries[${i}].tgtLabel=this.value;regen()">
       </div>
       <button class="del" onclick="cookbookEntries.splice(${i},1);rebuildPanel('properties')" title="Remove">&#x2715;</button>
     </div>`).join('');
@@ -2891,7 +2896,7 @@ function buildRecipeProps(){
   <button class="add-btn" onclick="recipeMods.push({type:1,stat:0,operation:2,value:0,source:1});rebuildPanel('properties')">+ Add Modification</button>
   <div class="sh" style="margin-top:14px"><div class="st">Cook Book (source → target pairs)</div><div class="sl"></div></div>
   ${cbRows}
-  <button class="add-btn" onclick="cookbookEntries.push({src:0,srcLabel:'',tgt:0});rebuildPanel('properties')">+ Add Source → Target Pair</button>
+  <button class="add-btn" onclick="cookbookEntries.push({src:0,srcLabel:'',tgt:0,tgtLabel:''});rebuildPanel('properties')">+ Add Source → Target Pair</button>
   </div>`;
 }
 
@@ -4173,6 +4178,61 @@ function _stripSQLComments(s){
   return s.replace(/\/\*[\s\S]*?\*\//g, '');
 }
 
+// Cookbook-specific helpers that preserve /* comments */ instead of stripping
+// them, since cook_book rows carry meaningful item-name annotations on the
+// source/target WCIDs that the editor needs to round-trip.
+function _splitRowsKeepComments(raw){
+  var rows=[], depth=0, buf='', inStr=false;
+  for(var i=0;i<raw.length;i++){
+    var c=raw[i];
+    if(c==="'"){
+      if(inStr && raw[i+1]==="'"){ buf+="''"; i++; continue; }
+      inStr=!inStr; buf+=c; continue;
+    }
+    if(!inStr && c==='/' && raw[i+1]==='*'){
+      var end=raw.indexOf('*/',i+2);
+      var stop=end>=0?end+2:raw.length;
+      buf+=raw.substring(i,stop);
+      i=stop-1;
+      continue;
+    }
+    if(!inStr && c==='('){ depth++; if(depth===1){ buf=''; continue; } }
+    if(!inStr && c===')'){
+      depth--;
+      if(depth===0){ rows.push(buf); continue; }
+    }
+    if(depth>=1) buf+=c;
+  }
+  return rows;
+}
+function _splitColsKeepComments(rowStr){
+  var cols=[], buf='', i=0, n=rowStr.length, inStr=false;
+  while(i<n){
+    var c=rowStr[i];
+    if(c==="'"){
+      if(inStr && rowStr[i+1]==="'"){ buf+="''"; i+=2; continue; }
+      inStr=!inStr; buf+=c; i++; continue;
+    }
+    if(!inStr && c==='/' && rowStr[i+1]==='*'){
+      var end=rowStr.indexOf('*/',i+2);
+      var stop=end>=0?end+2:n;
+      buf+=rowStr.substring(i,stop);
+      i=stop;
+      continue;
+    }
+    if(!inStr && c===','){ cols.push(buf.trim()); buf=''; i++; continue; }
+    buf+=c; i++;
+  }
+  if(buf.trim()) cols.push(buf.trim());
+  return cols;
+}
+function _valWithComment(tok){
+  tok=(tok||'').trim();
+  var m=tok.match(/^(-?\d+(?:\.\d+)?)\s*(?:\/\*\s*([\s\S]*?)\s*\*\/)?$/);
+  if(!m) return {val:parseInt(tok)||0, label:''};
+  return {val:parseInt(m[1])||0, label:m[2]||''};
+}
+
 function _splitSQLRows(raw){
   // Splits a multi-row VALUES(...) , (...) , (...) block into individual row strings.
   // Strips comments first so a stray ) or , inside a comment can't break row boundaries,
@@ -4287,12 +4347,12 @@ function _parseRecipeSQL(sql){
     var cbM = sql.match(/INSERT INTO `?cook_book`?\s*\([^)]+\)\s*\n?VALUES\s*([\s\S]+?);/i);
     cookbookEntries.length=0;
     if(cbM){
-      _splitSQLRows(cbM[1]).forEach(function(rowStr){
-        var rt = _tokenizeSQLValues(rowStr);
+      _splitRowsKeepComments(cbM[1]).forEach(function(rowStr){
+        var rt = _splitColsKeepComments(rowStr);
         if(rt.length>=3){
-          var src=parseInt(_unquoteSQL(rt[1]))||0;
-          var tgt=parseInt(_unquoteSQL(rt[2]))||0;
-          if(src||tgt) cookbookEntries.push({src:src, tgt:tgt});
+          var srcP=_valWithComment(rt[1]);
+          var tgtP=_valWithComment(rt[2]);
+          if(srcP.val||tgtP.val) cookbookEntries.push({src:srcP.val, srcLabel:srcP.label, tgt:tgtP.val, tgtLabel:tgtP.label});
         }
       });
     }
@@ -6372,21 +6432,28 @@ function _buildActionFields(fdefs, a, i, j, aType, actRef){
 
   if([14,19,27,73].includes(aType)){
     const spellSel=buildSearchSelect('ea_spell_'+pid,SPELLS.map(s=>[String(s[0]),s[1]]),String(a.spellId||''),_s('spellId'),'Search spells…');
-    return '<div class="fg" style="grid-column:span 3"><div class="fl">Spell</div>'+spellSel+'</div>';
+    const _selId=parseInt(a.spellId||0);
+    const _selEntry=SPELLS.find(s=>s[0]===_selId);
+    const _selLabel=_selEntry?(_selEntry[0]+' · '+_selEntry[1]):(_selId?('Unknown spell ID '+_selId):'— None selected —');
+    return '<div class="fg" style="grid-column:span 3">'
+      +'<div class="fl">Spell</div>'
+      +'<div id="ea_spell_sel_'+pid+'" style="font-family:var(--ui-font);font-size:11px;font-weight:700;color:'+(_selEntry?'var(--ink)':'var(--ink-faint)')+';padding:6px 9px;margin-bottom:4px;background:var(--parch-dk);border:1px solid var(--border);border-radius:4px">Selected: '+_selLabel+'</div>'
+      +spellSel
+      +'</div>';
   }
   if(aType===5){
     const mlist=[['--- Player ---',[...MOTIONS_PLAYER]],['--- Idle/NPC ---',[...MOTIONS_IDLE]],['--- Monster ---',[...MOTIONS_MONSTER]],['--- Vendor ---',[...MOTIONS_VENDOR]],['--- State/Looping ---',[...MOTIONS_STATE]]];
     const _mv=(a.motion!=null&&a.motion!=='')?parseInt(a.motion):0;
     const opts='<option value="0"'+(_mv===0?' selected':'')+'>— Not Set —</option>'
       +mlist.map(([g,ms])=>'<optgroup label="'+g+'">'+ms.map(m=>'<option value="'+m[0]+'"'+(m[0]===_mv?' selected':'')+'>'+m[1]+'</option>').join('')+'</optgroup>').join('');
-    return '<div class="fg" style="grid-column:span 3"><div class="fl">Motion</div><select '+_si('motion')+'">'+opts+'</select></div>';
+    return '<div class="fg" style="grid-column:span 3"><div class="fl">Motion</div><select '+_si('motion')+'>'+opts+'</select></div>';
   }
   if(aType===52){
     const mlist=[['--- Player ---',[...MOTIONS_PLAYER]],['--- Idle/NPC ---',[...MOTIONS_IDLE]],['--- Monster ---',[...MOTIONS_MONSTER]],['--- Vendor ---',[...MOTIONS_VENDOR]],['--- State/Looping ---',[...MOTIONS_STATE]]];
     const _mv=(a.motion!=null&&a.motion!=='')?parseInt(a.motion):0;
     const opts='<option value="0"'+(_mv===0?' selected':'')+'>— Not Set —</option>'
       +mlist.map(([g,ms])=>'<optgroup label="'+g+'">'+ms.map(m=>'<option value="'+m[0]+'"'+(m[0]===_mv?' selected':'')+'>'+m[1]+'</option>').join('')+'</optgroup>').join('');
-    return '<div class="fg" style="grid-column:span 3"><div class="fl">Motion</div><select '+_si('motion')+'">'+opts+'</select></div>';
+    return '<div class="fg" style="grid-column:span 3"><div class="fl">Motion</div><select '+_si('motion')+'>'+opts+'</select></div>';
   }
   if([87,63,99,100].includes(aType)){
     return buildLocFields('loc_'+pid, a);
@@ -6478,7 +6545,18 @@ function _emoteDelegate(e){
     else if(act==='splice') { _esplice(path, idx); }
     else if(act==='move')   { _emove(path, idx, idx2); }
     else if(act==='type')   { _eTypeChange(path, parseInt(el.value)); }
-    else if(act==='set')    { _eset(path, path2, el.value); }
+    else if(act==='set')    {
+      _eset(path, path2, el.value);
+      if(path2==='spellId'){
+        const _rdEl=document.getElementById('ea_spell_sel_'+_pid(path));
+        if(_rdEl){
+          const _sid=parseInt(el.value||0);
+          const _se=SPELLS.find(s=>s[0]===_sid);
+          _rdEl.textContent='Selected: '+(_se?(_se[0]+' · '+_se[1]):(_sid?('Unknown spell ID '+_sid):'— None selected —'));
+          _rdEl.style.color=_se?'var(--ink)':'var(--ink-faint)';
+        }
+      }
+    }
     else if(act==='seti')   { _eset(path, path2, parseInt(el.value)||0); }
     else if(act==='setf')   { _eset(path, path2, parseFloat(el.value)||0); }
   }catch(err){
@@ -8154,10 +8232,11 @@ function buildRecipeSQL(){
     lines.push(`DELETE FROM \`cook_book\` WHERE \`recipe_Id\` = ${rid};`,'');
     lines.push(`INSERT INTO \`cook_book\` (\`recipe_Id\`, \`source_W_C_I_D\`, \`target_W_C_I_D\`, \`last_Modified\`)`);
     cookbookEntries.forEach((e,i)=>{
-      const lbl=e.srcLabel?` /* ${e.srcLabel} */`:'';
+      const srcLbl=e.srcLabel?` /* ${e.srcLabel} */`:'';
+      const tgtLbl=e.tgtLabel?` /* ${e.tgtLabel} */`:'';
       const prefix=i===0?'VALUES ':'     , ';
       const trail=i===cookbookEntries.length-1?';':'';
-      lines.push(`${prefix}(${rid}, ${e.src||0}${lbl}, ${e.tgt||0}, '${now}')${trail}`);
+      lines.push(`${prefix}(${rid}, ${e.src||0}${srcLbl}, ${e.tgt||0}${tgtLbl}, '${now}')${trail}`);
     });
   }
 
@@ -9085,7 +9164,7 @@ function closeSettings(){$('settingsOverlay').classList.remove('open');}
   document.addEventListener('mousemove',function(e){
     if(!dragging) return;
     const delta=startY-e.clientY;
-    const newH=Math.max(120,Math.min(700,startH+delta));
+    const newH=Math.max(120,Math.min(400,startH+delta));
     previewBox.style.height=newH+'px';
   });
   document.addEventListener('mouseup',function(){
