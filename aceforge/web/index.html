@@ -50,6 +50,7 @@ html,body{height:100%;overflow:hidden;font-family:'Inter',-apple-system,sans-ser
 .sql-panel{flex-shrink:0;background:var(--sql);display:flex;flex-direction:column;width:420px}
 .sql-resize{width:5px;background:var(--border);cursor:ew-resize;flex-shrink:0}
 .sql-resize:hover,.sql-resize.dragging{background:var(--crimson)}
+.ai-preview-resize:hover{background:var(--crimson)}
 .wb-header{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;background:var(--parch);flex-shrink:0}
 .wb-title{font-family:var(--ui-font);font-size:15px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
 .wb-title span{color:var(--ink-dim);font-weight:400}
@@ -577,7 +578,8 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
       <span class="ai-status" id="aiStatus"></span>
     </div>
     <textarea id="aiPrompt" style="display:none"></textarea>
-    <div style="flex:1;overflow:hidden;margin-top:12px;border:1px solid var(--border);background:var(--sql);display:flex;flex-direction:column;min-height:200px">
+    <div class="ai-preview-resize" id="aiPreviewResize" style="height:5px;background:var(--border);cursor:ns-resize;flex-shrink:0;margin-top:12px"></div>
+    <div id="aiPreviewBox" style="overflow:hidden;border:1px solid var(--border);background:var(--sql);display:flex;flex-direction:column;height:280px;flex-shrink:0">
       <div id="qPreviewToolbar" style="padding:6px 12px;border-bottom:1px solid #2a2010;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;min-height:36px;gap:8px">
         <span style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)">&#x25C6; Preview</span>
       </div>
@@ -1911,19 +1913,22 @@ const MOTIONS_IDLE=[
   [2147483709,'NonCombat (0x8000003d)'],[268435533,'ChestBeat (0x1000004d)'],
   [268435537,'Twitch1 (0x10000051)'],[268435538,'Twitch2 (0x10000052)'],
   [268435539,'Twitch3 (0x10000053)'],[268435540,'Twitch4 (0x10000054)'],
+  [2147483880,'BowNoAmmo (0x800000e8)'],[2147483881,'CrossBowNoAmmo (0x800000e9)'],
 ];
 const MOTIONS_PLAYER=[
   [318767225,'ShakeFist'],[318767226,'Beckon'],[318767227,'BeSeeingYou'],
   [318767228,'BlowKiss'],[318767230,'ClapHands'],[318767231,'Cry'],
   [318767232,'Laugh'],[318767233,'MimeEat'],[318767234,'MimeDrink'],
-  [318767236,'Point'],[318767237,'ShakeHead'],[318767240,'Akimbo'],
-  [318767241,'HeartyLaugh'],[318767242,'Salute'],[318767243,'ScratchHead'],
-  [318767244,'SmackHead'],[318767245,'TapFoot'],[318767246,'WaveHigh'],
-  [318767247,'WaveLow'],[318767248,'YawnStretch'],[318767249,'Cringe'],
-  [318767250,'Kneel'],[318767251,'Plead'],[318767252,'Shiver'],
-  [318767253,'Shoo'],[318767254,'Slouch'],[318767255,'Spit'],
-  [318767256,'Surrender'],[318767257,'Woah'],[318767258,'Winded'],
-  [301990043,'YMCA'],
+  [318767236,'Point'],[318767237,'ShakeHead'],[318767239,'Wave'],
+  [318767240,'Akimbo'],[318767241,'HeartyLaugh'],[318767242,'Salute'],
+  [318767243,'ScratchHead'],[318767244,'SmackHead'],[318767245,'TapFoot'],
+  [318767246,'WaveHigh'],[318767247,'WaveLow'],[318767248,'YawnStretch'],
+  [318767249,'Cringe'],[318767250,'Kneel'],[318767251,'Plead'],
+  [318767252,'Shiver'],[318767253,'Shoo'],[318767254,'Slouch'],
+  [318767255,'Spit'],[318767256,'Surrender'],[318767257,'Woah'],
+  [318767258,'Winded'],[301990043,'YMCA'],
+  [318767306,'Pray'],[318767307,'Mock'],[318767308,'Teapot'],
+  [301990100,'Flatulence'],[318767385,'WarmHands'],
 ];
 const MOTIONS_MONSTER=[
   [268435661,'SpecialAttack1'],[268435662,'SpecialAttack2'],[268435663,'SpecialAttack3'],
@@ -1933,8 +1938,23 @@ const MOTIONS_MONSTER=[
 const MOTIONS_VENDOR=[
   [318767229,'BowDeep'],[318767235,'Nod'],[318767238,'Shrug'],
 ];
+// State/Looping motions — sustained or held versions of a gesture, rather than
+// a single one-off play-through (e.g. holding a kneel vs. a one-time bow).
+// ATOYOT placed here as its hex prefix (0x42) sits directly adjacent to this
+// 0x43 State block and it doesn't fit any other category — flagging this
+// placement as a guess if it turns out to belong elsewhere.
+const MOTIONS_STATE=[
+  [1124073706,'ShakeFistState'],[1124073707,'PrayState'],[1124073708,'BowDeepState'],
+  [1124073709,'ClapHandsState'],[1124073710,'CrossArmsState'],[1124073711,'ShiverState'],
+  [1124073712,'PointState'],[1124073713,'WaveState'],[1124073714,'AkimboState'],
+  [1124073715,'SaluteState'],[1124073716,'ScratchHeadState'],[1124073717,'TapFootState'],
+  [1124073718,'LeanState'],[1124073719,'KneelState'],[1124073720,'PleadState'],
+  [1107296505,'ATOYOT'],[1124073722,'SlouchState'],[1124073723,'SurrenderState'],
+  [1124073724,'WoahState'],[1124073725,'WindedState'],[1124073752,'SnowAngelState'],
+  [1124073754,'CurtseyState'],[1124073755,'AFKState'],[1124073756,'MeditateState'],
+];
 const MOTIONS_ALL=[...MOTIONS_IDLE,...MOTIONS_MONSTER,...MOTIONS_VENDOR];
-const MOTIONS_FORCE=[...MOTIONS_PLAYER,...MOTIONS_IDLE,...MOTIONS_MONSTER,...MOTIONS_VENDOR];
+const MOTIONS_FORCE=[...MOTIONS_PLAYER,...MOTIONS_IDLE,...MOTIONS_MONSTER,...MOTIONS_VENDOR,...MOTIONS_STATE];
 
 // Searchable stat dropdowns
 const INT_STATS=[
@@ -3761,10 +3781,10 @@ function _actionToYAML(a, indent, _inlined, _gotoSetMap){
     // InqSkillTrained (45), InqSkillSpecialized (46), InqSkillUntrainable (110): just name
   }
   else if(t===5||t===52){
-    // Motion / ForceMotion — look up motion id in MOTIONS_ALL
+    // Motion / ForceMotion — look up motion id in MOTIONS_FORCE
     var _mid=parseInt(a.motion||0);
     var _mentry=MOTIONS_FORCE.find(function(m){return m[0]===_mid;});
-    val=_mentry?_mentry[1]:(_mid?String(_mid):'');
+    val=_mentry?_mentry[1]:(_mid?String(_mid):'— Not Set —');
   }
   else val=a.message||a.testString||'';
 
@@ -4861,6 +4881,7 @@ function _parseSQLValueList(str) {
       else if(tok[0]==='@') vals.push(null);
       else if(tok.toUpperCase()==='TRUE') vals.push(1);
       else if(tok.toUpperCase()==='FALSE') vals.push(0);
+      else if(/^0x[0-9a-f]+$/i.test(tok)) vals.push(parseInt(tok, 16));
       else vals.push(isNaN(tok)?tok:(tok.indexOf('.')>=0?parseFloat(tok):parseInt(tok,10)));
     }
     ws();
@@ -6354,13 +6375,17 @@ function _buildActionFields(fdefs, a, i, j, aType, actRef){
     return '<div class="fg" style="grid-column:span 3"><div class="fl">Spell</div>'+spellSel+'</div>';
   }
   if(aType===5){
-    const mlist=[['--- Idle/NPC ---',[...MOTIONS_IDLE]],['--- Monster ---',[...MOTIONS_MONSTER]],['--- Vendor ---',[...MOTIONS_VENDOR]]];
-    const opts=mlist.map(([g,ms])=>'<optgroup label="'+g+'">'+ms.map(m=>'<option value="'+m[0]+'"'+(m[0]===(a.motion||0)?' selected':'')+'>'+m[1]+'</option>').join('')+'</optgroup>').join('');
+    const mlist=[['--- Player ---',[...MOTIONS_PLAYER]],['--- Idle/NPC ---',[...MOTIONS_IDLE]],['--- Monster ---',[...MOTIONS_MONSTER]],['--- Vendor ---',[...MOTIONS_VENDOR]],['--- State/Looping ---',[...MOTIONS_STATE]]];
+    const _mv=(a.motion!=null&&a.motion!=='')?parseInt(a.motion):0;
+    const opts='<option value="0"'+(_mv===0?' selected':'')+'>— Not Set —</option>'
+      +mlist.map(([g,ms])=>'<optgroup label="'+g+'">'+ms.map(m=>'<option value="'+m[0]+'"'+(m[0]===_mv?' selected':'')+'>'+m[1]+'</option>').join('')+'</optgroup>').join('');
     return '<div class="fg" style="grid-column:span 3"><div class="fl">Motion</div><select '+_si('motion')+'">'+opts+'</select></div>';
   }
   if(aType===52){
-    const mlist=[['--- Player ---',[...MOTIONS_PLAYER]],['--- Idle/NPC ---',[...MOTIONS_IDLE]],['--- Monster ---',[...MOTIONS_MONSTER]],['--- Vendor ---',[...MOTIONS_VENDOR]]];
-    const opts=mlist.map(([g,ms])=>'<optgroup label="'+g+'">'+ms.map(m=>'<option value="'+m[0]+'"'+(m[0]===(a.motion||0)?' selected':'')+'>'+m[1]+'</option>').join('')+'</optgroup>').join('');
+    const mlist=[['--- Player ---',[...MOTIONS_PLAYER]],['--- Idle/NPC ---',[...MOTIONS_IDLE]],['--- Monster ---',[...MOTIONS_MONSTER]],['--- Vendor ---',[...MOTIONS_VENDOR]],['--- State/Looping ---',[...MOTIONS_STATE]]];
+    const _mv=(a.motion!=null&&a.motion!=='')?parseInt(a.motion):0;
+    const opts='<option value="0"'+(_mv===0?' selected':'')+'>— Not Set —</option>'
+      +mlist.map(([g,ms])=>'<optgroup label="'+g+'">'+ms.map(m=>'<option value="'+m[0]+'"'+(m[0]===_mv?' selected':'')+'>'+m[1]+'</option>').join('')+'</optgroup>').join('');
     return '<div class="fg" style="grid-column:span 3"><div class="fl">Motion</div><select '+_si('motion')+'">'+opts+'</select></div>';
   }
   if([87,63,99,100].includes(aType)){
@@ -8310,6 +8335,29 @@ function switchAIType(type,btn){
 
 // ── OLLAMA SETUP ──────────────────────────────────────────────────────────────
 
+let _ollamaPollTimer = null;
+let _ollamaLaunching = false;
+
+function _stopOllamaPoll(){
+  if(_ollamaPollTimer){ clearInterval(_ollamaPollTimer); _ollamaPollTimer = null; }
+}
+
+function _startOllamaPoll(){
+  _stopOllamaPoll();
+  let elapsed = 0;
+  const intervalMs = 4000;
+  const maxMs = 5 * 60 * 1000; // give up auto-polling after 5 minutes
+  _ollamaPollTimer = setInterval(() => {
+    elapsed += intervalMs;
+    if(!window.pywebview){ _stopOllamaPoll(); return; }
+    window.pywebview.api.check_ollama().then(status => {
+      _ollamaStatus = status;
+      _renderOllamaStatus(status);
+      if(status.running || elapsed >= maxMs) _stopOllamaPoll();
+    });
+  }, intervalMs);
+}
+
 function openOllamaSetup(){
   const ov=$('ollamaOverlay');
   ov.style.display='flex';
@@ -8318,6 +8366,7 @@ function openOllamaSetup(){
 
 function closeOllamaSetup(){
   $('ollamaOverlay').style.display='none';
+  _stopOllamaPoll();
 }
 
 function ollamaCheck(){
@@ -8346,12 +8395,18 @@ function _renderOllamaStatus(s){
     s1status.style.color='var(--gold)';
     s1status.textContent='Ollama installed but not running — launching…';
     if(installBtn) installBtn.disabled=true;
-    // Auto-launch
-    window.pywebview.api.launch_ollama().then(r=>{
-      s1status.style.color = r.success ? 'var(--green)' : 'var(--crimson-lt)';
-      s1status.textContent  = r.success ? 'Ollama running ✓' : '✗ ' + r.error;
-      if(r.success) ollamaCheck();
-    });
+    // Auto-launch — guarded so repeated status polls (e.g. while waiting
+    // for a slow installer to finish) don't spawn multiple redundant
+    // `ollama serve` processes before the first one finishes starting up.
+    if(!_ollamaLaunching){
+      _ollamaLaunching = true;
+      window.pywebview.api.launch_ollama().then(r=>{
+        _ollamaLaunching = false;
+        s1status.style.color = r.success ? 'var(--green)' : 'var(--crimson-lt)';
+        s1status.textContent  = r.success ? 'Ollama running ✓' : '✗ ' + r.error;
+        if(r.success) ollamaCheck();
+      });
+    }
   } else {
     s1icon.textContent='⬜';
     s1status.style.color='var(--ink-dim)';
@@ -8441,6 +8496,8 @@ function ollamaInstall(){
     if(!r.success){
       $('olStep1Progress').style.display='none';
       if(btn) btn.disabled=false;
+    } else {
+      _startOllamaPoll();
     }
   });
 }
@@ -9006,6 +9063,30 @@ function closeSettings(){$('settingsOverlay').classList.remove('open');}
     const newW=Math.max(240,Math.min(900,startW+delta));
     sqlPanel.style.width=newW+'px';
     sqlPanel.style.flex='none';
+  });
+  document.addEventListener('mouseup',function(){
+    if(dragging){ dragging=false; document.body.style.userSelect=''; }
+  });
+})();
+
+(function(){
+  const handle=document.getElementById('aiPreviewResize');
+  const previewBox=document.getElementById('aiPreviewBox');
+  if(!handle||!previewBox) return;
+  let startY=0, startH=0, dragging=false;
+  handle.style.cursor='ns-resize';
+  handle.addEventListener('mousedown',function(e){
+    dragging=true;
+    startY=e.clientY;
+    startH=previewBox.offsetHeight;
+    document.body.style.userSelect='none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove',function(e){
+    if(!dragging) return;
+    const delta=startY-e.clientY;
+    const newH=Math.max(120,Math.min(700,startH+delta));
+    previewBox.style.height=newH+'px';
   });
   document.addEventListener('mouseup',function(){
     if(dragging){ dragging=false; document.body.style.userSelect=''; }
