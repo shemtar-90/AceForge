@@ -1263,6 +1263,26 @@ Start with: /* ===== FILE: {fname} ===== */
             return {"has_update": False, "error": str(e),
                     "current_version": self.APP_VERSION}
 
+    def save_converter_output(self, content: str, base_name: str, ext: str) -> dict:
+        """Save JSON<->SQL converter output to the configured Output folder."""
+        try:
+            output_dir = str(self.config.output_dir or "").strip()
+            if not output_dir:
+                output_dir = str(Path.home() / "Documents" / "ACEForge" / "output")
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+            name = (base_name or "converted").strip() or "converted"
+            for ch in r'\/:*?"<>|':
+                name = name.replace(ch, "")
+            name = name.strip() or "converted"
+            ext = (ext or "txt").lstrip(".").lower()
+
+            fpath = Path(output_dir) / f"{name}.{ext}"
+            fpath.write_text(content, encoding="utf-8")
+            return {"success": True, "path": str(fpath), "folder": output_dir}
+        except Exception as e:
+            return {"error": str(e)}
+
     def convert_json_to_sql(self, json_text: str, filename: str = "") -> dict:
         """Convert ACE JSON weenie data to ACE-World SQL."""
         try:
@@ -1283,6 +1303,8 @@ Start with: /* ===== FILE: {fname} ===== */
             def _clean_val(v):
                 v = v.strip()
                 if v.upper() == "NULL": return None
+                if v.upper() == "TRUE": return True
+                if v.upper() == "FALSE": return False
                 if v.startswith("'") and v.endswith("'"): return v[1:-1].replace("''", "'")
                 try: return int(v)
                 except ValueError: pass
@@ -1290,37 +1312,88 @@ Start with: /* ===== FILE: {fname} ===== */
                 except ValueError: pass
                 return v
 
-            def _parse_insert(sql_block):
-                """Parse a single INSERT statement into {col: val} dict."""
-                col_m = re.search(r"INSERT INTO `[^`]+`\s*\(([^)]+)\)", sql_block, re.I)
-                val_m = re.search(r"VALUES\s*\(([^;]+?)\)\s*;?", sql_block, re.I | re.S)
-                if not col_m or not val_m: return {}
-                cols = [c.strip().strip('`') for c in col_m.group(1).split(',')]
-                # Quote-aware CSV split
-                raw = val_m.group(1)
-                vals, cur, depth, in_q = [], '', 0, False
-                for ch in raw:
+            def _split_value_rows(values_block):
+                """Split a VALUES (...) , (...) , (...) block into individual
+                row strings, respecting quoted strings and skipping over
+                /* comments */ so a stray paren inside a comment can't break
+                row boundaries."""
+                rows, depth, buf, in_str = [], 0, '', False
+                i, n = 0, len(values_block)
+                while i < n:
+                    ch = values_block[i]
+                    if in_str:
+                        if ch == "'" and i+1 < n and values_block[i+1] == "'":
+                            buf += "''"; i += 2; continue
+                        buf += ch
+                        if ch == "'": in_str = False
+                        i += 1; continue
+                    if ch == "'":
+                        in_str = True; buf += ch; i += 1; continue
+                    if ch == '/' and i+1 < n and values_block[i+1] == '*':
+                        end = values_block.find('*/', i+2)
+                        i = end + 2 if end >= 0 else n
+                        continue
+                    if ch == '(':
+                        depth += 1
+                        if depth == 1:
+                            buf = ''
+                            i += 1; continue
+                    if ch == ')':
+                        depth -= 1
+                        if depth == 0:
+                            rows.append(buf)
+                            i += 1; continue
+                    if depth >= 1: buf += ch
+                    i += 1
+                return rows
+
+            def _split_row_values(raw):
+                """Quote-aware, comment-aware CSV split of one row's values."""
+                vals, cur, in_q = [], '', False
+                i, n = 0, len(raw)
+                while i < n:
+                    ch = raw[i]
                     if in_q:
-                        if ch == "'": in_q = False
+                        if ch == "'" and i+1 < n and raw[i+1] == "'":
+                            cur += "''"; i += 2; continue
                         cur += ch
-                    elif ch == "'": in_q = True; cur += ch
-                    elif ch == ',' and depth == 0: vals.append(cur.strip()); cur = ''
-                    else: cur += ch
+                        if ch == "'": in_q = False
+                        i += 1; continue
+                    if ch == "'":
+                        in_q = True; cur += ch; i += 1; continue
+                    if ch == '/' and i+1 < n and raw[i+1] == '*':
+                        end = raw.find('*/', i+2)
+                        i = end + 2 if end >= 0 else n
+                        continue
+                    if ch == ',':
+                        vals.append(cur.strip()); cur = ''
+                        i += 1; continue
+                    cur += ch; i += 1
                 if cur.strip(): vals.append(cur.strip())
-                return {cols[i]: _clean_val(vals[i]) for i in range(min(len(cols), len(vals)))}
+                return vals
+
+            def _parse_insert(sql_block):
+                """Parse an INSERT statement into a list of {col: val} dicts —
+                one per VALUES row tuple, since ACE-World SQL commonly writes
+                many rows per statement (e.g. one INSERT for all of a
+                weenie's int properties)."""
+                col_m = re.search(r"INSERT INTO `[^`]+`\s*\(([^)]+)\)", sql_block, re.I)
+                val_m = re.search(r"VALUES\s*([\s\S]+?);\s*$", sql_block, re.I)
+                if not col_m or not val_m: return []
+                cols = [c.strip().strip('`') for c in col_m.group(1).split(',')]
+                out = []
+                for row_raw in _split_value_rows(val_m.group(1)):
+                    vals = _split_row_values(row_raw)
+                    out.append({cols[i]: _clean_val(vals[i]) for i in range(min(len(cols), len(vals)))})
+                return out
 
             # Parse all INSERT statements
-            inserts = re.findall(
-                r"INSERT INTO `([^`]+)`[^;]+;",
-                re.sub(r"--[^\n]*", "", sql),
-                re.I | re.S
-            )
             all_rows = {}
             for m in re.finditer(r"INSERT INTO `([^`]+)`([^;]+);", re.sub(r"--[^\n]*","",sql), re.I|re.S):
                 table = m.group(1).lower()
-                row = _parse_insert("INSERT INTO `" + m.group(1) + "`" + m.group(2) + ";")
+                rows = _parse_insert("INSERT INTO `" + m.group(1) + "`" + m.group(2) + ";")
                 if table not in all_rows: all_rows[table] = []
-                all_rows[table].append(row)
+                all_rows[table].extend(rows)
 
             # Build JSON structure
             weenie_row = (all_rows.get("weenie") or [{}])[0]
