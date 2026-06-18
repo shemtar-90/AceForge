@@ -1230,7 +1230,7 @@ Start with: /* ===== FILE: {fname} ===== */
         return {"items": items, "generating": self._generating}
 
 
-    APP_VERSION = "1.0.0"
+    APP_VERSION = "0.2.04"
 
     def get_version(self) -> str:
         return self.APP_VERSION
