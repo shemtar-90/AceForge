@@ -2810,17 +2810,54 @@ window._WEENIE_TYPES = {
   38:'Gem',39:'TinkerTool',40:'SalvageBag',51:'Stackable',
 };
 
+// Build a stat-ID <select> whose options are drawn from the correct property
+// lookup table based on which Requirement type is currently selected.
+// type 1=IntStat→PROP_INT, 2=BoolStat→PROP_BOOL, 3=FloatStat→PROP_FLOAT,
+// 4=StringStat→PROP_STRING, 5=SkillTrained/6=SkillSpecialized→ALL_SKILLS_FULL,
+// 7=MinItems: no meaningful stat enum — keep raw number input.
+function _reqStatOpts(reqType, currentStat){
+  reqType=parseInt(reqType)||1;
+  var map={1:PROP_INT,2:PROP_BOOL,3:PROP_FLOAT,4:PROP_STRING};
+  if(reqType===5||reqType===6){
+    return ALL_SKILLS_FULL.map(function(s){
+      return '<option value="'+s[0]+'"'+(s[0]==currentStat?' selected':'')+'>'+s[0]+' · '+s[1]+'</option>';
+    }).join('');
+  }
+  var src=map[reqType];
+  if(!src) return '<option value="'+currentStat+'">'+currentStat+'</option>';
+  return Object.entries(src).map(function(e){
+    return '<option value="'+e[0]+'"'+(e[0]==currentStat?' selected':'')+'>'+e[0]+' · '+e[1]+'</option>';
+  }).join('');
+}
+
+// Same for Modification stat — types 1=Int→PROP_INT, 2=Float→PROP_FLOAT,
+// 3=Bool→PROP_BOOL, 4=String→PROP_STRING, 5=DID→PROP_DID, 6=IID: no enum.
+function _modStatOpts(modType, currentStat){
+  modType=parseInt(modType)||1;
+  var map={1:PROP_INT,2:PROP_FLOAT,3:PROP_BOOL,4:PROP_STRING,5:PROP_DID};
+  var src=map[modType];
+  if(!src) return '<option value="'+currentStat+'">'+currentStat+'</option>';
+  return Object.entries(src).map(function(e){
+    return '<option value="'+e[0]+'"'+(e[0]==currentStat?' selected':'')+'>'+e[0]+' · '+e[1]+'</option>';
+  }).join('');
+}
+
 function buildRecipeProps(){
   // Single unified requirements list — type dropdown determines which SQL table
   // Single array — type field routes to correct SQL table in buildRecipeSQL
   const reqRows=recipeReqs.map((r,i)=>{
+    const statOpts=_reqStatOpts(r.type, r.stat);
+    const showStatSelect=parseInt(r.type)!==7; // MinItems has no stat enum
     return `
-    <div style="display:grid;grid-template-columns:120px 80px 150px 140px 1fr 28px;gap:8px;align-items:end;margin-bottom:6px">
+    <div style="display:grid;grid-template-columns:120px 1fr 150px 140px 1fr 28px;gap:8px;align-items:end;margin-bottom:6px">
       <div class="fg"><div class="fl">Type</div>
-        <select onchange="recipeReqs[${i}].type=this.value;regen()">${opt(REQUIREMENT_TYPE,r.type)}</select>
+        <select onchange="recipeReqs[${i}].type=this.value;recipeReqs[${i}].stat=0;rebuildPanel('properties')">${opt(REQUIREMENT_TYPE,r.type)}</select>
       </div>
       <div class="fg"><div class="fl">Stat ID</div>
-        <input type="number" value="${r.stat}" oninput="recipeReqs[${i}].stat=this.value;regen()">
+        ${showStatSelect
+          ? `<select onchange="recipeReqs[${i}].stat=this.value;regen()">${statOpts}</select>`
+          : `<input type="number" value="${r.stat}" oninput="recipeReqs[${i}].stat=this.value;regen()">`
+        }
       </div>
       <div class="fg"><div class="fl">Value</div>
         <input type="text" value="${r.value||''}" oninput="recipeReqs[${i}].value=this.value;regen()">
@@ -2835,13 +2872,19 @@ function buildRecipeProps(){
     </div>`;
   }).join('');
 
-  const modRows=recipeMods.map((m,i)=>`
-    <div style="display:grid;grid-template-columns:120px 80px 130px 130px 90px 28px;gap:8px;align-items:end;margin-bottom:6px">
+  const modRows=recipeMods.map((m,i)=>{
+    const modStatSel=_modStatOpts(m.type, m.stat);
+    const showModStatSelect=[1,2,3,4,5].includes(parseInt(m.type)); // IID (6) has no enum
+    return `
+    <div style="display:grid;grid-template-columns:120px 1fr 130px 130px 90px 28px;gap:8px;align-items:end;margin-bottom:6px">
       <div class="fg"><div class="fl">Mod Type</div>
-        <select onchange="recipeMods[${i}].type=this.value;regen()">${opt(MOD_TYPE,m.type)}</select>
+        <select onchange="recipeMods[${i}].type=this.value;recipeMods[${i}].stat=0;rebuildPanel('properties')">${opt(MOD_TYPE,m.type)}</select>
       </div>
       <div class="fg"><div class="fl">Stat ID</div>
-        <input type="number" value="${m.stat||0}" oninput="recipeMods[${i}].stat=this.value;regen()">
+        ${showModStatSelect
+          ? `<select onchange="recipeMods[${i}].stat=this.value;regen()">${modStatSel}</select>`
+          : `<input type="number" value="${m.stat||0}" oninput="recipeMods[${i}].stat=this.value;regen()">`
+        }
       </div>
       <div class="fg"><div class="fl">Operation</div>
         <select onchange="recipeMods[${i}].operation=this.value;regen()">${opt(MOD_OP,m.operation)}</select>
@@ -2853,7 +2896,8 @@ function buildRecipeProps(){
         <select onchange="recipeMods[${i}].source=this.value;regen()">${opt(RECIPE_SOURCE_TYPE,m.source)}</select>
       </div>
       <button class="del" onclick="recipeMods.splice(${i},1);rebuildPanel('properties')" title="Remove">&#x2715;</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   const cbRows=cookbookEntries.map((e,i)=>`
     <div style="display:grid;grid-template-columns:70px 1fr 70px 1fr 28px;gap:8px;align-items:end;margin-bottom:6px">
@@ -8627,22 +8671,34 @@ window.addEventListener('ollama_setup', e=>{
 function checkForUpdate(){
   if(!window.pywebview) return;
   window.pywebview.api.check_for_update().then(r=>{
-    if(r.has_update){
-      // Only show if user hasn't already seen this version
-      var seenKey='aceforge_seen_v'+r.latest_version;
-      if(!localStorage.getItem(seenKey)){
-        const ov=document.getElementById('updateOverlay');
-        const msg=document.getElementById('updateMsg');
-        const notes=document.getElementById('updateNotes');
-        if(msg) msg.textContent='ACEForge '+r.latest_version+' is available (you have '+r.current_version+'). Would you like to update now?';
-        if(notes) notes.textContent=r.release_notes||'';
-        if(ov) ov.style.display='flex';
-        if(ov) ov._dlUrl=r.download_url;
-        // Mark this version as seen for future launches
-        try{ localStorage.setItem(seenKey,'1'); }catch(e){}
-      }
-    }
+    if(!r.has_update) return;
+    // Check config (not localStorage) for the dismissed version — config
+    // lives in %APPDATA%\ACEForge\config.json and survives app updates,
+    // unlike localStorage which can be wiped when a new zip is extracted.
+    window.pywebview.api.get_seen_update_version().then(seen=>{
+      if(seen===r.latest_version) return; // user already dismissed this version
+      const ov=document.getElementById('updateOverlay');
+      const msg=document.getElementById('updateMsg');
+      const notes=document.getElementById('updateNotes');
+      if(msg) msg.textContent='ACEForge '+r.latest_version+' is available (you have '+r.current_version+'). Would you like to update now?';
+      if(notes) notes.textContent=r.release_notes||'';
+      if(ov) ov.style.display='flex';
+      if(ov) ov._dlUrl=r.download_url;
+      if(ov) ov._latestVersion=r.latest_version;
+    });
   });
+}
+
+function dismissUpdate(){
+  const ov=document.getElementById('updateOverlay');
+  if(!ov) return;
+  ov.style.display='none';
+  // Persist the dismissed version to the config file so the user isn't
+  // re-notified on the next launch (localStorage alone doesn't survive
+  // a zip-extraction update that can wipe the WebView2 profile cache).
+  if(window.pywebview && ov._latestVersion){
+    window.pywebview.api.set_seen_update_version(ov._latestVersion);
+  }
 }
 
 function doUpdate(){
@@ -8652,6 +8708,9 @@ function doUpdate(){
   if(btn) btn.disabled=true;
   if(prog) prog.style.display='block';
   if(!window.pywebview||!ov._dlUrl) return;
+  // Mark this version as seen before installing so a post-restart launch
+  // doesn't re-show the prompt for the version we're about to install.
+  if(ov._latestVersion) window.pywebview.api.set_seen_update_version(ov._latestVersion);
   window.pywebview.api.download_and_install_update(ov._dlUrl).then(r=>{
     if(!r.success){
       if(btn) btn.disabled=false;
@@ -10778,7 +10837,7 @@ if(!window.pywebview)init();
   <div style="background:var(--parch);border:1px solid var(--gold);border-radius:4px;width:480px;box-shadow:0 8px 40px rgba(0,0,0,.6)">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
       <div style="font-family:var(--ui-font);font-size:13px;font-weight:700;letter-spacing:.1em;color:var(--gold)">⬆ UPDATE AVAILABLE</div>
-      <button onclick="document.getElementById('updateOverlay').style.display='none'" style="background:none;border:none;font-size:16px;cursor:pointer;color:var(--ink-dim)">✕</button>
+      <button onclick="dismissUpdate()" style="background:none;border:none;font-size:16px;cursor:pointer;color:var(--ink-dim)">✕</button>
     </div>
     <div style="padding:20px">
       <p id="updateMsg" style="font-family:var(--ui-font);font-style:italic;font-size:13px;color:var(--ink-dim);margin-bottom:14px;line-height:1.6"></p>
@@ -10791,7 +10850,7 @@ if(!window.pywebview)init();
       </div>
       <div style="display:flex;gap:10px">
         <button id="updateBtn" class="top-btn" onclick="doUpdate()" style="background:var(--gold);border-color:var(--gold);color:#1a1200;padding:8px 20px;font-size:11px">⬆ Update Now</button>
-        <button class="top-btn" onclick="document.getElementById('updateOverlay').style.display='none'" style="padding:8px 14px;font-size:11px;background:transparent">Later</button>
+        <button class="top-btn" onclick="dismissUpdate()" style="padding:8px 14px;font-size:11px;background:transparent">Later</button>
       </div>
     </div>
   </div>

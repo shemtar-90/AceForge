@@ -365,7 +365,6 @@ def _npc_base_sql(wcid: int, name: str, class_name: str, filename: str) -> str:
         (3,  0x20000001, "SoundTable"),
         (6,  0x0400007E, "PaletteBase"),
         (8,  0x06001036, "Icon"),
-        (31, 1595,       "LinkedPortalOne - Abandoned Mine"),
     ]
     # Body parts: Human 9-part matching reference (base_Armor=250, armor_Vs_*=125)
     body_parts = [
@@ -410,6 +409,13 @@ def _npc_base_sql(wcid: int, name: str, class_name: str, filename: str) -> str:
     sections.append(""); sections.append(_emit_attributes(wcid, attrs))
     sections.append(""); sections.append(_emit_vitals(wcid, 326, 456, 396))
     sections.append(""); sections.append(_emit_skills(wcid, skill_rows))
+    # Default clothing: Gelidite Robe (wcid 6061) wielded on all NPCs
+    sections.append("")
+    sections.append(
+        "INSERT INTO `weenie_properties_create_list`"
+        " (`object_Id`, `destination_Type`, `weenie_Class_Id`, `stack_Size`, `palette`, `shade`, `try_To_Bond`)\n"
+        f"VALUES ({wcid}, 2, 6061, 1, 0, 0, False) /* Create Gelidite Robe (6061) for Wield */;"
+    )
     sections.append("")
     return "\n".join(s for s in sections)
 

@@ -795,7 +795,7 @@ Start with: /* ===== FILE: {fname} ===== */
 
             # Restart
             self._ollama_event("download_done", "Update installed! Restarting…", 100, 100)
-            import threading
+            import threading, time
             def _restart():
                 time.sleep(1.5)
                 os.execl(sys.executable, sys.executable, *sys.argv)
@@ -1234,6 +1234,21 @@ Start with: /* ===== FILE: {fname} ===== */
 
     def get_version(self) -> str:
         return self.APP_VERSION
+
+    def get_seen_update_version(self) -> str:
+        """Return the last update version the user was notified about.
+        Stored in the config file (not localStorage) so it survives app updates."""
+        return self.config.get("seen_update_version", "")
+
+    def set_seen_update_version(self, version: str) -> dict:
+        """Persist the dismissed update version so the user isn't re-notified
+        about the same release on every launch."""
+        try:
+            self.config.set("seen_update_version", version)
+            self.config.save()
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def check_for_update(self) -> dict:
         """Check GitHub releases for a newer version of ACEForge."""
