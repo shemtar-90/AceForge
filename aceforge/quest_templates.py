@@ -1384,8 +1384,7 @@ def generate_item_turnin(params: dict, config) -> list[dict]:
                         message=f"You need {multi_count} {item_name} to complete this task."))
 
     # Block 7: QuestFailure(QTStarted) → explain task + stamp started
-    #   npc_desc contains the personality/task description — use item_desc as fallback
-    task_intro = params.get("npc_description", "") or f"I am in need of {multi_count} {item_name}! Bring one to me and I will reward you well!"
+    task_intro = f"I am in need of {multi_count} {item_name}! Bring one to me and I will reward you well!"
     emote_parts.append(_emit_emote_block(npc_wcid, 13, "QuestFailure", quest=qt_started))
     ACT_COLS = ("`emote_Id`, `order`, `type`, `delay`, `extent`, `motion`, `message`,"
                 " `test_String`, `min`, `max`, `min_64`, `max_64`, `min_Dbl`, `max_Dbl`,"
@@ -1607,7 +1606,6 @@ def generate_delivery(params: dict, config) -> list[dict]:
     npc_a    = npc_defs[0]
     npc_b    = npc_defs[1]
     del_flag = npc_a["flag_done"]   # PackDeliveryDelA
-    npc_b_desc = npc_b.get("description", npc_b["name"])
 
     ACT_COLS = ("`emote_Id`, `order`, `type`, `delay`, `extent`, `motion`, `message`,"
                 " `test_String`, `min`, `max`, `min_64`, `max_64`, `min_Dbl`, `max_Dbl`,"
@@ -1661,7 +1659,7 @@ def generate_delivery(params: dict, config) -> list[dict]:
     #     QF(DelA) → Tell(task intro) + Give(item) + StampQuest(DelA)
     npc_a_wcid = npc_a["wcid"]
     npc_b_name = npc_b["name"]
-    intro_msg  = params.get("npc_a_description", "").strip() or f"I need you to deliver this {item_name} to {npc_b_name}."
+    intro_msg  = f"I need you to deliver this {item_name} to {npc_b_name}."
 
     npc_a_parts = []
 
@@ -1714,7 +1712,7 @@ def generate_delivery(params: dict, config) -> list[dict]:
     #       TF → Tell(missing item)
     #     QF(DelA) → Tell(no task)
     npc_b_wcid   = npc_b["wcid"]
-    already_msg  = npc_b_desc if npc_b_desc != npc_b["name"] else "You have already made your delivery. My thanks!"
+    already_msg  = "You have already made your delivery. My thanks!"
     notask_msg   = f"I have nothing for you at this time."
     missing_msg  = f"You do not have the {item_name}! Bring it to me!"
     thanks_msg   = f"Excellent. This is exactly what I needed. You have my thanks!"
@@ -2117,7 +2115,7 @@ def generate_flagging(params: dict, config) -> list[dict]:
 
     already_msg = f"You are already flagged for {unlock_desc}."
     granted_msg = f"You are now flagged for {unlock_desc}. The way is open to you."
-    refuse_msg  = params.get("npc_description","").strip() or "Earn the right first. Then we will speak."
+    refuse_msg  = "Earn the right first. Then we will speak."
 
     # Grant block rows: erase req (if any) + stamp done + rewards + tell
     def _grant_rows(start_o, erase_req_flag=None, take_item_wcid=None, take_item_qty=1):

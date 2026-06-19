@@ -23,7 +23,7 @@ DEFAULT_WCID_RANGES = {
 
 DEFAULT_CONFIG = {
     # Provider: "anthropic" | "openai" | "compatible"
-    "provider":    "anthropic",
+    "provider":    "ollama",
     "api_key":     "",
     "model":       "claude-sonnet-4-20250514",
     "base_url":    "",          # only used for "compatible" provider
@@ -57,6 +57,12 @@ class Config:
                 for key, val in DEFAULT_CONFIG.items():
                     if key not in data:
                         data[key] = val
+                # Self-heal a stale provider value from before the cloud
+                # provider picker was removed — every code path now assumes
+                # Ollama, so a leftover "anthropic"/"openai"/"groq" value
+                # would otherwise cause the API client to misconfigure itself.
+                if data.get("provider") not in ("ollama", "compatible"):
+                    data["provider"] = "ollama"
                 for key, val in DEFAULT_WCID_RANGES.items():
                     if key not in data.get("wcid_ranges", {}):
                         data.setdefault("wcid_ranges", {})[key] = val
@@ -79,7 +85,7 @@ class Config:
 
     @property
     def provider(self) -> str:
-        return self._data.get("provider", "anthropic")
+        return self._data.get("provider", "ollama")
 
     @provider.setter
     def provider(self, value: str):

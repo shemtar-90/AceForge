@@ -128,8 +128,12 @@ class LoreMixin:
         self._ensure_lore_queue()
         if self._lore_generating:
             return {"success": False, "error": "Already generating"}
-        if not self.config.api_key:
-            return {"success": False, "error": "No API key configured. Open Settings."}
+        # No API-key gate here: ACEForge now operates exclusively against a
+        # local Ollama instance (the cloud-provider picker was removed from
+        # Settings), and the API client already substitutes a placeholder
+        # key for Ollama since it ignores authentication entirely. This also
+        # avoids getting stuck for any existing install whose saved config
+        # still has a stale pre-Ollama-only provider value.
 
         self._lore_generating = True
         while not self._lore_queue.empty():

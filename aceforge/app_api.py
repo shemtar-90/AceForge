@@ -661,7 +661,12 @@ Start with: /* ===== FILE: {fname} ===== */
 
     def generate_quest_template(self, template_id: str, params_json: str) -> dict:
         """
-        Deterministically generate all SQL files for a quest template.
+        Deterministically generate all SQL files for a quest template, then
+        send every dialogue line (Tell/DirectBroadcast/LocalBroadcast/
+        WorldBroadcast/Say/FellowBroadcast) to the AI in a single batched
+        request so it can rewrite them in the NPC's stated personality —
+        everything else (WCIDs, quest flags, generator rows, structure)
+        stays exactly as the deterministic template produced it.
         Returns {success, files: [{filename, sql, type}], error}
         """
         try:
@@ -677,11 +682,180 @@ Start with: /* ===== FILE: {fname} ===== */
             # Process emote scripts in each file
             for f in files:
                 f["sql"] = self._process_emote_scripts(f["sql"])
+            # Rewrite dialogue lines in each NPC's personality, if given
+            files = self._rewrite_dialogue_with_ai(files, params)
             return {"success": True, "files": files, "error": None}
         except Exception as e:
             import traceback
             return {"success": False, "error": str(e), "files": [],
                     "traceback": traceback.format_exc()}
+
+    # Dialogue action types whose `message` text should be rewritten in the
+    # NPC's personality. Other emote actions (Give, AwardLuminance, Goto,
+    # etc.) are structural and never touched.
+    _DIALOGUE_TYPES = ("Tell", "DirectBroadcast", "LocalBroadcast",
+                        "WorldBroadcast", "Say", "FellowBroadcast")
+
+    def _ai_generate_sync(self, system_prompt: str, user_prompt: str,
+                           temperature: float = 0.7, timeout: float = 60.0) -> dict:
+        """Blocking wrapper around APIClient.stream_generate for a single
+        request/response call (no live UI streaming needed here)."""
+        import threading
+        done = threading.Event()
+        result = {"text": "", "error": None}
+
+        def on_chunk(_chunk): pass
+        def on_done(full_text):
+            result["text"] = full_text
+            done.set()
+        def on_error(msg):
+            result["error"] = msg
+            done.set()
+
+        self.api_client.stream_generate(
+            system_prompt, user_prompt, on_chunk, on_done, on_error, temperature
+        )
+        done.wait(timeout)
+        if not done.is_set():
+            return {"success": False, "error": "AI request timed out", "text": ""}
+        if result["error"]:
+            return {"success": False, "error": result["error"], "text": ""}
+        return {"success": True, "error": None, "text": result["text"]}
+
+    def _rewrite_dialogue_with_ai(self, files: list, params: dict) -> list:
+        """
+        Extract every Tell/Broadcast/Say message across all generated files,
+        grouped by which NPC speaks them (matched via the generated filename
+        slug), and send everything to the AI in one combined batched request
+        — each NPC's lines are clearly delineated with that NPC's stated
+        personality, so a multi-NPC template (e.g. Delivery's NPC A/B/C/D)
+        gets each voice rewritten distinctly in a single call. Every other
+        line (WCIDs, quest flags, structure) is untouched. On any failure,
+        returns `files` unmodified so the quest still generates with its
+        original templated dialogue.
+        """
+        import re, json as _json
+
+        def _slug(name: str) -> str:
+            return re.sub(r'[^a-z0-9]+', '_', (name or '').lower()).strip('_')
+
+        # Discover every NPC name/personality pair present in params:
+        # single-NPC templates use npc_name/npc_description; Delivery uses
+        # npc_a_name/npc_a_description through npc_d_name/npc_d_description.
+        npc_pairs = []  # [(name, personality)]
+        if params.get("npc_name"):
+            npc_pairs.append((params["npc_name"], (params.get("npc_description") or "").strip()))
+        for letter in ("a", "b", "c", "d"):
+            name = params.get(f"npc_{letter}_name")
+            if name:
+                npc_pairs.append((name, (params.get(f"npc_{letter}_description") or "").strip()))
+
+        # Only NPCs with a personality given are worth an AI rewrite — others
+        # keep their templated dialogue exactly as-is.
+        npc_pairs = [(n, p) for (n, p) in npc_pairs if p]
+        if not npc_pairs:
+            return files
+
+        msg_pattern = re.compile(
+            r"(/\*\s*(?:" + "|".join(self._DIALOGUE_TYPES) + r")\s*\*/"
+            r"\s*,\s*-?\d+\s*,\s*-?\d+\s*,\s*(?:NULL|0x[0-9A-Fa-f]+|\d+)\s*,\s*)'((?:[^']|'')*)'",
+            re.IGNORECASE,
+        )
+
+        def _unescape(s):  return s.replace("''", "'")
+        def _escape(s):    return s.replace("'", "''")
+
+        # Match each NPC-type file to its (name, personality) pair via the
+        # slugified name embedded in the generated filename.
+        file_to_npc = {}  # file_idx -> (name, personality)
+        for fi, f in enumerate(files):
+            if f.get("type") != "npc":
+                continue
+            fname_slug = f["filename"].lower()
+            for name, personality in npc_pairs:
+                if _slug(name) and _slug(name) in fname_slug:
+                    file_to_npc[fi] = (name, personality)
+                    break
+
+        if not file_to_npc:
+            return files  # couldn't confidently match any file to an NPC
+
+        # Collect every dialogue line, grouped by NPC, preserving per-file
+        # document order so the splice-back can match occurrences correctly.
+        groups = []  # [{npc_name, personality, lines: [{file_idx, original}]}]
+        group_by_npc = {}
+        for fi, (name, personality) in file_to_npc.items():
+            for m in msg_pattern.finditer(files[fi]["sql"]):
+                original = _unescape(m.group(2))
+                if not original.strip():
+                    continue
+                if name not in group_by_npc:
+                    group_by_npc[name] = {"npc_name": name, "personality": personality, "lines": []}
+                    groups.append(group_by_npc[name])
+                group_by_npc[name]["lines"].append({"file_idx": fi, "original": original})
+
+        groups = [g for g in groups if g["lines"]]
+        if not groups:
+            return files
+
+        # Build one combined prompt covering every NPC's lines, clearly
+        # delineated so the model applies the right voice to each group.
+        prompt_sections = []
+        flat_lines = []  # global order, matches the flat JSON array we expect back
+        n = 0
+        for g in groups:
+            prompt_sections.append(f"\n--- NPC: {g['npc_name']} (personality: {g['personality']}) ---")
+            for l in g["lines"]:
+                n += 1
+                prompt_sections.append(f"{n}. {l['original']}")
+                flat_lines.append(l)
+
+        system_prompt = (
+            "You rewrite Asheron's Call NPC dialogue lines to match each "
+            "NPC's stated personality. You will receive dialogue grouped by "
+            "NPC, each group labeled with that NPC's name and personality. "
+            "Rewrite each numbered line in its own NPC's voice, keeping the "
+            "same meaning, similar length, and any game mechanics/numbers/"
+            "item names mentioned exactly as given — only tone and phrasing "
+            "should change. Reply with ONLY a JSON array of strings, one per "
+            "numbered line in the SAME GLOBAL ORDER as given (ignore the "
+            "per-NPC grouping when forming the output array — it's just for "
+            "your reference). No other text, no markdown fences."
+        )
+        user_prompt = "Lines to rewrite:\n" + "\n".join(prompt_sections)
+
+        result = self._ai_generate_sync(system_prompt, user_prompt, temperature=0.8)
+        if not result["success"]:
+            return files  # silent fallback to templated dialogue
+
+        try:
+            raw = result["text"].strip()
+            raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
+            rewritten = _json.loads(raw)
+            if not isinstance(rewritten, list) or len(rewritten) != len(flat_lines):
+                return files  # shape mismatch — don't risk a bad splice
+        except Exception:
+            return files  # unparseable — silent fallback
+
+        # Splice rewrites back in per-file, in original document order, so a
+        # repeated line maps to its correct occurrence.
+        per_file_replacements = {}
+        for line, new_text in zip(flat_lines, rewritten):
+            if not isinstance(new_text, str) or not new_text.strip():
+                continue
+            per_file_replacements.setdefault(line["file_idx"], []).append(
+                (line["original"], new_text)
+            )
+
+        for fi, repls in per_file_replacements.items():
+            sql = files[fi]["sql"]
+            for original, new_text in repls:
+                old_escaped = _escape(original)
+                new_escaped = _escape(new_text)
+                sql = sql.replace(f"'{old_escaped}'", f"'{new_escaped}'", 1)
+            files[fi]["sql"] = sql
+
+        return files
 
     def _enrich_item_descriptions(self, params: dict) -> dict:
         """
@@ -1269,7 +1443,7 @@ Start with: /* ===== FILE: {fname} ===== */
         return {"items": items, "generating": self._generating}
 
 
-    APP_VERSION = "0.2.07"
+    APP_VERSION = "0.2.09"
 
     def get_version(self) -> str:
         return self.APP_VERSION
