@@ -272,7 +272,7 @@ ACTION_TYPE_MAP: Dict[str, int] = {
 # keyed by quest name (the value after InqQuest:)
 QUEST_BRANCHING_ACTIONS = {
     'InqQuest', 'InqQuestSolves', 'InqMyQuest', 'InqMyQuestSolves',
-    'InqFellowQuest',
+    'InqFellowQuest', 'InqFellowNum',
 }
 # Stat-based branching: TestSuccess keyed by auto-key, TestFailure quest=NULL
 STAT_BRANCHING_ACTIONS = {
@@ -290,6 +290,9 @@ BRANCH_CATEGORY: Dict[str, int] = {
     'TestFailure':  23,  # confirmed
     'EventSuccess': 27,  # confirmed
     'EventFailure': 28,  # confirmed
+    'NumFellowsSuccess': 33,  # InqFellowNum: fellowship within range
+    'NumFellowsFailure': 34,  # InqFellowNum: fellowship above max
+    'TestNoFellow':      31,  # InqFellowNum: fellowship below min (third branch)
 }
 
 BRANCH_LABELS = set(BRANCH_CATEGORY.keys())
@@ -625,6 +628,20 @@ def parse_action_value(name: str, v: str, warnings: List[str]) -> dict:
     elif name == 'InqFellowQuest':
         # message = quest name (same as InqQuest)
         attrs['message'] = re.split(r'[@,]', v)[0].strip()
+
+    elif name == 'InqFellowNum':
+        # Value is the literal range key, e.g. "HasFellowNum_1-9_7" — kept
+        # verbatim in message (matches SQL `quest`/`message` column and the
+        # YAML convention). The embedded "<min>-<max>" is also extracted into
+        # the real min/max integer columns, since the source SQL populates
+        # both independently of the key string.
+        attrs['message'] = v.strip()
+        m = re.search(r'_(\d+)-(\d+)_', v)
+        if m:
+            try:
+                attrs['min_int'] = int(m.group(1))
+                attrs['max_int'] = int(m.group(2))
+            except: pass
 
     elif name == 'InqOwnsItems':
         # Parse "wcid, count" or "wcid, min-max"

@@ -943,15 +943,21 @@ const BRANCH_CATS = {
   43:[22,23], 44:[22,23], 45:[22,23], 46:[22,23],
   71:[22,23],                                                    // PackSpace
   89:[35,36],                                                    // InqNumCharacterTitles
+  59:[33,34],                                                     // InqFellowNum: success=NumFellowsSuccess, failure=NumFellowsFailure
+                                                                 // (TestNoFellow=31 is a third auto-populated branch, handled
+                                                                 // separately via FELLOWNUM_EXTRA_BRANCH since BRANCH_CATS is 2-way)
 };
+// InqFellowNum gets a third auto-populated response branch beyond the normal
+// success/failure pair — fires when the fellowship is below the minimum size.
+const FELLOWNUM_EXTRA_BRANCH = { type: 59, category: 31, key: 'noFellow', label: 'TestNoFellow' };
 // Quest-style: BOTH branches get the quest key (action.message)
-const QUEST_BRANCH_ACTIONS = new Set([21,30,80,82,58]);
+const QUEST_BRANCH_ACTIONS = new Set([21,30,80,82,58,59]);
 // Event-style: success gets event name, failure gets null quest
 const EVENT_BRANCH_ACTIONS = new Set([51]);
 // Stat/item-style: success gets auto-key, failure gets null quest
 const STAT_BRANCH_ACTIONS  = new Set([76,75,35,36,37,38,39,40,41,42,43,44,45,46,71,89]);
 // Categories that are branch RESULTS (never top-level triggers)
-const BRANCH_RESULT_CATS   = new Set([12,13,22,23,27,28,35,36]);
+const BRANCH_RESULT_CATS   = new Set([12,13,22,23,27,28,35,36,31]);
 let createList    = [];
 let extraInt      = [];
 let extraInt64    = [];
@@ -1872,7 +1878,7 @@ const PROP_DID={
   60:'RedSurgeSpell',
   61:'OlthoiDeathTreasureType'
 };
-const EMOTE_CATS=[[1,'Refuse'],[2,'Vendor'],[3,'Death'],[4,'Portal'],[5,'HeartBeat'],[6,'Give'],[7,'Use'],[8,'Activation'],[9,'Generation'],[10,'PickUp'],[11,'Drop'],[12,'QuestSuccess'],[13,'QuestFailure'],[14,'Taunt'],[15,'WoundedTaunt'],[16,'KillTaunt'],[17,'NewEnemy'],[18,'Scream'],[19,'Homesick'],[20,'ReceiveCritical'],[21,'ResistSpell'],[22,'TestSuccess'],[23,'TestFailure'],[24,'HearChat'],[25,'Wield'],[26,'UnWield'],[27,'EventSuccess'],[28,'EventFailure'],[29,'TestNoQuality'],[32,'GotoSet'],[33,'NumFellowsSuccess'],[34,'NumFellowsFailure'],[35,'NumCharacterTitlesSuccess'],[36,'NumCharacterTitlesFailure'],[37,'ReceiveLocalSignal'],[38,'ReceiveTalkDirect']];
+const EMOTE_CATS=[[1,'Refuse'],[2,'Vendor'],[3,'Death'],[4,'Portal'],[5,'HeartBeat'],[6,'Give'],[7,'Use'],[8,'Activation'],[9,'Generation'],[10,'PickUp'],[11,'Drop'],[12,'QuestSuccess'],[13,'QuestFailure'],[14,'Taunt'],[15,'WoundedTaunt'],[16,'KillTaunt'],[17,'NewEnemy'],[18,'Scream'],[19,'Homesick'],[20,'ReceiveCritical'],[21,'ResistSpell'],[22,'TestSuccess'],[23,'TestFailure'],[24,'HearChat'],[25,'Wield'],[26,'UnWield'],[27,'EventSuccess'],[28,'EventFailure'],[29,'TestNoQuality'],[31,'TestNoFellow'],[32,'GotoSet'],[33,'NumFellowsSuccess'],[34,'NumFellowsFailure'],[35,'NumCharacterTitlesSuccess'],[36,'NumCharacterTitlesFailure'],[37,'ReceiveLocalSignal'],[38,'ReceiveTalkDirect']];
 // ── CORE HELPERS ─────────────────────────────────────────────────────────────
 const $   = id => document.getElementById(id);
 const opt = (arr,selVal) => arr.map(r=>`<option value="${r[0]}"${r[0]==selVal?' selected':''} >${r[0]} · ${r[1]}</option>`).join('');
@@ -1897,7 +1903,7 @@ const EMOTE_TYPES=[
   [39,'InqAttributeStat'],[40,'InqRawAttributeStat'],[41,'InqSecondaryAttributeStat'],[42,'InqRawSecondaryAttributeStat'],[43,'InqSkillStat'],
   [44,'InqRawSkillStat'],[45,'InqSkillTrained'],[46,'InqSkillSpecialized'],[47,'AwardTrainingCredits'],[48,'InflictVitaePenalty'],
   [49,'AwardLevelProportionalXP'],[51,'InqEvent'],[52,'ForceMotion'],[53,'SetIntStat'],[54,'IncrementIntStat'],
-  [55,'DecrementIntStat'],[56,'CreateTreasure'],[57,'ResetHomePosition'],[58,'InqFellowQuest'],[60,'UpdateFellowQuest'],
+  [55,'DecrementIntStat'],[56,'CreateTreasure'],[57,'ResetHomePosition'],[58,'InqFellowQuest'],[59,'InqFellowNum'],[60,'UpdateFellowQuest'],
   [61,'StampFellowQuest'],[62,'AwardNoShareXP'],[63,'SetSanctuaryPosition'],[65,'FellowBroadcast'],[66,'LockFellow'],
   [67,'Goto'],[68,'PopUp'],[69,'SetBoolStat'],[70,'SetQuestCompletions'],[71,'InqNumCharacterTitles'],
   [73,'PetCastSpellOnOwner'],[74,'TakeItems'],[75,'InqYesNo'],[76,'InqOwnsItems'],[77,'DeleteSelf'],
@@ -3569,17 +3575,24 @@ function buildEmotesTab(){
 
   // ── YAML Script tab ──────────────────────────────────────────────────────
   return tabBar+`<div class="sec" style="padding-top:14px">
-    <div class="sh"><div class="st">YAML Script</div><div class="sl"></div></div>
+    <div class="sh">
+      <div class="st">YAML Script</div>
+      <div class="sl"></div>
+      <button class="gen-btn" style="padding:6px 20px;font-size:11px" onclick="runEmoteInject()">⬇ Inject</button>
+      <span id="emoteInjectStatus" style="font-family:var(--ui-font);font-size:10px;color:var(--ink-dim);margin-left:8px"></span>
+    </div>
     <p style="font-family:var(--ui-font);font-style:italic;font-size:13px;color:var(--ink-dim);margin-bottom:14px;line-height:1.6">
       Write emotes in YAML compact format, then click <strong style="font-style:normal">Inject</strong> to convert and append to the SQL panel.
     </p>
 
+    <div id="emoteInjectBanner" style="display:none;border-radius:3px;padding:10px 14px;margin-bottom:10px;font-size:12px;line-height:1.5"></div>
+
     <div style="margin-bottom:8px">
       <div class="fl" style="margin-bottom:4px">YAML Script</div>
-      <textarea id="emoteScriptInput" rows="14"
+      <textarea id="emoteScriptInput" rows="60"
         oninput="_emoteScriptDraft=this.value"
         onkeydown="_yamlTabKey(event)"
-        style="font-family:'JetBrains Mono',monospace;font-size:12px;resize:vertical;width:100%;box-sizing:border-box;padding:8px 6px;line-height:1.55"
+        style="font-family:'JetBrains Mono',monospace;font-size:12px;resize:vertical;width:100%;box-sizing:border-box;padding:8px 6px;line-height:1.55;min-height:480px"
         placeholder="Use:
     - Tell: Hello traveler!
     - InqQuest: QuestOne
@@ -3592,13 +3605,6 @@ GotoSet: QuestOneStart
     - Tell: Can you please complete this Quest for me?
     - StampQuest: QuestOneStart"
       ></textarea>
-    </div>
-
-    <div id="emoteInjectBanner" style="display:none;border-radius:3px;padding:10px 14px;margin-bottom:10px;font-size:12px;line-height:1.5"></div>
-
-    <div style="display:flex;gap:10px;align-items:center">
-      <button class="gen-btn" style="padding:8px 22px;font-size:11px" onclick="runEmoteInject()">⬇ Inject</button>
-      <span id="emoteInjectStatus" style="font-family:var(--ui-font);font-size:10px;color:var(--ink-dim)"></span>
     </div>
   </div>`;
 }
@@ -3748,6 +3754,8 @@ const _CAT_TRIGGER={
   // Branch result categories — shown flat in Builder, noted in YAML
   12:'QuestSuccess', 13:'QuestFailure', 22:'TestSuccess', 23:'TestFailure',
   27:'EventSuccess', 28:'EventFailure', 29:'TestNoQuality',
+  // InqFellowNum branches
+  31:'TestNoFellow', 33:'NumFellowsSuccess', 34:'NumFellowsFailure',
 };
 // Categories that require a quest/label key on the trigger line
 const _CAT_NEEDS_KEY=new Set([32,38,12,13,22,23,27,28,29,30,31,33,34,35,36,37]);
@@ -3777,6 +3785,7 @@ function _actionToYAML(a, indent, _inlined, _gotoSetMap){
   // Value extraction (same logic as before)
   if([10,8,16,17,18,68,88,65,66,11].includes(t)) val=a.message||'';
   else if([21,22,31,80,81,83,58,60,61,23,24,51].includes(t)) val=a.message||'';
+  else if(t===59){ val=a.message||''; } // InqFellowNum: message carries the range key e.g. HasFellowNum_1-9_7
   else if(t===30||t===82){ val=a.message||''; if(a.min!==''&&a.min!=null) val+=', '+a.min; }
   else if(t===33||t===32||t===84||t===85){
     val=a.message||'';
@@ -3858,6 +3867,12 @@ function _actionToYAML(a, indent, _inlined, _gotoSetMap){
     sActs.forEach(function(sa){ out+='\n'+_actionToYAML(sa,ai,_inlined,_gotoSetMap); });
     out+='\n'+bi+fLabel+':';
     fActs.forEach(function(fa){ out+='\n'+_actionToYAML(fa,ai,_inlined,_gotoSetMap); });
+    // InqFellowNum's third auto-populated branch: TestNoFellow
+    if(t===FELLOWNUM_EXTRA_BRANCH.type){
+      const nActs=(a.branches.noFellow&&a.branches.noFellow.actions)||[];
+      out+='\n'+bi+FELLOWNUM_EXTRA_BRANCH.label+':';
+      nActs.forEach(function(na){ out+='\n'+_actionToYAML(na,ai,_inlined,_gotoSetMap); });
+    }
   }
   // ── Inline GotoSet for single-reference Goto actions ───────────────────
   if(t===67&&val&&_inlined&&_inlined.has(val)&&_gotoSetMap){
@@ -3900,12 +3915,15 @@ function nestBlocks(flatBlocks){
         sq=ownsCtr[base]===1?base:base+'_'+ownsCtr[base];fq=null;
       }else{sq=null;fq=null;}
       const sb=consume(sc,sq),fb=consume(fc,fq);
-      return Object.assign({},a,{
-        branches:{
-          success:{actions:nestActions(sb?sb.actions:[])},
-          failure:{actions:nestActions(fb?fb.actions:[])}
-        }
-      });
+      const branches={
+        success:{actions:nestActions(sb?sb.actions:[])},
+        failure:{actions:nestActions(fb?fb.actions:[])}
+      };
+      if(t===FELLOWNUM_EXTRA_BRANCH.type){
+        const nb=consume(FELLOWNUM_EXTRA_BRANCH.category, sq);
+        branches.noFellow={actions:nestActions(nb?nb.actions:[])};
+      }
+      return Object.assign({},a,{branches:branches});
     });
   }
   return triggers.map(b=>({
@@ -5127,19 +5145,24 @@ function _parseEmotesFromImportedSQL(sql){
  * computed 'OwnsItem-'+wcid key.
  */
 function _nestSQLEmotes(flatEmotes){
-  var BRANCH_RESULT = new Set([12,13,22,23,27,28,35,36]);
+  var BRANCH_RESULT = new Set([12,13,22,23,27,28,35,36,31,33,34]);
 
   var triggers = flatEmotes.filter(function(em){ return !BRANCH_RESULT.has(parseInt(em.category)); });
 
-  // Build branch map keyed by quest field: successMap/failureMap
+  // Build branch map keyed by quest field: successMap/failureMap, plus a
+  // dedicated map for TestNoFellow (31) — InqFellowNum's third auto-populated
+  // response (fires when the fellowship is below the minimum size), which
+  // isn't generically "success" or "failure" so it gets its own lookup.
   var successMap = {}; // quest → [emoteBlock]
   var failureMap = {};
-  var SUCCESS_CATS = new Set([12,22,27,35]);
+  var noFellowMap = {};
+  var SUCCESS_CATS = new Set([12,22,27,35,33]);
   flatEmotes.forEach(function(em){
     var cat = parseInt(em.category);
     if(!BRANCH_RESULT.has(cat)) return;
     var k = em.quest || '';
-    if(SUCCESS_CATS.has(cat)){ if(!successMap[k]) successMap[k]=[]; successMap[k].push(em); }
+    if(cat===31){ if(!noFellowMap[k]) noFellowMap[k]=[]; noFellowMap[k].push(em); }
+    else if(SUCCESS_CATS.has(cat)){ if(!successMap[k]) successMap[k]=[]; successMap[k].push(em); }
     else                      { if(!failureMap[k]) failureMap[k]=[]; failureMap[k].push(em); }
   });
 
@@ -5154,12 +5177,16 @@ function _nestSQLEmotes(flatEmotes){
       // Consume first matching block (shift) to handle duplicate quest names
       var sBlock = sList.shift();
       var fBlock = fList.shift();
-      return Object.assign({},a,{
-        branches:{
-          success:{actions: nestActions(sBlock?sBlock.actions:[])},
-          failure:{actions: nestActions(fBlock?fBlock.actions:[])},
-        }
-      });
+      var branches={
+        success:{actions: nestActions(sBlock?sBlock.actions:[])},
+        failure:{actions: nestActions(fBlock?fBlock.actions:[])},
+      };
+      if(t===FELLOWNUM_EXTRA_BRANCH.type){
+        var nList = noFellowMap[key]||[];
+        var nBlock = nList.shift();
+        branches.noFellow={actions: nestActions(nBlock?nBlock.actions:[])};
+      }
+      return Object.assign({},a,{branches:branches});
     });
   }
 
@@ -6422,6 +6449,7 @@ const EMOTE_CAT_COLORS = {
   27:'#3a7a4a',   // EventSuccess
   28:'#7a5a2a',   // EventFailure
   29:'#6a5a5a',   // TestNoQuality
+  31:'#5a6a7a',   // TestNoFellow
   32:'#5a4a7a',   // GotoSet
   33:'#4a6a5a',   // NumFellowsSuccess
   34:'#6a5a4a',   // NumFellowsFailure
@@ -6539,7 +6567,11 @@ function _buildActionFields(fdefs, a, i, j, aType, actRef){
   }
   if(aType===58||aType===60||aType===61){
     return '<div class="fg" style="grid-column:span 3"><div class="fl">Quest Name</div>'+
-      '<input type="text" value="'+(a.message||'')+'" placeholder="e.g. FreddieFlowerQuest" '+_s('message')+'"></div>';
+      '<input type="text" value="'+(a.message||'')+'" placeholder="e.g. FreddieFlowerQuest" '+_s('message')+'></div>';
+  }
+  if(aType===59){
+    return '<div class="fg" style="grid-column:span 3"><div class="fl">Fellow Num Key <span class="fc">e.g. HasFellowNum_1-9_7 (min-max_flagId)</span></div>'+
+      '<input type="text" value="'+(a.message||'')+'" placeholder="HasFellowNum_1-9_7" '+_s('message')+'></div>';
   }
   if(aType===70){
     return '<div class="fg" style="grid-column:span 2"><div class="fl">Quest Name</div>'+
@@ -6676,7 +6708,11 @@ function renderActionsAtPath(actions, basePath, depth){
     // Branch panels — auto-init if type is branching but branches null (safety net)
     if(BRANCH_CATS[aType]&&!a.branches){
       a.branches={success:{actions:[]},failure:{actions:[]}};
+      if(aType===FELLOWNUM_EXTRA_BRANCH.type) a.branches.noFellow={actions:[]};
       _d('EMOTE','Auto-init branches for type '+aType+' @ '+actPath);
+    }
+    if(a.branches&&aType===FELLOWNUM_EXTRA_BRANCH.type&&!a.branches.noFellow){
+      a.branches.noFellow={actions:[]};
     }
     if(a.branches&&BRANCH_CATS[aType]){
       out+=renderBranchPanels(a,actPath,aType,depth+1);
@@ -6716,8 +6752,21 @@ function renderBranchPanels(a, actPath, aType, depth){
       +'</div>';
   }
 
-  return branchPanel('success',sLabel,sColor,sPanelId,sActs)
-       + branchPanel('failure',fLabel,fColor,fPanelId,fActs);
+  let out=branchPanel('success',sLabel,sColor,sPanelId,sActs)
+        + branchPanel('failure',fLabel,fColor,fPanelId,fActs);
+
+  // InqFellowNum gets a third auto-populated branch: TestNoFellow, fired
+  // when the fellowship is below the minimum size in the range key.
+  if(aType===FELLOWNUM_EXTRA_BRANCH.type){
+    const nCat=FELLOWNUM_EXTRA_BRANCH.category;
+    const nLabel=FELLOWNUM_EXTRA_BRANCH.label;
+    const nColor=EMOTE_CAT_COLORS[nCat]||_depthColor(depth);
+    const nPanelId='bp_n_'+_pid(actPath);
+    const nActs=(a.branches.noFellow&&a.branches.noFellow.actions)||[];
+    out+=branchPanel('noFellow',nLabel,nColor,nPanelId,nActs);
+  }
+
+  return out;
 }
 
 
@@ -8114,7 +8163,8 @@ function buildSQL(){
       function walkActions(actions){
         (actions||[]).forEach(a=>{
           if(!a.branches||!BRANCH_CATS[parseInt(a.type)]) return;
-          const [sc,fc]=BRANCH_CATS[parseInt(a.type)];
+          const t=parseInt(a.type);
+          const [sc,fc]=BRANCH_CATS[t];
           const [sq,fq]=_branchKeys(a,ownsCtr);
           const sActs=(a.branches.success&&a.branches.success.actions)||[];
           const fActs=(a.branches.failure&&a.branches.failure.actions)||[];
@@ -8122,6 +8172,11 @@ function buildSQL(){
           walkActions(sActs);
           blocks.push({category:fc,quest:fq,prob:1,actions:fActs});
           walkActions(fActs);
+          if(t===FELLOWNUM_EXTRA_BRANCH.type){
+            const nActs=(a.branches.noFellow&&a.branches.noFellow.actions)||[];
+            blocks.push({category:FELLOWNUM_EXTRA_BRANCH.category,quest:sq,prob:1,actions:nActs});
+            walkActions(nActs);
+          }
         });
       }
 

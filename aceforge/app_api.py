@@ -734,10 +734,11 @@ Start with: /* ===== FILE: {fname} ===== */
 
     def download_and_install_update(self, download_url: str) -> dict:
         """
-        Download the new release zip, extract it over the current install,
-        then restart the application.
+        Download the new release zip, then hand off installation to a
+        temporary batch script that runs after ACEForge exits — avoiding
+        the Windows file-lock on the running ACEForge.exe.
         """
-        import urllib.request, zipfile, shutil, sys, os
+        import urllib.request, zipfile, shutil, sys, os, subprocess, threading, time
         from pathlib import Path
 
         if not download_url:
@@ -747,13 +748,15 @@ Start with: /* ===== FILE: {fname} ===== */
             # Determine install root (where ACEForge.exe or main.py lives)
             if hasattr(sys, "_MEIPASS"):
                 install_root = Path(sys.executable).parent
+                exe_path     = Path(sys.executable)
             else:
                 install_root = Path(__file__).parent.parent
+                exe_path     = Path(sys.executable)
 
-            tmp_zip = install_root / "_update_download.zip"
-            tmp_dir = install_root / "_update_extract"
+            tmp_zip = Path(os.environ.get("TEMP", str(Path.home()))) / "ACEForge_update.zip"
+            tmp_dir = Path(os.environ.get("TEMP", str(Path.home()))) / "ACEForge_update_extract"
 
-            # Download with progress
+            # ── Download ──────────────────────────────────────────────────────
             self._ollama_event("download_start", "Downloading update…", 0, 0)
 
             def on_progress(block, block_size, total):
@@ -765,42 +768,78 @@ Start with: /* ===== FILE: {fname} ===== */
                         f"Downloading update… {mb} MB / {mbt} MB", pct, 100)
 
             urllib.request.urlretrieve(download_url, str(tmp_zip), on_progress)
-            self._ollama_event("download_done", "Extracting update…", 100, 100)
+            self._ollama_event("download_done", "Download complete. Preparing installer…", 100, 100)
 
-            # Extract
+            # ── Extract to temp dir ───────────────────────────────────────────
             if tmp_dir.exists():
                 shutil.rmtree(tmp_dir)
             with zipfile.ZipFile(tmp_zip, "r") as zf:
                 zf.extractall(tmp_dir)
+            tmp_zip.unlink(missing_ok=True)
 
-            # Copy new files over install root
-            # Zip should have ACEForge/ at root
+            # Zip has ACEForge/ at its root — find the inner folder
             src_root = next(
                 (tmp_dir / d for d in os.listdir(tmp_dir)
                  if (tmp_dir / d).is_dir()), tmp_dir
             )
-            for item in os.listdir(src_root):
-                s = src_root / item
-                d = install_root / item
-                if s.is_dir():
-                    if d.exists():
-                        shutil.rmtree(d)
-                    shutil.copytree(s, d)
-                else:
-                    shutil.copy2(s, d)
 
-            # Cleanup
-            tmp_zip.unlink(missing_ok=True)
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            # ── Write a batch script that runs AFTER we exit ──────────────────
+            # Windows locks the running .exe, so we can't copy over it while
+            # it's alive.  The batch script waits for our PID to disappear,
+            # then copies every file from the extracted zip into the install
+            # root, relaunches ACEForge, and cleans up after itself.
+            pid       = os.getpid()
+            bat_path  = Path(os.environ.get("TEMP", str(Path.home()))) / "aceforge_update.bat"
+            install_q = str(install_root).replace("/", "\\")
+            src_q     = str(src_root).replace("/", "\\")
+            tmp_dir_q = str(tmp_dir).replace("/", "\\")
+            exe_q     = str(exe_path).replace("/", "\\")
 
-            # Restart
-            self._ollama_event("download_done", "Update installed! Restarting…", 100, 100)
-            import threading, time
-            def _restart():
-                time.sleep(1.5)
-                os.execl(sys.executable, sys.executable, *sys.argv)
-            threading.Thread(target=_restart, daemon=True).start()
-            return {"success": True, "message": "Update installed. Restarting…"}
+            bat_lines = [
+                "@echo off",
+                "setlocal",
+                f"echo Waiting for ACEForge to close…",
+                # Spin until our PID is gone (max ~30 s)
+                f":waitloop",
+                f"tasklist /FI \"PID eq {pid}\" 2>NUL | find \"{pid}\" >NUL",
+                f"if not errorlevel 1 (",
+                f"    timeout /t 1 /nobreak >NUL",
+                f"    goto waitloop",
+                f")",
+                f"echo Copying update files…",
+                # Robocopy: source → install root, all files/subdirs, quiet
+                f"robocopy \"{src_q}\" \"{install_q}\" /E /IS /IT /IM /NFL /NDL /NJH /NJS >NUL 2>&1",
+                # Fall back to xcopy if robocopy isn't available
+                f"if errorlevel 8 xcopy /E /Y /I \"{src_q}\\*\" \"{install_q}\\\"",
+                f"echo Relaunching ACEForge…",
+                f"start \"\" \"{exe_q}\"",
+                # Self-delete and clean up extracted temp dir
+                f"rd /s /q \"{tmp_dir_q}\" 2>NUL",
+                f"del \"%~f0\"",
+            ]
+
+            bat_path.write_text("\r\n".join(bat_lines), encoding="ascii")
+
+            # ── Launch the batch detached, then exit ─────────────────────────
+            self._ollama_event("download_done",
+                "Update ready. ACEForge will restart automatically.", 100, 100)
+
+            def _launch_and_exit():
+                time.sleep(0.8)   # let the UI message render
+                subprocess.Popen(
+                    ["cmd.exe", "/c", str(bat_path)],
+                    creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
+                               | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+                    close_fds=True,
+                )
+                time.sleep(0.4)   # give cmd.exe time to detach
+                os._exit(0)       # hard exit so the batch can replace the exe
+
+            threading.Thread(target=_launch_and_exit, daemon=True).start()
+            return {"success": True, "message": "Update ready. Restarting…"}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
         except Exception as e:
             return {"success": False, "error": str(e)}
