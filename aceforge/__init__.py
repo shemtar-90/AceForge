@@ -1,2 +1,2 @@
 """ACEForge — ACEmulator Content Generator"""
-__version__ = "0.2.04"
+__version__ = "0.2.07"
