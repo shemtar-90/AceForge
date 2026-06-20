@@ -5,6 +5,7 @@ Called from JS as: window.pywebview.api.method_name(args)
 """
 
 import queue
+import re
 from aceforge.lore_api import LoreMixin
 import threading
 import json
@@ -120,6 +121,134 @@ class AppAPI(LoreMixin):
         return {"valid": ok, "error": err}
 
     # ── File Operations ────────────────────────────────────────────────────────
+
+    _gear_data_cache = None
+
+    def _gear_load_data(self):
+        if self._gear_data_cache is not None:
+            return self._gear_data_cache
+        try:
+            here = Path(__file__).parent / "web" / "gear_data" / "gear_full.json"
+            with open(here, encoding="utf-8") as f:
+                raw = json.load(f)
+            by_wcid = {}
+            for records in raw.values():
+                for r in records:
+                    by_wcid[r["wcid"]] = r
+            self._gear_data_cache = by_wcid
+        except Exception:
+            self._gear_data_cache = {}
+        return self._gear_data_cache
+
+    def generate_gear_set(self, wcids: list, options: dict) -> dict:
+        """
+        Clone one or more source armor/weapon weenies into new custom items.
+        options: {name_prefix, start_wcid, palette, shade, value, stat_scale}
+        Name/Palette/Shade/Value/ArmorLevel-or-Damage are user-editable;
+        everything else (ValidLocations, resistances, Setup/Icon/
+        PhysicsEffectTable/SoundTable DIDs, spellbook) copies verbatim so the
+        clone looks and behaves like the source item.
+        """
+        try:
+            data = self._gear_load_data()
+            name_prefix = (options.get("name_prefix") or "").strip()
+            start_wcid  = int(options.get("start_wcid") or 0)
+            palette     = options.get("palette")
+            shade       = options.get("shade")
+            value       = options.get("value")
+            stat_scale  = options.get("stat_scale")
+
+            if not start_wcid:
+                return {"success": False, "error": "Starting WCID is required.", "sql": ""}
+
+            blocks = []
+            next_wcid = start_wcid
+            for src_wcid in wcids:
+                src = data.get(int(src_wcid))
+                if not src:
+                    continue
+                new_wcid = next_wcid
+                next_wcid += 1
+                orig_name = (src.get("string", {}).get("Name", {}) or {}).get("value", "Item")
+                new_name = f"{name_prefix} {orig_name}".strip() if name_prefix else orig_name
+                blocks.append(self._gear_clone_one(src, new_wcid, new_name,
+                                                    palette, shade, value, stat_scale))
+
+            if not blocks:
+                return {"success": False, "error": "No matching source items found.", "sql": ""}
+
+            return {"success": True, "sql": "\n".join(blocks), "error": None,
+                    "count": len(blocks), "next_wcid": next_wcid}
+        except Exception as e:
+            import traceback
+            return {"success": False, "error": str(e), "sql": "",
+                    "traceback": traceback.format_exc()}
+
+    def _gear_clone_one(self, source: dict, new_wcid: int, new_name: str,
+                         palette, shade, value, stat_scale) -> str:
+        def deep_copy_props(props):
+            return {k: dict(v) for k, v in props.items()}
+
+        int_props = deep_copy_props(source.get("int", {}))
+        if palette not in (None, ""):
+            if "PaletteTemplate" in int_props:
+                int_props["PaletteTemplate"]["value"] = str(palette)
+            else:
+                int_props["PaletteTemplate"] = {"type": 3, "value": str(palette)}
+        if value not in (None, "") and "Value" in int_props:
+            int_props["Value"]["value"] = str(value)
+        if stat_scale not in (None, ""):
+            if "ArmorLevel" in int_props:
+                int_props["ArmorLevel"]["value"] = str(stat_scale)
+            elif "Damage" in int_props:
+                int_props["Damage"]["value"] = str(stat_scale)
+
+        float_props = deep_copy_props(source.get("float", {}))
+        if shade not in (None, ""):
+            if "Shade" in float_props:
+                float_props["Shade"]["value"] = str(shade)
+            else:
+                float_props["Shade"] = {"type": 12, "value": str(shade)}
+
+        bool_props = deep_copy_props(source.get("bool", {}))
+        string_props = deep_copy_props(source.get("string", {}))
+        name_type = string_props.get("Name", {}).get("type", 1)
+        string_props["Name"] = {"type": name_type, "value": new_name}
+        did_props = deep_copy_props(source.get("did", {}))  # always verbatim
+
+        class_name = re.sub(r"[^a-zA-Z0-9]", "", new_name.lower())[:30] or f"item{new_wcid}"
+
+        def emit_block(table, props, fmt):
+            if not props:
+                return ""
+            lines = [f"INSERT INTO `weenie_properties_{table}` (`object_Id`, `type`, `value`)"]
+            rows = sorted(props.items(), key=lambda kv: kv[1]["type"])
+            for i, (pname, p) in enumerate(rows):
+                prefix = "VALUES " if i == 0 else "     , "
+                trail = ";" if i == len(rows) - 1 else ""
+                lines.append(f"{prefix}({new_wcid}, {p['type']}, {fmt(p['value'])}) /* {pname} */{trail}")
+            return "\n".join(lines) + "\n"
+
+        lines = [
+            f"DELETE FROM `weenie` WHERE `class_Id` = {new_wcid};\n",
+            "INSERT INTO `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)",
+            f"VALUES ({new_wcid}, '{class_name}', {source.get('weenie_type', 1)}, NOW());\n",
+            emit_block("int", int_props, lambda v: v),
+            emit_block("bool", bool_props, lambda v: v),
+            emit_block("float", float_props, lambda v: v),
+            emit_block("string", string_props, lambda v: "'" + v.replace("'", "''") + "'"),
+            emit_block("d_i_d", did_props, lambda v: v),
+        ]
+        spells = source.get("spells") or []
+        if spells:
+            spell_lines = ["INSERT INTO `weenie_properties_spell_book` (`object_Id`, `spell`, `probability`)"]
+            for i, sp in enumerate(spells):
+                prefix = "VALUES " if i == 0 else "     , "
+                trail = ";" if i == len(spells) - 1 else ""
+                spell_lines.append(f"{prefix}({new_wcid}, {sp['spell_id']}, {sp['probability']}){trail}")
+            lines.append("\n".join(spell_lines))
+
+        return "\n".join(l for l in lines if l)
 
     def save_sql(self, sql_text: str, wcid: int, name: str) -> dict:
         try:
@@ -1443,7 +1572,7 @@ Start with: /* ===== FILE: {fname} ===== */
         return {"items": items, "generating": self._generating}
 
 
-    APP_VERSION = "0.2.09"
+    APP_VERSION = "0.3.6"
 
     def get_version(self) -> str:
         return self.APP_VERSION

@@ -355,6 +355,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
   <button class="mode-tab active" onclick="switchMode('manual',this)">&#x1F528; WeenieForge</button>
   <button class="mode-tab" onclick="switchMode('ai',this)">&#x2728; QuestForge</button>
   <button class="mode-tab" onclick="switchMode('lore',this)">&#x1F4D6; LoreForge</button>
+  <button class="mode-tab" onclick="switchMode('gear',this)">&#x2694;&#xFE0F; GearForge</button>
 </div>
 
 
@@ -502,6 +503,47 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
           oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,160)+'px'"></textarea>
         <button class="lore-send-btn" id="loreSendBtn" onclick="loreSend()">SEND</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- GEARFORGE WORKSPACE -->
+<div class="workspace" id="gearWS" style="flex-direction:row">
+  <div class="form-panel" style="flex:0 0 280px;border-right:1px solid var(--border)">
+    <div class="sec" style="padding-top:14px">
+      <div class="sh">
+        <div class="st">GEARFORGE</div>
+        <div class="sl"></div>
+      </div>
+      <div style="display:flex;gap:2px;border-bottom:2px solid var(--border);margin-bottom:10px">
+        <button class="prop-stab gear-subtab active" data-gtab="armor" onclick="gearSwitchSubtab('armor',this)">Armor Sets</button>
+        <button class="prop-stab gear-subtab" data-gtab="weapon" onclick="gearSwitchSubtab('weapon',this)">Weapon Sets</button>
+      </div>
+      <input type="text" id="gearFamilySearch" placeholder="Search sets…" oninput="gearRenderFamilyList()"
+        style="width:100%;margin-bottom:8px">
+      <div id="gearFamilyList" style="overflow-y:auto;max-height:calc(100vh - 260px)"></div>
+    </div>
+  </div>
+  <div class="form-panel" id="gearMainPanel" style="flex:1;overflow-y:auto">
+    <div class="sec" style="padding-top:14px">
+      <div style="color:var(--ink-faint);font-style:italic;font-size:13px;padding:40px 20px;text-align:center">
+        Select an armor or weapon set from the list to get started.
+      </div>
+    </div>
+  </div>
+  <div class="sql-panel" id="gearSqlPanel">
+    <div class="sql-hdr">
+      <div class="sql-title">Generated SQL</div>
+      <div class="sql-btns">
+        <button class="sql-btn" onclick="gearCopySQL()">⊡ Copy</button>
+        <button class="sql-btn" onclick="gearSaveSQL()">+ Save</button>
+      </div>
+    </div>
+    <div style="flex:1;overflow-x:auto;overflow-y:auto;display:flex;flex-direction:column;min-height:0">
+    <textarea class="sql-out" id="gearSqlOut" spellcheck="false" readonly
+      style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px"
+    ></textarea>
+    <pre id="gearSqlOutHl"></pre>
     </div>
   </div>
 </div>
@@ -1895,21 +1937,22 @@ const lookupName = (arr,val) => {const f=arr.find(r=>r[0]==val);return f?f[1]:St
 //           79=UpdateMyQuest, 91-98=eye/nose/mouth/head textures,
 //           101=StartBarber, 119=AddContract, 120=RemoveContract
 const EMOTE_TYPES=[
-  [2,'AwardXP'],[3,'Give'],[5,'Motion'],[8,'Say'],[10,'Tell'],
-  [12,'TurnToTarget'],[14,'CastSpell'],[16,'WorldBroadcast'],[17,'LocalBroadcast'],[18,'DirectBroadcast'],
-  [19,'CastSpellInstant'],[21,'InqQuest'],[22,'StampQuest'],[23,'StartEvent'],[24,'StopEvent'],
-  [27,'TeachSpell'],[30,'InqQuestSolves'],[31,'EraseQuest'],[32,'DecrementQuest'],[33,'IncrementQuest'],
+  [1,'Act'],[2,'AwardXP'],[3,'Give'],[4,'MoveHome'],[5,'Motion'],[6,'Move'],[7,'PhysScript'],[8,'Say'],[9,'Sound'],[10,'Tell'],
+  [11,'Turn'],[12,'TurnToTarget'],[13,'TextDirect'],[14,'CastSpell'],[15,'Activate'],[16,'WorldBroadcast'],[17,'LocalBroadcast'],[18,'DirectBroadcast'],
+  [19,'CastSpellInstant'],[20,'UpdateQuest'],[21,'InqQuest'],[22,'StampQuest'],[23,'StartEvent'],[24,'StopEvent'],[25,'BLog'],[26,'AdminSpam'],
+  [27,'TeachSpell'],[28,'AwardSkillXP'],[29,'AwardSkillPoints'],[30,'InqQuestSolves'],[31,'EraseQuest'],[32,'DecrementQuest'],[33,'IncrementQuest'],
   [34,'AddCharacterTitle'],[35,'InqBoolStat'],[36,'InqIntStat'],[37,'InqFloatStat'],[38,'InqStringStat'],
   [39,'InqAttributeStat'],[40,'InqRawAttributeStat'],[41,'InqSecondaryAttributeStat'],[42,'InqRawSecondaryAttributeStat'],[43,'InqSkillStat'],
   [44,'InqRawSkillStat'],[45,'InqSkillTrained'],[46,'InqSkillSpecialized'],[47,'AwardTrainingCredits'],[48,'InflictVitaePenalty'],
-  [49,'AwardLevelProportionalXP'],[51,'InqEvent'],[52,'ForceMotion'],[53,'SetIntStat'],[54,'IncrementIntStat'],
+  [49,'AwardLevelProportionalXP'],[50,'AwardLevelProportionalSkillXP'],[51,'InqEvent'],[52,'ForceMotion'],[53,'SetIntStat'],[54,'IncrementIntStat'],
   [55,'DecrementIntStat'],[56,'CreateTreasure'],[57,'ResetHomePosition'],[58,'InqFellowQuest'],[59,'InqFellowNum'],[60,'UpdateFellowQuest'],
-  [61,'StampFellowQuest'],[62,'AwardNoShareXP'],[63,'SetSanctuaryPosition'],[65,'FellowBroadcast'],[66,'LockFellow'],
-  [67,'Goto'],[68,'PopUp'],[69,'SetBoolStat'],[70,'SetQuestCompletions'],[71,'InqNumCharacterTitles'],
-  [73,'PetCastSpellOnOwner'],[74,'TakeItems'],[75,'InqYesNo'],[76,'InqOwnsItems'],[77,'DeleteSelf'],
+  [61,'StampFellowQuest'],[62,'AwardNoShareXP'],[63,'SetSanctuaryPosition'],[64,'TellFellow'],[65,'FellowBroadcast'],[66,'LockFellow'],
+  [67,'Goto'],[68,'PopUp'],[69,'SetBoolStat'],[70,'SetQuestCompletions'],[71,'InqNumCharacterTitles'],[72,'Generate'],
+  [73,'PetCastSpellOnOwner'],[74,'TakeItems'],[75,'InqYesNo'],[76,'InqOwnsItems'],[77,'DeleteSelf'],[78,'KillSelf'],[79,'UpdateMyQuest'],
   [80,'InqMyQuest'],[81,'StampMyQuest'],[82,'InqMyQuestSolves'],[83,'EraseMyQuest'],[84,'DecrementMyQuest'],
   [85,'IncrementMyQuest'],[86,'SetMyQuestCompletions'],[87,'MoveToPos'],[88,'LocalSignal'],[89,'InqPackSpace'],
-  [90,'RemoveVitaePenalty'],[99,'TeleportTarget'],[100,'TeleportSelf'],[110,'UntrainSkill'],[112,'SpendLuminance'],
+  [90,'RemoveVitaePenalty'],[91,'SetEyeTexture'],[92,'SetEyePalette'],[93,'SetNoseTexture'],[94,'SetNosePalette'],[95,'SetMouthTexture'],
+  [99,'TeleportTarget'],[100,'TeleportSelf'],[110,'UntrainSkill'],[112,'SpendLuminance'],
   [113,'AwardLuminance'],[114,'InqInt64Stat'],[115,'SetInt64Stat'],[118,'SetFloatStat']
 ];
 
@@ -5589,7 +5632,7 @@ function _parseGeneratorSQL(sql){
   if(!sql) return;
   var blockRe = /INSERT INTO `weenie_properties_generator`[\s\S]+?;/gi, m;
   while((m = blockRe.exec(sql)) !== null){
-    var rowRe = /(?:VALUES|,)\s*\(\s*\d+\s*,\s*(-?[0-9.]+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(-?\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*,\s*(0x[0-9a-fA-F]+|\d+)\s*,\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*\)/gi, vr;
+    var rowRe = /(?:VALUES|,)\s*\(\s*\d+\s*,\s*(-?[0-9.]+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(-?\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*,\s*(0x[0-9a-fA-F]+|\d+)\s*,\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*\)/gi, vr;
     while((vr = rowRe.exec(m[0])) !== null){
       generatorRows.push({
         prob: parseFloat(vr[1]), wcid: parseInt(vr[2]), delay: parseFloat(vr[3]),
@@ -6415,7 +6458,10 @@ function switchMode(mode,btn){
   if(aiWS) aiWS.classList.toggle('active', mode==='ai');
   const loreWS=document.getElementById('loreWS');
   if(loreWS) loreWS.classList.toggle('active', mode==='lore');
+  const gearWS=document.getElementById('gearWS');
+  if(gearWS) gearWS.classList.toggle('active', mode==='gear');
   if(mode==='lore') loreInit();
+  if(mode==='gear') gearInit();
 }
 
 
@@ -10556,6 +10602,462 @@ function loreInit(){
   window.pywebview.api.list_conversations().then(function(r){
     if(r.success){ _loreConvos=r.conversations; loreRenderList(); }
   }).catch(function(e){ console.error('[LORE] list:',e); });
+}
+
+// ── GearForge ────────────────────────────────────────────────────────────
+let _gearSubtab = 'armor';
+let _gearLoaded = false;
+let _gearArmorSuits = {};    // family name -> [{palette, primary_set, alternatives}]
+let _gearWeaponFamilies = {};
+let _gearFull = {};          // wcid -> full parsed record (int/bool/float/string/did/spells)
+let _gearSelectedFamily = null;
+let _gearSelectedSubcat = null; // armor only: which subcategory within the top category
+let _gearSelectedTier = null;   // weapon only: themed_sets | elemental_sets | misc
+let _gearSelectedSuitIdx = 0; // which palette-suit within the family is active
+let _gearSelectedPieces = {}; // wcid -> true, currently checked for generation
+
+function gearInit(){
+  if(_gearLoaded) return;
+  const base = document.location.href.replace(/[^/]*$/, '') + 'gear_data/';
+  Promise.all([
+    fetch(base + 'armor_suits.json').then(r => r.json()),
+    fetch(base + 'weapon_families.json').then(r => r.json()),
+    fetch(base + 'gear_full.json').then(r => r.json()),
+  ]).then(([armorSuits, weaponFam, full]) => {
+    _gearArmorSuits = armorSuits;
+    _gearWeaponFamilies = weaponFam;
+    // Flatten gear_full.json (category -> [records]) into a wcid -> record map
+    _gearFull = {};
+    Object.values(full).forEach(records => {
+      records.forEach(r => { _gearFull[r.wcid] = r; });
+    });
+    _gearLoaded = true;
+    gearRenderFamilyList();
+  }).catch(e => {
+    console.error('[GEAR] data load failed:', e);
+    const list = document.getElementById('gearFamilyList');
+    if(list) list.innerHTML = '<div style="color:var(--crimson-lt);font-size:11px;padding:10px">Failed to load GearForge data.</div>';
+  });
+}
+
+function gearSwitchSubtab(tab, btn){
+  _gearSubtab = tab;
+  document.querySelectorAll('.gear-subtab').forEach(b => b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  _gearSelectedFamily = null;
+  _gearSelectedSubcat = null;
+  _gearSelectedTier = null;
+  _gearSelectedPieces = {};
+  gearRenderFamilyList();
+  gearRenderMainPanel();
+}
+
+let _gearExpandedCategories = {}; // top category name -> true if expanded
+
+function gearRenderFamilyList(){
+  const isArmor = _gearSubtab === 'armor';
+  const q = (document.getElementById('gearFamilySearch')?.value || '').toLowerCase();
+  const list = document.getElementById('gearFamilyList');
+  if(!list) return;
+  if(!_gearLoaded){ list.innerHTML = '<div style="color:var(--ink-faint);font-size:11px;padding:10px">Loading…</div>'; return; }
+
+  if(!isArmor){
+    gearRenderWeaponFamilyList(q, list);
+    return;
+  }
+
+  const cats = _gearArmorSuits; // { topCategory: { subcategory_or_null: [suits...] } }
+  const topNames = Object.keys(cats)
+    .filter(top => {
+      if(!q) return true;
+      if(top.toLowerCase().includes(q)) return true;
+      return Object.keys(cats[top]).some(sub => sub && sub.toLowerCase().includes(q));
+    })
+    .sort((a,b) => a.localeCompare(b));
+
+  if(!topNames.length){
+    list.innerHTML = '<div style="color:var(--ink-faint);font-size:11px;padding:10px;font-style:italic">No sets match.</div>';
+    return;
+  }
+
+  list.innerHTML = topNames.map(top => {
+    const subs = cats[top];
+    const subKeys = Object.keys(subs);
+    const onlyDefaultSub = subKeys.length === 1 && subKeys[0] === 'null';
+
+    if(onlyDefaultSub){
+      // No real subcategories — clicking the category selects it directly.
+      const active = (top === _gearSelectedFamily && _gearSelectedSubcat === null) ? ' active' : '';
+      return `<div class="gear-family-row${active}" data-top="${escHtml(top)}" data-sub=""
+        style="padding:7px 10px;cursor:pointer;border-radius:4px;margin-bottom:2px;
+        ${active ? 'background:var(--accent-tint);' : ''}">
+        <span style="font-family:var(--ui-font);font-size:12px;font-weight:600">${escHtml(top)}</span>
+      </div>`;
+    }
+
+    const expanded = !!_gearExpandedCategories[top] || (q && subKeys.some(s => s.toLowerCase().includes(q)));
+    const arrow = expanded ? '\u25bc' : '\u25b6';
+    const subRows = subKeys.map(sub => {
+      const active = (top === _gearSelectedFamily && sub === _gearSelectedSubcat) ? ' active' : '';
+      return `<div class="gear-family-row${active}" data-top="${escHtml(top)}" data-sub="${escHtml(sub)}"
+        style="padding:6px 10px 6px 22px;cursor:pointer;border-radius:4px;margin-bottom:2px;
+        ${active ? 'background:var(--accent-tint);' : ''}">
+        <span style="font-family:var(--ui-font);font-size:11px">${escHtml(sub)}</span>
+      </div>`;
+    }).join('');
+    return `<div>
+      <div class="gear-cat-toggle" data-top-toggle="${escHtml(top)}" style="padding:7px 10px;cursor:pointer;
+        display:flex;align-items:center;gap:6px;border-radius:4px">
+        <span style="font-size:9px;color:var(--ink-faint)">${arrow}</span>
+        <span style="font-family:var(--ui-font);font-size:12px;font-weight:600;flex:1">${escHtml(top)}</span>
+        <span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint)">${subKeys.length}</span>
+      </div>
+      <div style="display:${expanded ? 'block' : 'none'}">${subRows}</div>
+    </div>`;
+  }).join('');
+}
+
+const GEAR_WEAPON_TIER_LABELS = {
+  themed_sets: 'Themed Sets',
+  rare: 'Rare',
+  elemental_sets: 'Elemental Sets',
+  misc: 'Misc',
+};
+
+function gearRenderWeaponFamilyList(q, list){
+  const tiers = _gearWeaponFamilies; // { themed_sets: {...}, rare: {...}, elemental_sets: {...}, misc: {...} }
+  const tierOrder = ['themed_sets', 'rare', 'elemental_sets', 'misc'];
+
+  const sections = tierOrder.map(tierKey => {
+    const families = tiers[tierKey] || {};
+    const names = Object.keys(families)
+      .filter(n => !q || n.toLowerCase().includes(q))
+      .sort((a,b) => families[b].length - families[a].length || a.localeCompare(b));
+    if(!names.length) return '';
+
+    const expanded = !!_gearExpandedCategories['weapon_' + tierKey] || !!q;
+    const arrow = expanded ? '\u25bc' : '\u25b6';
+    const rows = names.map(name => {
+      const count = families[name].length;
+      const active = (name === _gearSelectedFamily && tierKey === _gearSelectedTier) ? ' active' : '';
+      return `<div class="gear-family-row${active}" data-tier="${tierKey}" data-family="${escHtml(name)}"
+        style="padding:6px 10px 6px 22px;cursor:pointer;border-radius:4px;margin-bottom:2px;
+        ${active ? 'background:var(--accent-tint);' : ''}
+        display:flex;justify-content:space-between;align-items:center">
+        <span style="font-family:var(--ui-font);font-size:11px">${escHtml(name)}</span>
+        <span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint)">${count} type${count!==1?'s':''}</span>
+      </div>`;
+    }).join('');
+
+    return `<div>
+      <div class="gear-cat-toggle" data-top-toggle="weapon_${tierKey}" style="padding:7px 10px;cursor:pointer;
+        display:flex;align-items:center;gap:6px;border-radius:4px">
+        <span style="font-size:9px;color:var(--ink-faint)">${arrow}</span>
+        <span style="font-family:var(--ui-font);font-size:12px;font-weight:600;flex:1">${GEAR_WEAPON_TIER_LABELS[tierKey]}</span>
+        <span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint)">${names.length}</span>
+      </div>
+      <div style="display:${expanded ? 'block' : 'none'}">${rows}</div>
+    </div>`;
+  }).join('');
+
+  if(!sections.replace(/\s/g,'')){
+    list.innerHTML = '<div style="color:var(--ink-faint);font-size:11px;padding:10px;font-style:italic">No sets match.</div>';
+    return;
+  }
+  list.innerHTML = sections;
+}
+
+// Event delegation for family-row clicks and category-expand toggles —
+// avoids embedding names inside inline onclick strings, which breaks
+// whenever a name contains a quote character (common in ACE item names).
+document.addEventListener('click', function(e){
+  const toggle = e.target.closest('.gear-cat-toggle');
+  if(toggle && toggle.dataset.topToggle !== undefined){
+    const top = toggle.dataset.topToggle;
+    _gearExpandedCategories[top] = !_gearExpandedCategories[top];
+    gearRenderFamilyList();
+    return;
+  }
+  const row = e.target.closest('.gear-family-row');
+  if(!row) return;
+  if(row.dataset.tier !== undefined){
+    gearSelectFamily(row.dataset.family, null, row.dataset.tier);
+  } else if(row.dataset.top !== undefined){
+    gearSelectFamily(row.dataset.top, row.dataset.sub || null);
+  } else if(row.dataset.family !== undefined){
+    gearSelectFamily(row.dataset.family);
+  }
+});
+
+function gearSelectFamily(name, subcat, tier){
+  _gearSelectedFamily = name;
+  _gearSelectedSubcat = subcat === undefined ? null : subcat;
+  _gearSelectedTier = tier === undefined ? null : tier;
+  _gearSelectedSuitIdx = 0;
+  _gearSelectedPieces = {};
+  gearRenderFamilyList();
+  gearRenderMainPanel();
+}
+
+function gearSelectSuit(idx){
+  _gearSelectedSuitIdx = idx;
+  _gearSelectedPieces = {};
+  gearRenderMainPanel();
+}
+
+function gearRenderMainPanel(){
+  const panel = document.getElementById('gearMainPanel');
+  if(!panel) return;
+  if(!_gearSelectedFamily){
+    panel.innerHTML = '<div class="sec" style="padding-top:14px"><div style="color:var(--ink-faint);font-style:italic;font-size:13px;padding:40px 20px;text-align:center">Select an armor or weapon set from the list to get started.</div></div>';
+    return;
+  }
+  if(_gearSubtab === 'armor') gearRenderArmorFamily();
+  else gearRenderWeaponFamily();
+}
+
+function gearRenderArmorFamily(){
+  const panel = document.getElementById('gearMainPanel');
+  const fam = _gearSelectedFamily;
+  const subKey = _gearSelectedSubcat === null ? 'null' : _gearSelectedSubcat;
+  const catData = _gearArmorSuits[fam] || {};
+  const suits = catData[subKey] || [];
+  if(!suits.length){ panel.innerHTML = '<div class="sec" style="padding-top:14px"><div style="color:var(--ink-faint);font-style:italic;padding:20px;text-align:center">No data for this set.</div></div>'; return; }
+  if(_gearSelectedSuitIdx >= suits.length) _gearSelectedSuitIdx = 0;
+  const suit = suits[_gearSelectedSuitIdx];
+  const title = _gearSelectedSubcat ? `${fam} — ${_gearSelectedSubcat}` : fam;
+
+  let html = `<div class="sec" style="padding-top:14px">
+    <div class="sh"><div class="st">${escHtml(title)}</div><div class="sl"></div></div>`;
+
+  if(suits.length > 1){
+    // Multiple coordinated color variants of this full suit — pick one.
+    html += `<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">`;
+    suits.forEach((s, i) => {
+      const active = i === _gearSelectedSuitIdx;
+      const label = s.palette ? `Palette ${escHtml(String(s.palette))}` : `Variant ${i+1}`;
+      html += `<button class="prop-stab${active?' active':''}" data-suitidx="${i}" onclick="gearSelectSuit(${i})"
+        style="padding:6px 12px">${label}</button>`;
+    });
+    html += `</div>`;
+    html += `<p style="font-family:var(--ui-font);font-style:italic;font-size:11px;color:var(--ink-faint);margin-bottom:10px">
+      This set comes in ${suits.length} coordinated colors — each button above is a complete, matching suit.</p>`;
+  }
+
+  if(suit.alternatives.length){
+    html += `<p style="font-family:var(--ui-font);font-style:italic;font-size:12px;color:var(--ink-dim);margin-bottom:14px">
+      This suit has two ways to cover the body — pick one. Mixing pieces across both can leave overlapping or missing coverage.</p>`;
+    html += gearArmorCoverageOption('primary', suit.primary_set,
+      'Fewer pieces (broader coverage per item)');
+    html += gearArmorCoverageOption('alternatives', suit.alternatives,
+      'More pieces (granular, swap individual slots)');
+  } else {
+    html += gearArmorCoverageOption('only', suit.primary_set, 'Pieces in this suit');
+  }
+
+  html += gearGenerationForm('armor');
+  html += '</div>';
+  panel.innerHTML = html;
+  gearSyncSelectionDefaults();
+}
+
+function gearArmorCoverageOption(groupKey, pieces, label){
+  if(!pieces || !pieces.length) return '';
+
+  const rows = pieces.map(p => {
+    const primaryWcid = p.wcids[0];
+    const checkboxId = `gear_pc_${groupKey}_${primaryWcid}`;
+    const hasAlts = p.wcids.length > 1;
+    const mainRow = `<label for="${checkboxId}" style="display:flex;align-items:center;gap:8px;padding:5px 8px;
+      border-radius:3px;cursor:pointer" onmouseover="this.style.background='var(--accent-tint)'" onmouseout="this.style.background=''">
+      <input type="checkbox" id="${checkboxId}" data-piece-group="${groupKey}_${primaryWcid}" data-wcid="${primaryWcid}"
+        checked onchange="gearTogglePiece(this)">
+      <span style="font-family:var(--ui-font);font-size:12px;flex:1">${escHtml(p.name)}</span>
+      ${hasAlts ? `<span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint);cursor:pointer;text-decoration:underline"
+        onclick="event.preventDefault();gearToggleWcidPicker(this)">swap WCID (${p.wcids.length})</span>` : ''}
+      <span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint)">${(p.slots||[]).join(', ')}</span>
+    </label>`;
+    if(!hasAlts) return mainRow;
+    // Alt-WCID picker: radio buttons, only one of this piece's identical
+    // WCIDs should ever be selected at once.
+    const altRows = p.wcids.map((w,i) => {
+      const rid = `gear_wp_${groupKey}_${primaryWcid}_${w}`;
+      return `<label for="${rid}" style="display:flex;align-items:center;gap:8px;padding:4px 8px 4px 26px;cursor:pointer">
+        <input type="radio" name="gear_wcid_choice_${groupKey}_${primaryWcid}" id="${rid}" value="${w}"
+          ${i===0?'checked':''} onchange="gearSwapPieceWcid('${groupKey}_${primaryWcid}', ${w})">
+        <span style="font-family:var(--ui-font);font-size:11px;color:var(--ink-dim)">WCID ${w}</span>
+      </label>`;
+    }).join('');
+    return `<div>${mainRow}<div class="gear-wcid-picker" style="display:none">${altRows}</div></div>`;
+  }).join('');
+
+  return `<div style="margin-bottom:16px">
+    <div class="fl" style="margin-bottom:6px">${label}</div>
+    <div style="border:1px solid var(--border);border-radius:4px;padding:4px">${rows}</div>
+  </div>`;
+}
+
+function gearToggleWcidPicker(el){
+  const picker = el.closest('div').nextElementSibling;
+  if(picker && picker.classList.contains('gear-wcid-picker')){
+    picker.style.display = picker.style.display === 'none' ? 'block' : 'none';
+  }
+}
+
+function gearSwapPieceWcid(pieceGroupKey, newWcid){
+  // Remove whichever WCID for this piece-slot was previously selected, swap
+  // in the newly chosen one, and keep the main checkbox's checked state.
+  const mainCb = document.querySelector(`input[data-piece-group="${pieceGroupKey}"]`);
+  if(mainCb){
+    delete _gearSelectedPieces[parseInt(mainCb.dataset.wcid)];
+    mainCb.dataset.wcid = newWcid;
+    mainCb.id = 'gear_pc_' + pieceGroupKey.split('_')[0] + '_' + newWcid;
+    if(mainCb.checked) _gearSelectedPieces[newWcid] = true;
+  }
+  gearRegenSQL();
+}
+
+function gearTogglePiece(el){
+  const wcid = parseInt(el.dataset.wcid);
+  if(el.checked) _gearSelectedPieces[wcid] = true;
+  else delete _gearSelectedPieces[wcid];
+  gearRegenSQL();
+}
+
+function gearSyncSelectionDefaults(){
+  // All visible checkboxes start checked — seed _gearSelectedPieces accordingly.
+  _gearSelectedPieces = {};
+  document.querySelectorAll('#gearMainPanel input[type=checkbox][data-wcid]').forEach(el => {
+    if(el.checked) _gearSelectedPieces[parseInt(el.dataset.wcid)] = true;
+  });
+  gearRegenSQL();
+}
+
+function gearRenderWeaponFamily(){
+  const panel = document.getElementById('gearMainPanel');
+  const fam = _gearSelectedFamily;
+  const tier = _gearSelectedTier || 'misc';
+  const pieces = (_gearWeaponFamilies[tier] && _gearWeaponFamilies[tier][fam]) || [];
+  const tierLabel = GEAR_WEAPON_TIER_LABELS[tier] || '';
+
+  let html = `<div class="sec" style="padding-top:14px">
+    <div class="sh"><div class="st">${escHtml(fam)}</div><div class="sl"></div></div>
+    <div style="font-family:var(--ui-font);font-size:10px;color:var(--ink-faint);margin-bottom:10px">${escHtml(tierLabel)}</div>`;
+
+  if(pieces.length > 1){
+    html += `<div style="display:flex;gap:10px;margin-bottom:14px">
+      <button class="gen-btn" onclick="gearWeaponSelectAll()">Generate Full Family (${pieces.length} weapon types)</button>
+    </div>`;
+  }
+
+  const rows = pieces.map((p,i) => {
+    const primaryWcid = p.wcids[0];
+    const rid = `gear_wp_${primaryWcid}`;
+    const hasAlts = p.wcids.length > 1;
+    return `<label for="${rid}" style="display:flex;align-items:center;gap:8px;padding:5px 8px;
+      border-radius:3px;cursor:pointer" onmouseover="this.style.background='var(--accent-tint)'" onmouseout="this.style.background=''">
+      <input type="radio" name="gear_weapon_pick" id="${rid}" data-wcid="${primaryWcid}"
+        onchange="gearWeaponPickOne(this)">
+      <span style="font-family:var(--ui-font);font-size:12px;flex:1">${escHtml(p.name)}</span>
+      ${hasAlts ? `<span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint);font-style:italic">${p.wcids.length} identical WCIDs available</span>` : ''}
+    </label>`;
+  }).join('');
+  html += `<div style="margin-bottom:16px">
+    <div class="fl" style="margin-bottom:6px">${pieces.length > 1 ? 'Or pick one weapon from this set' : 'Pick this weapon'}</div>
+    <div style="border:1px solid var(--border);border-radius:4px;padding:4px">${rows}</div>
+  </div>`;
+
+  html += gearGenerationForm('weapon');
+  html += '</div>';
+  panel.innerHTML = html;
+}
+
+function gearWeaponSelectAll(){
+  const fam = _gearSelectedFamily;
+  const tier = _gearSelectedTier || 'misc';
+  const pieces = (_gearWeaponFamilies[tier] && _gearWeaponFamilies[tier][fam]) || [];
+  _gearSelectedPieces = {};
+  pieces.forEach(p => { _gearSelectedPieces[p.wcids[0]] = true; }); // one WCID per weapon type
+  document.querySelectorAll('input[name=gear_weapon_pick]').forEach(el => el.checked = false);
+  gearRegenSQL();
+}
+
+function gearWeaponPickOne(el){
+  _gearSelectedPieces = {};
+  _gearSelectedPieces[parseInt(el.dataset.wcid)] = true;
+  gearRegenSQL();
+}
+
+function gearGetSQL(){ const el=document.getElementById('gearSqlOut'); return el ? el.value : ''; }
+
+function gearWriteSQLOut(text){
+  const el = document.getElementById('gearSqlOut');
+  if(el) el.value = text;
+  const hl = document.getElementById('gearSqlOutHl');
+  if(hl) hl.innerHTML = _highlightSQL(text);
+}
+
+function gearCopySQL(){
+  navigator.clipboard.writeText(gearGetSQL()).then(() => toast('Copied to clipboard'));
+}
+
+function gearSaveSQL(){
+  const sql = gearGetSQL();
+  if(!sql.trim()){ toast('Nothing to save.'); return; }
+  if(!window.pywebview) return;
+  const wcid = parseInt(document.getElementById('gearStartWcid')?.value) || 0;
+  const prefix = (document.getElementById('gearNamePrefix')?.value || '').trim();
+  const name = (prefix || _gearSelectedFamily || 'gear_set').replace(/\s+/g, '_');
+  window.pywebview.api.save_sql(sql, wcid, name).then(r => {
+    if(r.success){
+      toast('✓ Saved: ' + r.filename, 3000);
+      if(appConfig.auto_open_folder !== false) window.pywebview.api.open_output_folder();
+    } else {
+      toast('✗ Error: ' + r.error, 4000);
+    }
+  });
+}
+
+let _gearRegenTimer = null;
+function gearRegenSQL(){
+  // Debounce so rapid typing doesn't spam the backend
+  clearTimeout(_gearRegenTimer);
+  _gearRegenTimer = setTimeout(_gearRegenSQLNow, 300);
+}
+
+function _gearRegenSQLNow(){
+  const wcids = Object.keys(_gearSelectedPieces).map(Number);
+  if(!wcids.length || !window.pywebview){ gearWriteSQLOut(''); return; }
+  const options = {
+    name_prefix: document.getElementById('gearNamePrefix')?.value || '',
+    start_wcid:  document.getElementById('gearStartWcid')?.value || '',
+    palette:     document.getElementById('gearPalette')?.value || '',
+    shade:       document.getElementById('gearShade')?.value || '',
+    value:       document.getElementById('gearValue')?.value || '',
+    stat_scale:  document.getElementById('gearStatScale')?.value || '',
+  };
+  window.pywebview.api.generate_gear_set(wcids, options).then(r => {
+    if(r.success) gearWriteSQLOut(r.sql);
+    else gearWriteSQLOut('-- Error: ' + r.error);
+  });
+}
+
+function gearGenerationForm(kind){
+  return `<div class="sh" style="margin-top:18px"><div class="st">Generate</div><div class="sl"></div></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    <div class="fg"><div class="fl">Name Prefix <span class="fc">applied to every generated item</span></div>
+      <input type="text" id="gearNamePrefix" placeholder="e.g. Frostbound" oninput="gearRegenSQL()"></div>
+    <div class="fg"><div class="fl">Starting WCID <span class="fc">you assign — must be unused</span></div>
+      <input type="number" id="gearStartWcid" placeholder="e.g. 900000" oninput="gearRegenSQL()"></div>
+    <div class="fg"><div class="fl">Palette Template</div>
+      <input type="number" id="gearPalette" placeholder="leave blank to keep original" oninput="gearRegenSQL()"></div>
+    <div class="fg"><div class="fl">Shade <span class="fc">0.0 – 1.0</span></div>
+      <input type="text" id="gearShade" placeholder="leave blank to keep original" oninput="gearRegenSQL()"></div>
+    <div class="fg"><div class="fl">Value</div>
+      <input type="number" id="gearValue" placeholder="leave blank to keep original" oninput="gearRegenSQL()"></div>
+    <div class="fg"><div class="fl">${kind === 'armor' ? 'Armor Level' : 'Damage'}</div>
+      <input type="number" id="gearStatScale" placeholder="leave blank to keep original" oninput="gearRegenSQL()"></div>
+  </div>`;
 }
 
 function escHtml(s){
