@@ -4107,7 +4107,7 @@ function openIconPicker(onSelect){
     grid.innerHTML='';
     _renderIdx=0;
     var q=search.value.trim().toLowerCase().replace(/^0x/,'');
-    _filtered=q?_allIcons.filter(function(n){return n.indexOf(q)>=0;}):_allIcons;
+    _filtered=q?_allIcons.filter(function(n){return n.toLowerCase().indexOf(q)>=0;}):_allIcons;
     countEl.textContent=_filtered.length.toLocaleString()+' ICONS';
     renderChunk();
   }
@@ -4147,7 +4147,7 @@ function openIconPicker(onSelect){
         var fallback=[];
         if(typeof ICONS!=='undefined'&&ICONS.length){
           ICONS.forEach(function(ic){
-            var did=(ic[1]||ic[0]||'').toString().replace(/^0x/i,'').toLowerCase();
+            var did=(ic[1]||ic[0]||'').toString().replace(/^0x/i,'').toUpperCase();
             if(did) fallback.push(did);
           });
         }
@@ -6889,7 +6889,7 @@ function buildDIDIconPreview(){
     var _rv=(row?row.value:'')||'';
     var wv=_rv.toString().match(/^0x/i)?parseInt(_rv,16):parseInt(_rv)||0;
     if(!wv) return '';
-    var _hexFile=wv.toString(16).padStart(8,'0');
+    var _hexFile=wv.toString(16).toUpperCase().padStart(8,'0');
     return '<img src="'+_iconsBaseUrl+'/'+_hexFile+'.png" '
       +'style="position:absolute;top:0;left:0;width:64px;height:64px;'
       +'object-fit:contain;image-rendering:pixelated;" '
@@ -10612,7 +10612,6 @@ let _gearFull = {};          // wcid -> full parsed record (int/bool/float/strin
 let _gearSelectedFamily = null;
 let _gearSelectedSubcat = null; // armor only: which subcategory within the top category
 let _gearSelectedTier = null;   // weapon only: themed_sets | elemental_sets | misc
-let _gearSelectedSuitIdx = 0; // which palette-suit within the family is active
 let _gearSelectedPieces = {}; // wcid -> true, currently checked for generation
 
 function gearInit(){
@@ -10814,15 +10813,8 @@ function gearSelectFamily(name, subcat, tier){
   _gearSelectedFamily = name;
   _gearSelectedSubcat = subcat === undefined ? null : subcat;
   _gearSelectedTier = tier === undefined ? null : tier;
-  _gearSelectedSuitIdx = 0;
   _gearSelectedPieces = {};
   gearRenderFamilyList();
-  gearRenderMainPanel();
-}
-
-function gearSelectSuit(idx){
-  _gearSelectedSuitIdx = idx;
-  _gearSelectedPieces = {};
   gearRenderMainPanel();
 }
 
@@ -10847,37 +10839,35 @@ function gearRenderArmorFamily(){
   }
   const suits = (catData && catData[subKey]) || [];
   if(!suits.length){ panel.innerHTML = '<div class="sec" style="padding-top:14px"><div style="color:var(--ink-faint);font-style:italic;padding:20px;text-align:center">No data for this set.</div></div>'; return; }
-  if(_gearSelectedSuitIdx >= suits.length) _gearSelectedSuitIdx = 0;
-  const suit = suits[_gearSelectedSuitIdx];
   const title = _gearSelectedSubcat ? `${fam} — ${_gearSelectedSubcat}` : fam;
 
   let html = `<div class="sec" style="padding-top:14px">
     <div class="sh"><div class="st">${escHtml(title)}</div><div class="sl"></div></div>`;
 
   if(suits.length > 1){
-    // Multiple coordinated color variants of this full suit — pick one.
-    html += `<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">`;
-    suits.forEach((s, i) => {
-      const active = i === _gearSelectedSuitIdx;
-      const label = s.palette ? `Palette ${escHtml(String(s.palette))}` : `Variant ${i+1}`;
-      html += `<button class="prop-stab${active?' active':''}" data-suitidx="${i}" onclick="gearSelectSuit(${i})"
-        style="padding:6px 12px">${label}</button>`;
-    });
-    html += `</div>`;
-    html += `<p style="font-family:var(--ui-font);font-style:italic;font-size:11px;color:var(--ink-faint);margin-bottom:10px">
-      This set comes in ${suits.length} coordinated colors — each button above is a complete, matching suit.</p>`;
+    html += `<p style="font-family:var(--ui-font);font-style:italic;font-size:11px;color:var(--ink-faint);margin-bottom:14px">
+      This set comes in ${suits.length} coordinated colors — every palette is listed below.</p>`;
   }
 
-  if(suit.alternatives.length){
-    html += `<p style="font-family:var(--ui-font);font-style:italic;font-size:12px;color:var(--ink-dim);margin-bottom:14px">
-      This suit has two ways to cover the body — pick one. Mixing pieces across both can leave overlapping or missing coverage.</p>`;
-    html += gearArmorCoverageOption('primary', suit.primary_set,
-      'Fewer pieces (broader coverage per item)');
-    html += gearArmorCoverageOption('alternatives', suit.alternatives,
-      'More pieces (granular, swap individual slots)');
-  } else {
-    html += gearArmorCoverageOption('only', suit.primary_set, 'Pieces in this suit');
-  }
+  suits.forEach((suit, suitIdx) => {
+    const palLabel = suit.palette ? `Palette ${escHtml(String(suit.palette))}` : `Variant ${suitIdx+1}`;
+    html += `<div style="margin-bottom:22px;padding-bottom:6px;${suitIdx < suits.length-1 ? 'border-bottom:1px solid var(--border)' : ''}">
+      <div style="font-family:var(--ui-font);font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--crimson);margin-bottom:10px">${palLabel}</div>`;
+
+    const groupPrefix = `p${suitIdx}`;
+    const isFirstPalette = suitIdx === 0;
+    if(suit.alternatives.length){
+      html += `<p style="font-family:var(--ui-font);font-style:italic;font-size:11px;color:var(--ink-dim);margin-bottom:10px">
+        Two ways to cover the body — pick one. Mixing pieces across both can leave overlapping or missing coverage.</p>`;
+      html += gearArmorCoverageOption(groupPrefix+'_primary', suit.primary_set,
+        'Fewer pieces (broader coverage per item)', isFirstPalette);
+      html += gearArmorCoverageOption(groupPrefix+'_alternatives', suit.alternatives,
+        'More pieces (granular, swap individual slots)', false);
+    } else {
+      html += gearArmorCoverageOption(groupPrefix+'_only', suit.primary_set, 'Pieces in Suit', isFirstPalette);
+    }
+    html += `</div>`;
+  });
 
   html += gearGenerationForm('armor');
   html += '</div>';
@@ -10885,17 +10875,30 @@ function gearRenderArmorFamily(){
   gearSyncSelectionDefaults();
 }
 
-function gearArmorCoverageOption(groupKey, pieces, label){
+function gearIconThumb(wcid){
+  const rec = _gearFull[wcid];
+  const iconDid = rec && rec.did && rec.did.Icon && rec.did.Icon.value;
+  if(!iconDid) return `<div style="width:32px;height:32px;flex-shrink:0;background:rgba(0,0,0,.15);border:1px solid var(--border)"></div>`;
+  const n = iconDid.toString().match(/^0x/i) ? parseInt(iconDid,16) : (parseInt(iconDid)||0);
+  if(!n) return `<div style="width:32px;height:32px;flex-shrink:0;background:rgba(0,0,0,.15);border:1px solid var(--border)"></div>`;
+  const hexFile = n.toString(16).toUpperCase().padStart(8,'0');
+  return `<img src="${_iconsBaseUrl}/${hexFile}.png" style="width:32px;height:32px;flex-shrink:0;object-fit:contain;image-rendering:pixelated;background:rgba(0,0,0,.15);border:1px solid var(--border)" onerror="this.style.display='none'">`;
+}
+
+function gearArmorCoverageOption(groupKey, pieces, label, defaultChecked){
   if(!pieces || !pieces.length) return '';
+  if(defaultChecked === undefined) defaultChecked = true;
 
   const rows = pieces.map(p => {
     const primaryWcid = p.wcids[0];
     const checkboxId = `gear_pc_${groupKey}_${primaryWcid}`;
     const hasAlts = p.wcids.length > 1;
+    const checkedAttr = defaultChecked ? 'checked' : '';
     const mainRow = `<label for="${checkboxId}" style="display:flex;align-items:center;gap:8px;padding:5px 8px;
       border-radius:3px;cursor:pointer" onmouseover="this.style.background='var(--accent-tint)'" onmouseout="this.style.background=''">
       <input type="checkbox" id="${checkboxId}" data-piece-group="${groupKey}_${primaryWcid}" data-wcid="${primaryWcid}"
-        checked onchange="gearTogglePiece(this)">
+        ${checkedAttr} onchange="gearTogglePiece(this)">
+      ${gearIconThumb(primaryWcid)}
       <span style="font-family:var(--ui-font);font-size:12px;flex:1">${escHtml(p.name)}</span>
       ${hasAlts ? `<span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint);cursor:pointer;text-decoration:underline"
         onclick="event.preventDefault();gearToggleWcidPicker(this)">swap WCID (${p.wcids.length})</span>` : ''}
@@ -10965,7 +10968,18 @@ function gearRenderWeaponFamily(){
     <div class="sh"><div class="st">${escHtml(fam)}</div><div class="sl"></div></div>
     <div style="font-family:var(--ui-font);font-size:10px;color:var(--ink-faint);margin-bottom:10px">${escHtml(tierLabel)}</div>`;
 
-  html += gearArmorCoverageOption('weapon', pieces.map(p => ({name: p.name, slots: [], wcids: p.wcids})), 'Select weapons to generate');
+  // Names that appear more than once in this family are genuinely distinct
+  // color variants (different palette/icon), not duplicates — label them
+  // with their palette so that's clear instead of showing repeated rows.
+  const nameCounts = {};
+  pieces.forEach(p => { nameCounts[p.name] = (nameCounts[p.name]||0) + 1; });
+  const displayPieces = pieces.map(p => {
+    const needsLabel = nameCounts[p.name] > 1 && p.palette;
+    const displayName = needsLabel ? `${p.name} (palette ${p.palette})` : p.name;
+    return {name: displayName, slots: [], wcids: p.wcids};
+  });
+
+  html += gearArmorCoverageOption('weapon', displayPieces, 'Select weapons to generate');
 
   html += gearGenerationForm('weapon');
   html += '</div>';
@@ -11132,7 +11146,7 @@ function gearBuildDIDIconPreview(item){
     const v = (byType[l.type]||'').toString();
     const wv = v.match(/^0x/i) ? parseInt(v,16) : (parseInt(v)||0);
     if(!wv) return '';
-    const hexFile = wv.toString(16).padStart(8,'0');
+    const hexFile = wv.toString(16).toUpperCase().padStart(8,'0');
     return `<img src="${_iconsBaseUrl}/${hexFile}.png"
       style="position:absolute;top:0;left:0;width:64px;height:64px;object-fit:contain;image-rendering:pixelated;"
       onerror="this.style.display='none'" title="${l.label} (DID ${wv})">`;
