@@ -344,6 +344,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 <div class="topbar">
   <div class="logo"><img src="aceforge_logo.png" alt="ACEForge" class="logo-img"><span class="logo-name">ACEFORGE</span><span class="logo-sub">— Asheron's Call Content Development Tool</span></div>
   <div class="top-spacer"></div>
+  <button class="top-btn" id="versionBtn" onclick="checkForUpdate(true)" title="Click to check for updates">v…</button>
   <button class="top-btn" onclick="toggleDebug()">⚙ Debug <span id="debugErrBadge"></span></button>
   <button class="top-btn" onclick="openOutputFolder()">📂 Output</button>
   <button class="top-btn" onclick="openSettings()">⚙ Settings</button>
@@ -8768,15 +8769,22 @@ window.addEventListener('ollama_setup', e=>{
   }
 });
 
-function checkForUpdate(){
+function checkForUpdate(manual){
   if(!window.pywebview) return;
+  if(manual) toast('Checking for updates…', 2000);
   window.pywebview.api.check_for_update().then(r=>{
-    if(!r.has_update) return;
+    if(!r.has_update){
+      if(manual){
+        if(r.error) toast('✗ Could not check for updates: '+r.error, 4000);
+        else toast('✓ You\'re on the latest version ('+r.current_version+')', 3000);
+      }
+      return;
+    }
     // Check config (not localStorage) for the dismissed version — config
     // lives in %APPDATA%\ACEForge\config.json and survives app updates,
     // unlike localStorage which can be wiped when a new zip is extracted.
     window.pywebview.api.get_seen_update_version().then(seen=>{
-      if(seen===r.latest_version) return; // user already dismissed this version
+      if(!manual && seen===r.latest_version) return; // user already dismissed this version (manual checks always show it)
       const ov=document.getElementById('updateOverlay');
       const msg=document.getElementById('updateMsg');
       const notes=document.getElementById('updateNotes');
@@ -9369,6 +9377,10 @@ async function init(){
   initQuestForge();
   if(window.pywebview){
     window.pywebview.api.ping().then(r=>console.log('[BOOT] ping:',JSON.stringify(r))).catch(e=>console.warn('[BOOT] ping failed:',e));
+    window.pywebview.api.get_version().then(v=>{
+      const vb=document.getElementById('versionBtn');
+      if(vb) vb.textContent='v'+v;
+    }).catch(e=>console.warn('[BOOT] get_version failed:',e));
     // Resolve absolute icons path for frozen exe — relative paths break in _MEIPASS
   }
   try{ await loadData(); }catch(e){ console.warn('loadData:',e); }

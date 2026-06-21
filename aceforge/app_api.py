@@ -1310,20 +1310,54 @@ Start with: /* ===== FILE: {fname} ===== */
 
             bat_lines = [
                 "@echo off",
-                "setlocal",
+                "setlocal enabledelayedexpansion",
                 f"echo Waiting for ACEForge to close...",
-                # Spin until our PID is gone (max ~30 s)
+                # Wait for the visible child process PID to exit first.
+                # Every if/goto here is a single top-level statement, never
+                # nested inside parentheses — a goto jumping out of an open
+                # if(...) block corrupts the batch parser's bracket-tracking
+                # state, a documented Windows batch quirk.
                 f":waitloop",
                 f"tasklist /FI \"PID eq {pid}\" 2>NUL | find \"{pid}\" >NUL",
-                f"if not errorlevel 1 (",
-                f"    timeout /t 1 /nobreak >NUL",
-                f"    goto waitloop",
-                f")",
+                f"if errorlevel 1 goto waitloopdone",
+                f"timeout /t 1 /nobreak >NUL",
+                f"goto waitloop",
+                f":waitloopdone",
+                # PyInstaller onefile builds run a separate bootloader parent
+                # process under the same exe name, which can hold a lock on
+                # the .exe for a short window after the visible child PID
+                # exits (it has its own temp-dir cleanup to finish). Give it
+                # a moment, then also wait until no process with this image
+                # name is running at all before attempting to copy.
+                f"timeout /t 1 /nobreak >NUL",
+                f":waitimage",
+                f"tasklist /FI \"IMAGENAME eq {exe_path.name}\" 2>NUL | find /I \"{exe_path.name}\" >NUL",
+                f"if errorlevel 1 goto waitimagedone",
+                f"timeout /t 1 /nobreak >NUL",
+                f"goto waitimage",
+                f":waitimagedone",
                 f"echo Copying update files...",
+                # Retry the copy a few times in case the file is still
+                # transiently locked (antivirus scan, slow handle release).
+                # The goto below is intentionally OUTSIDE any parenthetical
+                # block — a goto from inside nested if(...) parens corrupts
+                # the batch parser's bracket-tracking state.
+                f"set COPY_TRIES=0",
+                f":copyretry",
+                f"set /a COPY_TRIES+=1",
                 # Robocopy: source → install root, all files/subdirs, quiet
                 f"robocopy \"{src_q}\" \"{install_q}\" /E /IS /IT /IM /NFL /NDL /NJH /NJS >NUL 2>&1",
                 # Fall back to xcopy if robocopy isn't available
                 f"if errorlevel 8 xcopy /E /Y /I \"{src_q}\\*\" \"{install_q}\\\"",
+                # Verify the exe actually landed before declaring success —
+                # if the copy silently failed (file still locked), retry up
+                # to 5 times with a short pause. Each check/goto is a single
+                # top-level statement, never nested inside parentheses.
+                f"if exist \"{exe_q}\" goto copyok",
+                f"if !COPY_TRIES! GEQ 5 goto copyok",
+                f"timeout /t 2 /nobreak >NUL",
+                f"goto copyretry",
+                f":copyok",
                 f"echo Relaunching ACEForge...",
                 f"start \"\" \"{exe_q}\"",
                 # Self-delete and clean up extracted temp dir
@@ -1355,9 +1389,6 @@ Start with: /* ===== FILE: {fname} ===== */
 
             threading.Thread(target=_launch_and_exit, daemon=True).start()
             return {"success": True, "message": "Update ready. Restarting…"}
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
 
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -1787,7 +1818,7 @@ Start with: /* ===== FILE: {fname} ===== */
         return {"items": items, "generating": self._generating}
 
 
-    APP_VERSION = "0.3.07"
+    APP_VERSION = "0.3.09"
 
     def get_version(self) -> str:
         return self.APP_VERSION
