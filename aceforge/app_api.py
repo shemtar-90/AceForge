@@ -124,11 +124,34 @@ class AppAPI(LoreMixin):
 
     _gear_data_cache = None
 
+    def _gear_resolve_web_path(self, *parts) -> 'Path':
+        """Find a file under aceforge/web/ in any of the places PyInstaller
+        might put it — mirrors main.py's get_icon() candidate-search pattern,
+        since a single hardcoded Path(__file__).parent guess does not
+        reliably resolve inside a one-file PyInstaller bundle."""
+        import sys
+        candidates = []
+        if hasattr(sys, "_MEIPASS"):
+            base = Path(sys._MEIPASS)
+            candidates += [
+                base.joinpath("aceforge", "web", *parts),
+                base.joinpath("web", *parts),
+            ]
+        here = Path(__file__).parent
+        candidates += [
+            here.joinpath("web", *parts),
+            here.parent.joinpath("aceforge", "web", *parts),
+        ]
+        for p in candidates:
+            if p.exists():
+                return p
+        return candidates[0]  # fall back to first candidate so the error message is informative
+
     def _gear_load_data(self):
         if self._gear_data_cache is not None:
             return self._gear_data_cache
         try:
-            here = Path(__file__).parent / "web" / "gear_data" / "gear_full.json"
+            here = self._gear_resolve_web_path("gear_data", "gear_full.json")
             with open(here, encoding="utf-8") as f:
                 raw = json.load(f)
             by_wcid = {}
@@ -146,7 +169,7 @@ class AppAPI(LoreMixin):
         if self._gear_spell_names_cache is not None:
             return self._gear_spell_names_cache
         try:
-            here = Path(__file__).parent / "web" / "spells.json"
+            here = self._gear_resolve_web_path("spells.json")
             with open(here, encoding="utf-8") as f:
                 raw = json.load(f)
             self._gear_spell_names_cache = {row[0]: row[1] for row in raw}
@@ -1759,7 +1782,7 @@ Start with: /* ===== FILE: {fname} ===== */
         return {"items": items, "generating": self._generating}
 
 
-    APP_VERSION = "0.3.0"
+    APP_VERSION = "0.3.01"
 
     def get_version(self) -> str:
         return self.APP_VERSION

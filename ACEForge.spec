@@ -17,12 +17,17 @@ if skill_md.exists():
     ref_datas.append((str(skill_md), 'aceforge'))
 
 # ── Web UI — index.html must land at aceforge/web/index.html in the bundle ───
+# Walks subdirectories too (e.g. aceforge/web/gear_data/) so nothing nested
+# under web/ is silently dropped from the packaged build — PyInstaller needs
+# each file's destination directory specified to preserve the structure.
 web_dir = Path('aceforge/web')
 web_datas = []
 if web_dir.exists():
-    for f in web_dir.iterdir():
+    for f in web_dir.rglob('*'):
         if f.is_file():
-            web_datas.append((str(f), 'aceforge/web'))
+            rel_parent = f.parent.relative_to(web_dir)
+            dest_dir = str(Path('aceforge/web') / rel_parent) if str(rel_parent) != '.' else 'aceforge/web'
+            web_datas.append((str(f), dest_dir))
 
 # ── App icon ──────────────────────────────────────────────────────────────────
 icon_datas = []
