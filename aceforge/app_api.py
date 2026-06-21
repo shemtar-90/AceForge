@@ -140,6 +140,193 @@ class AppAPI(LoreMixin):
             self._gear_data_cache = {}
         return self._gear_data_cache
 
+    _gear_spell_names_cache = None
+
+    def _gear_load_spell_names(self):
+        if self._gear_spell_names_cache is not None:
+            return self._gear_spell_names_cache
+        try:
+            here = Path(__file__).parent / "web" / "spells.json"
+            with open(here, encoding="utf-8") as f:
+                raw = json.load(f)
+            self._gear_spell_names_cache = {row[0]: row[1] for row in raw}
+        except Exception:
+            self._gear_spell_names_cache = {}
+        return self._gear_spell_names_cache
+
+    _GEAR_ARMOR_PIECE_WORDS = [
+        'Pair Of', 'Helm', 'Helmet', 'Coif', 'Basinet', 'Cowl', 'Kabuton',
+        'Breastplate', 'Cuirass', 'Hauberk', 'Coat', 'Vestment', 'Jerkin', 'Vest', 'Jumpsuit',
+        'Shirt', 'Robe', 'Pauldrons', 'Sleeves', 'Bracers', 'Vambraces', 'Gauntlets',
+        'Girth', 'Leggings', 'Tassets', 'Greaves', 'Sollerets', 'Boots', 'Shoes', 'Sandals',
+    ]
+    _GEAR_WEAPON_PIECE_WORDS = [
+        'Sword', 'Blade', 'Axe', 'Mace', 'Dagger', 'Spear', 'Staff', 'Stave', 'Fist', 'Lance',
+        'Bow', 'Crossbow', 'Atlatl', 'Wand', 'Orb', 'Katar', 'Club', 'Scimitar', 'Kaskara',
+        'Quarter Staff', 'War Staff', 'Greatblade', 'Two Handed Blade', 'Tachi', 'Balister',
+        'Greatsword', 'Scepter',
+    ]
+
+    def _gear_piece_type_word(self, original_name: str) -> str:
+        """Extract just the piece-type word (e.g. 'Bracers', 'Axe') from a
+        full source item name, wherever it appears — armor piece words sit
+        at the end ('Blackfire Shadow Bracers'), but weapon piece words can
+        sit at the start ('Axe of the Quiddity') or end ('Acid Axe'). Falls
+        back to the full original name if no known piece word is found, so
+        a renamed item never ends up with an empty/blank name."""
+        words = self._GEAR_ARMOR_PIECE_WORDS + self._GEAR_WEAPON_PIECE_WORDS
+        for w in sorted(words, key=len, reverse=True):  # longest match first
+            if re.search(r'\b' + re.escape(w) + r'\b', original_name, re.I):
+                return w
+        return original_name
+
+    def generate_gear_items(self, wcids: list, options: dict) -> dict:
+        """
+        Clone one or more source armor/weapon weenies into structured,
+        editable item data (NOT rendered SQL) — used by GearForge's new
+        per-item editor flow. Returns each item's full int/bool/float/
+        string/did/spells property dict, same shape as the source data,
+        so every field is independently editable before Save.
+        """
+        try:
+            data = self._gear_load_data()
+            name_prefix = (options.get("name_prefix") or "").strip()
+            start_wcid  = int(options.get("start_wcid") or 0)
+            palette     = options.get("palette")
+            shade       = options.get("shade")
+            value       = options.get("value")
+            stat_scale  = options.get("stat_scale")
+
+            if not start_wcid:
+                return {"success": False, "error": "Starting WCID is required.", "items": []}
+
+            items = []
+            next_wcid = start_wcid
+            for src_wcid in wcids:
+                src = data.get(int(src_wcid))
+                if not src:
+                    continue
+                new_wcid = next_wcid
+                next_wcid += 1
+                orig_name = (src.get("string", {}).get("Name", {}) or {}).get("value", "Item")
+                if name_prefix:
+                    piece_word = self._gear_piece_type_word(orig_name)
+                    new_name = f"{name_prefix} {piece_word}".strip()
+                else:
+                    new_name = orig_name
+                item = self._gear_build_item(src, new_wcid, new_name,
+                                              palette, shade, value, stat_scale)
+                items.append(item)
+
+            if not items:
+                return {"success": False, "error": "No matching source items found.", "items": []}
+
+            return {"success": True, "items": items, "error": None, "next_wcid": next_wcid}
+        except Exception as e:
+            import traceback
+            return {"success": False, "error": str(e), "items": [],
+                    "traceback": traceback.format_exc()}
+
+    def render_gear_items_sql(self, items: list) -> dict:
+        """
+        Serialize a list of (possibly user-edited) structured item dicts —
+        same shape as generate_gear_items returns — into final SQL. Called
+        by Save, so whatever edits the user made in the per-item editor are
+        what actually gets written out, not the original unedited clone.
+        """
+        try:
+            blocks = [self._gear_render_item_sql(item) for item in items]
+            return {"success": True, "sql": "\n".join(blocks), "error": None}
+        except Exception as e:
+            import traceback
+            return {"success": False, "error": str(e), "sql": "",
+                    "traceback": traceback.format_exc()}
+
+    def _gear_build_item(self, source: dict, new_wcid: int, new_name: str,
+                          palette, shade, value, stat_scale) -> dict:
+        """Apply the standard GearForge overrides and return a structured,
+        editable item dict (wcid/class_name/weenie_type/int/bool/float/
+        string/did/spells) — the shared logic behind both the legacy
+        one-shot SQL generator and the new structured item editor."""
+        def deep_copy_props(props):
+            return {k: dict(v) for k, v in props.items()}
+
+        int_props = deep_copy_props(source.get("int", {}))
+        if palette not in (None, ""):
+            if "PaletteTemplate" in int_props:
+                int_props["PaletteTemplate"]["value"] = str(palette)
+            else:
+                int_props["PaletteTemplate"] = {"type": 3, "value": str(palette)}
+        if value not in (None, "") and "Value" in int_props:
+            int_props["Value"]["value"] = str(value)
+        if stat_scale not in (None, ""):
+            if "ArmorLevel" in int_props:
+                int_props["ArmorLevel"]["value"] = str(stat_scale)
+            elif "Damage" in int_props:
+                int_props["Damage"]["value"] = str(stat_scale)
+
+        float_props = deep_copy_props(source.get("float", {}))
+        if shade not in (None, ""):
+            if "Shade" in float_props:
+                float_props["Shade"]["value"] = str(shade)
+            else:
+                float_props["Shade"] = {"type": 12, "value": str(shade)}
+
+        bool_props = deep_copy_props(source.get("bool", {}))
+        string_props = deep_copy_props(source.get("string", {}))
+        name_type = string_props.get("Name", {}).get("type", 1)
+        string_props["Name"] = {"type": name_type, "value": new_name}
+        did_props = deep_copy_props(source.get("did", {}))
+        spells = []  # always start empty — user builds their own spellbook from scratch
+
+        return {
+            "wcid": new_wcid,
+            "class_name": re.sub(r"[^a-zA-Z0-9]", "", new_name.lower())[:30] or f"item{new_wcid}",
+            "weenie_type": source.get("weenie_type", 1),
+            "int": int_props, "bool": bool_props, "float": float_props,
+            "string": string_props, "did": did_props, "spells": spells,
+        }
+
+    def _gear_render_item_sql(self, item: dict) -> str:
+        """Render one structured item dict (from _gear_build_item, possibly
+        edited by the user afterward) into a complete weenie SQL block."""
+        new_wcid = item["wcid"]
+
+        def emit_block(table, props, fmt):
+            if not props:
+                return ""
+            lines = [f"INSERT INTO `weenie_properties_{table}` (`object_Id`, `type`, `value`)"]
+            rows = sorted(props.items(), key=lambda kv: kv[1]["type"])
+            for i, (pname, p) in enumerate(rows):
+                prefix = "VALUES " if i == 0 else "     , "
+                trail = ";" if i == len(rows) - 1 else ""
+                lines.append(f"{prefix}({new_wcid}, {p['type']}, {fmt(p['value'])}) /* {pname} */{trail}")
+            return "\n".join(lines) + "\n"
+
+        lines = [
+            f"DELETE FROM `weenie` WHERE `class_Id` = {new_wcid};\n",
+            "INSERT INTO `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)",
+            f"VALUES ({new_wcid}, '{item['class_name']}', {item.get('weenie_type', 1)}, NOW());\n",
+            emit_block("int", item.get("int", {}), lambda v: v),
+            emit_block("bool", item.get("bool", {}), lambda v: v),
+            emit_block("float", item.get("float", {}), lambda v: v),
+            emit_block("string", item.get("string", {}), lambda v: "'" + str(v).replace("'", "''") + "'"),
+            emit_block("d_i_d", item.get("did", {}), lambda v: v),
+        ]
+        spells = item.get("spells") or []
+        if spells:
+            spell_names = self._gear_load_spell_names()
+            spell_lines = ["INSERT INTO `weenie_properties_spell_book` (`object_Id`, `spell`, `probability`)"]
+            for i, sp in enumerate(spells):
+                prefix = "VALUES " if i == 0 else "     , "
+                trail = ";" if i == len(spells) - 1 else ""
+                sp_name = spell_names.get(int(sp["spell_id"]), "")
+                comment = f" /* {sp_name} */" if sp_name else ""
+                spell_lines.append(f"{prefix}({new_wcid}, {sp['spell_id']}, {sp['probability']}){comment}{trail}")
+            lines.append("\n".join(spell_lines))
+
+        return "\n".join(l for l in lines if l)
+
     def generate_gear_set(self, wcids: list, options: dict) -> dict:
         """
         Clone one or more source armor/weapon weenies into new custom items.
@@ -239,7 +426,7 @@ class AppAPI(LoreMixin):
             emit_block("string", string_props, lambda v: "'" + v.replace("'", "''") + "'"),
             emit_block("d_i_d", did_props, lambda v: v),
         ]
-        spells = source.get("spells") or []
+        spells = []  # always start empty — user builds their own spellbook from scratch
         if spells:
             spell_lines = ["INSERT INTO `weenie_properties_spell_book` (`object_Id`, `spell`, `probability`)"]
             for i, sp in enumerate(spells):
@@ -1572,7 +1759,7 @@ Start with: /* ===== FILE: {fname} ===== */
         return {"items": items, "generating": self._generating}
 
 
-    APP_VERSION = "0.3.6"
+    APP_VERSION = "0.3.0"
 
     def get_version(self) -> str:
         return self.APP_VERSION
