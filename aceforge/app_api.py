@@ -1311,7 +1311,7 @@ Start with: /* ===== FILE: {fname} ===== */
             bat_lines = [
                 "@echo off",
                 "setlocal",
-                f"echo Waiting for ACEForge to close…",
+                f"echo Waiting for ACEForge to close...",
                 # Spin until our PID is gone (max ~30 s)
                 f":waitloop",
                 f"tasklist /FI \"PID eq {pid}\" 2>NUL | find \"{pid}\" >NUL",
@@ -1319,19 +1319,24 @@ Start with: /* ===== FILE: {fname} ===== */
                 f"    timeout /t 1 /nobreak >NUL",
                 f"    goto waitloop",
                 f")",
-                f"echo Copying update files…",
+                f"echo Copying update files...",
                 # Robocopy: source → install root, all files/subdirs, quiet
                 f"robocopy \"{src_q}\" \"{install_q}\" /E /IS /IT /IM /NFL /NDL /NJH /NJS >NUL 2>&1",
                 # Fall back to xcopy if robocopy isn't available
                 f"if errorlevel 8 xcopy /E /Y /I \"{src_q}\\*\" \"{install_q}\\\"",
-                f"echo Relaunching ACEForge…",
+                f"echo Relaunching ACEForge...",
                 f"start \"\" \"{exe_q}\"",
                 # Self-delete and clean up extracted temp dir
                 f"rd /s /q \"{tmp_dir_q}\" 2>NUL",
                 f"del \"%~f0\"",
             ]
 
-            bat_path.write_text("\r\n".join(bat_lines), encoding="ascii")
+            # Encode defensively: strip/replace anything outside ASCII rather
+            # than crashing the whole update on a single stray character —
+            # the exact failure mode that motivated this fix in the first
+            # place (a literal "…" in an echo string broke ascii encoding).
+            bat_text = "\r\n".join(bat_lines)
+            bat_path.write_text(bat_text.encode("ascii", errors="replace").decode("ascii"), encoding="ascii")
 
             # ── Launch the batch detached, then exit ─────────────────────────
             self._ollama_event("download_done",
@@ -1782,7 +1787,7 @@ Start with: /* ===== FILE: {fname} ===== */
         return {"items": items, "generating": self._generating}
 
 
-    APP_VERSION = "0.3.01"
+    APP_VERSION = "0.3.02"
 
     def get_version(self) -> str:
         return self.APP_VERSION
