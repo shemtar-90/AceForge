@@ -1247,21 +1247,16 @@ Start with: /* ===== FILE: {fname} ===== */
 
     def download_and_install_update(self, download_url: str) -> dict:
         """
-        Download the new release zip, then hand off installation to a
-        temporary batch script that runs elevated (UAC) after ACEForge exits.
+        Download the new release zip, extract it, write a batch installer to
+        TEMP, then use Win32 ShellExecuteW("runas") to launch it elevated and
+        exit the current process so the batch can overwrite the running exe.
 
-        Root causes of previous failures:
-        1. ACEForge installs to C:\\Program Files\\ which requires elevation.
-           The old batch ran as the current user — robocopy returned exit
-           code 5 (Access Denied) which is < 8 and was silently ignored.
-           Nothing was ever copied.
-        2. The "if exist exe_q goto copyok" guard always fired because the
-           original exe was never deleted, short-circuiting the retry loop
-           even when the copy did nothing.
-
-        Fix: Launch the batch elevated via PowerShell Start-Process -Verb RunAs
-        (single UAC prompt, then runs with admin rights). The copy-success check
-        now uses VERSION.txt — a file that only exists after a successful copy.
+        Previous approaches failed because:
+        - PowerShell -NonInteractive blocks UAC dialogs entirely
+        - DETACHED_PROCESS disconnects from the desktop session UAC needs
+        - The copy-success check used exe existence (always true) not a new file
+        The fix uses ctypes ShellExecuteW which is the native Win32 elevation
+        path — reliable from PyInstaller bundles, no PowerShell dependency.
         """
         import urllib.request, zipfile, shutil, sys, os, subprocess, threading, time
         from pathlib import Path
@@ -1281,6 +1276,7 @@ Start with: /* ===== FILE: {fname} ===== */
             tmp_zip  = Path(os.environ.get("TEMP", str(Path.home()))) / "ACEForge_update.zip"
             tmp_dir  = Path(os.environ.get("TEMP", str(Path.home()))) / "ACEForge_update_extract"
             bat_path = Path(os.environ.get("TEMP", str(Path.home()))) / "aceforge_update.bat"
+            log_path = Path(os.environ.get("TEMP", str(Path.home()))) / "aceforge_update.log"
 
             # ── Download ──────────────────────────────────────────────────────
             self._ollama_event("download_start", "Downloading update...", 0, 0)
@@ -1303,40 +1299,52 @@ Start with: /* ===== FILE: {fname} ===== */
                 zf.extractall(tmp_dir)
             tmp_zip.unlink(missing_ok=True)
 
-            # Release zip is flat (ACEForge.exe at root, no subfolder).
-            # If exactly one subdirectory exists (source zip), use it.
+            # Release zip is flat (ACEForge.exe, README.md, VERSION.txt at root).
+            # If exactly one subdirectory exists (source zip layout), use it.
             subdirs = [tmp_dir / d for d in os.listdir(tmp_dir)
                        if (tmp_dir / d).is_dir()]
             src_root = subdirs[0] if len(subdirs) == 1 else tmp_dir
 
-            # ── Build batch script ────────────────────────────────────────────
-            pid = os.getpid()
+            # ── Verify the exe is in src_root before writing the bat ──────────
+            src_exe = src_root / exe_path.name
+            if not src_exe.exists():
+                # Try one level deeper
+                deeper = [src_root / d / exe_path.name
+                          for d in os.listdir(src_root)
+                          if (src_root / d).is_dir()]
+                found  = [p for p in deeper if p.exists()]
+                if found:
+                    src_root = found[0].parent
+                else:
+                    return {"success": False,
+                            "error": "Could not find {} in downloaded zip.".format(exe_path.name)}
 
-            # Use raw backslash paths for the batch file
+            # ── Write batch script ────────────────────────────────────────────
+            pid       = os.getpid()
             install_q = str(install_root).replace("/", "\\")
             src_q     = str(src_root).replace("/", "\\")
             tmp_dir_q = str(tmp_dir).replace("/", "\\")
             exe_q     = str(exe_path).replace("/", "\\")
-            ver_q     = str(install_root / "VERSION.txt").replace("/", "\\")
+            log_q     = str(log_path).replace("/", "\\")
 
-            # All if/goto are top-level — never nested inside parentheses.
-            # Gotos inside paren blocks corrupt batch parser bracket-tracking,
-            # a documented Windows batch quirk we explicitly avoid.
             lines = []
             lines.append("@echo off")
             lines.append("setlocal enabledelayedexpansion")
-            lines.append("echo [ACEForge Updater] Waiting for ACEForge to exit...")
+            lines.append('echo [%TIME%] ACEForge updater started >> "{}"'.format(log_q))
+            lines.append('echo [%TIME%] PID to wait for: {} >> "{}"'.format(pid, log_q))
+            lines.append('echo [%TIME%] Source: {} >> "{}"'.format(src_q, log_q))
+            lines.append('echo [%TIME%] Destination: {} >> "{}"'.format(install_q, log_q))
 
-            # Wait for the visible child PID
+            # Wait for the PID to exit
             lines.append(":waitpid")
             lines.append('tasklist /FI "PID eq {}" 2>NUL | find "{}" >NUL'.format(pid, pid))
             lines.append("if errorlevel 1 goto waitpiddone")
             lines.append("timeout /t 1 /nobreak >NUL")
             lines.append("goto waitpid")
             lines.append(":waitpiddone")
+            lines.append('echo [%TIME%] PID {} gone >> "{}"'.format(pid, log_q))
 
-            # PyInstaller onefile: bootloader parent holds the exe handle
-            # briefly after the child exits — wait for image name to clear.
+            # Wait for image name to clear (PyInstaller bootloader cleanup)
             lines.append("timeout /t 2 /nobreak >NUL")
             lines.append(":waitimg")
             lines.append('tasklist /FI "IMAGENAME eq {}" 2>NUL | find /I "{}" >NUL'.format(
@@ -1345,34 +1353,41 @@ Start with: /* ===== FILE: {fname} ===== */
             lines.append("timeout /t 1 /nobreak >NUL")
             lines.append("goto waitimg")
             lines.append(":waitimgdone")
+            lines.append('echo [%TIME%] Image cleared >> "{}"'.format(log_q))
 
-            # Copy — robocopy exit codes 0-7 are all success/informational;
-            # only 8+ indicate errors (per Microsoft documentation).
-            lines.append("echo [ACEForge Updater] Copying files...")
+            # Copy — robocopy 0-7 = success/informational, 8+ = error
             lines.append("set TRIES=0")
             lines.append(":copyloop")
             lines.append("set /a TRIES+=1")
-            lines.append('robocopy "{}" "{}" /E /IS /IT /IM /NFL /NDL /NJH /NJS'.format(src_q, install_q))
+            lines.append('echo [%TIME%] Copy attempt %TRIES% >> "{}"'.format(log_q))
+            lines.append('robocopy "{}" "{}" /E /IS /IT /IM /NFL /NDL /NJH /NJS'.format(
+                src_q, install_q))
             lines.append("set RC=%ERRORLEVEL%")
+            lines.append('echo [%TIME%] robocopy exit %RC% >> "{}"'.format(log_q))
+            # robocopy 0-7 = ok
             lines.append("if %RC% LEQ 7 goto copydone")
             # robocopy failed — xcopy fallback
-            lines.append("echo [ACEForge Updater] robocopy failed (exit %RC%), trying xcopy...")
+            lines.append('echo [%TIME%] robocopy failed, trying xcopy >> "{}"'.format(log_q))
             lines.append('xcopy /E /Y /I "{}\\*" "{}\\"\n'.format(src_q, install_q))
             lines.append(":copydone")
 
-            # Verify VERSION.txt landed — this file only exists in install_root
-            # AFTER a successful copy, so it proves the copy actually ran.
-            # (The old exe-existence check always passed because the old exe
-            # was already there, making the check useless as a gate.)
-            lines.append('if exist "{}" goto verified'.format(ver_q))
-            lines.append("if %TRIES% GEQ 5 goto verified")
-            lines.append("echo [ACEForge Updater] Verification failed, retrying...")
+            # Verify: VERSION.txt is a new file that only lands after a real copy
+            lines.append('if exist "{}\\VERSION.txt" goto verified'.format(install_q))
+            lines.append("if %TRIES% GEQ 5 goto giveup")
+            lines.append('echo [%TIME%] VERSION.txt not found, retry >> "{}"'.format(log_q))
             lines.append("timeout /t 2 /nobreak >NUL")
             lines.append("goto copyloop")
-            lines.append(":verified")
 
-            # Relaunch and cleanup
-            lines.append("echo [ACEForge Updater] Relaunching {}...".format(exe_path.name))
+            lines.append(":giveup")
+            lines.append('echo [%TIME%] Copy failed after 5 attempts >> "{}"'.format(log_q))
+            lines.append("goto relaunch")
+
+            lines.append(":verified")
+            lines.append('echo [%TIME%] Copy verified OK >> "{}"'.format(log_q))
+
+            # Relaunch then cleanup
+            lines.append(":relaunch")
+            lines.append('echo [%TIME%] Relaunching {} >> "{}"'.format(exe_path.name, log_q))
             lines.append('start "" "{}"'.format(exe_q))
             lines.append('rd /s /q "{}" 2>NUL'.format(tmp_dir_q))
             lines.append('del "%~f0"')
@@ -1383,36 +1398,49 @@ Start with: /* ===== FILE: {fname} ===== */
                 encoding="ascii"
             )
 
-            # ── Signal UI then launch elevated and exit ───────────────────────
+            # ── Signal UI ─────────────────────────────────────────────────────
             self._ollama_event("download_done",
-                "Update downloaded. A UAC prompt will appear — click Yes to install. "
-                "ACEForge will restart automatically.",
+                "Update downloaded. ACEForge will now close and restart with the new version.",
                 100, 100)
 
+            # ── Launch batch + exit ───────────────────────────────────────────
+            # Use Win32 ShellExecuteW with "runas" verb for elevation.
+            # This is the native Windows UAC path — works from PyInstaller
+            # bundles, doesn't need PowerShell, shows UAC on the correct desktop.
+            # SW_HIDE = 0 keeps the cmd window hidden.
+            #
+            # If already elevated (ran as admin), ShellExecuteW("runas") still
+            # works — it just skips the UAC prompt.
+            #
+            # We use a non-daemon thread so the thread survives even if the
+            # webview main thread exits before the sleep finishes.
             def _launch_and_exit():
-                time.sleep(0.8)   # let the UI event render
-
-                # PowerShell Start-Process -Verb RunAs triggers a UAC prompt
-                # and runs the batch with administrator rights, allowing it to
-                # write to C:\Program Files\.
-                # -WindowStyle Hidden keeps the cmd window invisible.
-                ps_cmd = (
-                    "Start-Process"
-                    " -FilePath 'cmd.exe'"
-                    " -ArgumentList '/c \"{}\"'".format(str(bat_path).replace("'", "''"))
-                    + " -Verb RunAs"
-                    " -WindowStyle Hidden"
-                )
-                subprocess.Popen(
-                    ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
-                    creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
-                               | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
-                    close_fds=True,
-                )
-                time.sleep(0.5)
+                time.sleep(0.8)  # let the UI event render
+                try:
+                    import ctypes
+                    SW_HIDE = 0
+                    ctypes.windll.shell32.ShellExecuteW(
+                        None,           # hwnd
+                        "runas",        # verb — triggers UAC elevation
+                        "cmd.exe",      # file
+                        '/c "{}"'.format(str(bat_path)),  # params
+                        None,           # working dir (use cwd)
+                        SW_HIDE,        # nShowCmd — hidden window
+                    )
+                except Exception:
+                    # ctypes not available or not on Windows — fall back to
+                    # plain subprocess (no elevation, may fail on Program Files)
+                    subprocess.Popen(
+                        ["cmd.exe", "/c", str(bat_path)],
+                        creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
+                                   | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+                    )
+                time.sleep(0.3)
                 os._exit(0)
 
-            threading.Thread(target=_launch_and_exit, daemon=True).start()
+            # daemon=False: thread survives main thread exit
+            t = threading.Thread(target=_launch_and_exit, daemon=False)
+            t.start()
             return {"success": True, "message": "Update ready. Restarting..."}
 
         except Exception as e:
