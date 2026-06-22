@@ -9684,21 +9684,149 @@ var QUEST_FIELDS = { kill_task:KILL_TASK_FIELDS, item_turnin:ITEM_TURNIN_FIELDS,
 // ── Reward builder state ──────────────────────────────────────────────────────
 var _rewardRowsShown = 1;
 
+// ── WCID name index (loaded once from weenie_names.json) ─────────────────────
+var _weenieNames = null;   // null = not yet loaded, [] = loaded but empty, [...] = ready
+
+function _loadWeenieNames(cb){
+  if(_weenieNames !== null){ if(cb) cb(); return; }
+  var base = (window._appBase || '');
+  fetch(base + 'weenie_names.json')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      // data: [[wcid, name, category], ...]
+      _weenieNames = data;
+      if(cb) cb();
+    })
+    .catch(function(){
+      _weenieNames = [];  // mark as attempted even if failed
+      if(cb) cb();
+    });
+}
+
+function _weenieSearch(term, rowIdx){
+  var dd = document.getElementById('reward_dd_'+rowIdx);
+  if(!dd) return;
+  if(!term || term.length < 2){ dd.style.display='none'; return; }
+  if(!_weenieNames || !_weenieNames.length){ dd.style.display='none'; return; }
+
+  var q = term.toLowerCase();
+  var hits = [];
+  for(var i=0; i<_weenieNames.length && hits.length<12; i++){
+    var entry = _weenieNames[i];
+    if(entry[1].toLowerCase().indexOf(q) !== -1){
+      hits.push(entry);
+    }
+  }
+
+  if(!hits.length){ dd.style.display='none'; return; }
+
+  var html = '';
+  for(var j=0; j<hits.length; j++){
+    var e = hits[j];
+    var wcid = e[0], name = e[1], cat = e[2];
+    // Escape for onclick attribute
+    var safeName = name.replace(/'/g,"&#39;").replace(/"/g,"&quot;");
+    html += '<div class="reward-dd-item" onclick="_weenieSelect('+rowIdx+','+wcid+',\''+safeName+'\')"'
+          + ' style="padding:4px 8px;cursor:pointer;font-family:var(--ui-font);font-size:10px;'
+          + 'display:flex;justify-content:space-between;align-items:center;gap:8px;'
+          + 'border-bottom:1px solid var(--border-lt)">'
+          + '<span style="color:var(--ink)">' + name + '</span>'
+          + '<span style="color:var(--ink-faint);font-size:9px;white-space:nowrap">'
+          + cat + ' &middot; ' + wcid
+          + '</span></div>';
+  }
+  dd.innerHTML = html;
+  dd.style.display = 'block';
+}
+
+function _weenieSelect(rowIdx, wcid, name){
+  var nameEl = document.getElementById('reward_'+rowIdx+'_name');
+  var wcidEl = document.getElementById('reward_'+rowIdx+'_wcid');
+  var dd     = document.getElementById('reward_dd_'+rowIdx);
+  if(nameEl) nameEl.value = name;
+  if(wcidEl) wcidEl.value = wcid;
+  if(dd)     dd.style.display = 'none';
+  // Move focus to desc field so user can add description if needed
+  var descEl = document.getElementById('reward_'+rowIdx+'_desc');
+  if(descEl) descEl.focus();
+}
+
+function _weenieByWcid(wcid, rowIdx){
+  // Called when user types a number into the WCID field.
+  // Looks up the WCID in the name index and auto-fills the name field if found.
+  var nameEl = document.getElementById('reward_'+rowIdx+'_name');
+  if(!nameEl) return;
+  if(!wcid || isNaN(parseInt(wcid))){ return; }
+  var id = parseInt(wcid);
+
+  function doLookup(){
+    if(!_weenieNames || !_weenieNames.length) return;
+    for(var i=0; i<_weenieNames.length; i++){
+      if(_weenieNames[i][0] === id){
+        // Only fill if the name field is empty or was auto-filled previously
+        // (don't stomp a custom name the user typed)
+        var dd = document.getElementById('reward_dd_'+rowIdx);
+        if(dd) dd.style.display='none';
+        nameEl.value = _weenieNames[i][1];
+        // Add a subtle "found" flash
+        nameEl.style.background='var(--parch-lt)';
+        setTimeout(function(){ nameEl.style.background=''; }, 600);
+        return;
+      }
+    }
+    // Not found — clear any previously auto-filled name? No: leave user's text alone.
+  }
+
+  if(_weenieNames === null){
+    _loadWeenieNames(doLookup);
+  } else {
+    doLookup();
+  }
+}
+
 function _buildRewardBuilder(fieldId){
+  // Pre-load the weenie name index when the builder is first rendered
+  _loadWeenieNames();
+
   var rows = '';
+  var INP = 'font-family:var(--ui-font);font-size:10px;padding:3px 6px;background:var(--parch);border:1px solid var(--border);color:var(--ink)';
   for(var i=1;i<=4;i++){
     var d = (i===1)?'flex':'none';
     rows += '<div id="reward_row_'+i+'" style="display:'+d+';flex-direction:column;gap:2px;margin-bottom:6px">';
-    rows += '<div style="display:flex;gap:4px;align-items:center">';
-    rows += '<input type="text"   id="reward_'+i+'_name" placeholder="Item name"        style="flex:2;font-family:var(--ui-font);font-size:10px;padding:3px 6px;background:var(--parch);border:1px solid var(--border);color:var(--ink)" title="Item name">';
-    rows += '<input type="number" id="reward_'+i+'_wcid" placeholder="WCID (or blank)"  style="flex:1;font-family:var(--ui-font);font-size:10px;padding:3px 6px;background:var(--parch);border:1px solid var(--border);color:var(--ink)" title="Existing WCID - blank = generate new item file">';
-    rows += '<input type="number" id="reward_'+i+'_qty"  placeholder="Qty" value="1"    style="width:44px;font-family:var(--ui-font);font-size:10px;padding:3px 4px;background:var(--parch);border:1px solid var(--border);color:var(--ink)" title="Quantity">';
-    rows += '</div>';
-    rows += '<input type="text" id="reward_'+i+'_desc" placeholder="Description — AI uses this to write the item" style="width:100%;font-family:var(--ui-font);font-size:10px;padding:3px 6px;background:var(--parch);border:1px solid var(--border);color:var(--ink);font-style:italic;opacity:.8">';
+
+    // Name field + search button row, with dropdown container
+    rows += '<div style="display:flex;gap:4px;align-items:center;position:relative">';
+    rows += '<div style="flex:2;position:relative">';
+    rows += '<input type="text" id="reward_'+i+'_name" placeholder="Search or type item name"'
+          + ' style="width:100%;'+INP+';padding-right:22px;box-sizing:border-box"'
+          + ' title="Type to search existing items, or enter a custom name"'
+          + ' autocomplete="off"'
+          + ' oninput="_weenieSearch(this.value,'+i+')"'
+          + ' onblur="setTimeout(function(){var d=document.getElementById(\'reward_dd_'+i+'\');if(d)d.style.display=\'none\'},160)"'
+          + ' onfocus="if(this.value.length>=2)_weenieSearch(this.value,'+i+')">';
+    // Small search icon badge
+    rows += '<span style="position:absolute;right:5px;top:50%;transform:translateY(-50%);'
+          + 'font-size:9px;color:var(--ink-faint);pointer-events:none;user-select:none">&#x1F50D;</span>';
+    // Dropdown
+    rows += '<div id="reward_dd_'+i+'" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:9999;'
+          + 'background:var(--parch);border:1px solid var(--border);border-top:none;'
+          + 'max-height:160px;overflow-y:auto;box-shadow:0 4px 8px rgba(0,0,0,.25)"></div>';
+    rows += '</div>';  // end name wrapper
+
+    rows += '<input type="number" id="reward_'+i+'_wcid" placeholder="WCID"'
+          + ' style="width:76px;'+INP+'" title="Existing WCID — filled automatically by search, or enter manually. Blank = generate new item file"'
+          + ' oninput="_weenieByWcid(this.value,'+i+')"'>
+          + '';
+    rows += '<input type="number" id="reward_'+i+'_qty"  placeholder="Qty" value="1"'
+          + ' style="width:44px;'+INP.replace('padding:3px 6px','padding:3px 4px')+'" title="Quantity">';
+    rows += '</div>';  // end row
+
+    rows += '<input type="text" id="reward_'+i+'_desc" placeholder="Description — AI uses this to write or flavor the item"'
+          + ' style="width:100%;'+INP+';font-style:italic;opacity:.8">';
     rows += '</div>';
   }
   rows += "<button onclick='_addRewardRow()' style='font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;padding:3px 10px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;margin-top:2px'>+ Add</button>";
-  rows += "<span style='font-family:var(--ui-font);font-style:italic;font-size:10px;color:var(--ink-faint);margin-left:8px'>Name + WCID = existing item &middot; Name only = generate file</span>";
+  rows += "<span style='font-family:var(--ui-font);font-style:italic;font-size:10px;color:var(--ink-faint);margin-left:8px'>Search to use existing item &middot; Leave WCID blank to generate a new one</span>";
   return rows;
 }
 
@@ -9980,6 +10108,8 @@ function clearQuestForm(){
     var rw=document.getElementById('reward_'+ri+'_wcid');
     var rq=document.getElementById('reward_'+ri+'_qty');
     if(rn) rn.value=''; if(rw) rw.value=''; if(rq) rq.value='1';
+    var rd=document.getElementById('reward_'+ri+'_desc'); if(rd) rd.value='';
+    var dd=document.getElementById('reward_dd_'+ri); if(dd) dd.style.display='none';
     var row=document.getElementById('reward_row_'+ri);
     if(row) row.style.display=(ri===1?'flex':'none');
   }
