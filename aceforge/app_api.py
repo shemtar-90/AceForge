@@ -1248,8 +1248,20 @@ Start with: /* ===== FILE: {fname} ===== */
     def download_and_install_update(self, download_url: str) -> dict:
         """
         Download the new release zip, then hand off installation to a
-        temporary batch script that runs after ACEForge exits — avoiding
-        the Windows file-lock on the running ACEForge.exe.
+        temporary batch script that runs elevated (UAC) after ACEForge exits.
+
+        Root causes of previous failures:
+        1. ACEForge installs to C:\\Program Files\\ which requires elevation.
+           The old batch ran as the current user — robocopy returned exit
+           code 5 (Access Denied) which is < 8 and was silently ignored.
+           Nothing was ever copied.
+        2. The "if exist exe_q goto copyok" guard always fired because the
+           original exe was never deleted, short-circuiting the retry loop
+           even when the copy did nothing.
+
+        Fix: Launch the batch elevated via PowerShell Start-Process -Verb RunAs
+        (single UAC prompt, then runs with admin rights). The copy-success check
+        now uses VERSION.txt — a file that only exists after a successful copy.
         """
         import urllib.request, zipfile, shutil, sys, os, subprocess, threading, time
         from pathlib import Path
@@ -1258,7 +1270,7 @@ Start with: /* ===== FILE: {fname} ===== */
             return {"success": False, "error": "No download URL provided"}
 
         try:
-            # Determine install root (where ACEForge.exe or main.py lives)
+            # ── Paths ─────────────────────────────────────────────────────────
             if hasattr(sys, "_MEIPASS"):
                 install_root = Path(sys.executable).parent
                 exe_path     = Path(sys.executable)
@@ -1266,11 +1278,12 @@ Start with: /* ===== FILE: {fname} ===== */
                 install_root = Path(__file__).parent.parent
                 exe_path     = Path(sys.executable)
 
-            tmp_zip = Path(os.environ.get("TEMP", str(Path.home()))) / "ACEForge_update.zip"
-            tmp_dir = Path(os.environ.get("TEMP", str(Path.home()))) / "ACEForge_update_extract"
+            tmp_zip  = Path(os.environ.get("TEMP", str(Path.home()))) / "ACEForge_update.zip"
+            tmp_dir  = Path(os.environ.get("TEMP", str(Path.home()))) / "ACEForge_update_extract"
+            bat_path = Path(os.environ.get("TEMP", str(Path.home()))) / "aceforge_update.bat"
 
             # ── Download ──────────────────────────────────────────────────────
-            self._ollama_event("download_start", "Downloading update…", 0, 0)
+            self._ollama_event("download_start", "Downloading update...", 0, 0)
 
             def on_progress(block, block_size, total):
                 if total > 0:
@@ -1278,117 +1291,129 @@ Start with: /* ===== FILE: {fname} ===== */
                     mb  = round(block * block_size / 1024 / 1024, 1)
                     mbt = round(total / 1024 / 1024, 1)
                     self._ollama_event("download_progress",
-                        f"Downloading update… {mb} MB / {mbt} MB", pct, 100)
+                        "Downloading update... {} MB / {} MB".format(mb, mbt), pct, 100)
 
             urllib.request.urlretrieve(download_url, str(tmp_zip), on_progress)
-            self._ollama_event("download_done", "Download complete. Preparing installer…", 100, 100)
+            self._ollama_event("download_done", "Download complete. Preparing installer...", 100, 100)
 
-            # ── Extract to temp dir ───────────────────────────────────────────
+            # ── Extract ───────────────────────────────────────────────────────
             if tmp_dir.exists():
                 shutil.rmtree(tmp_dir)
             with zipfile.ZipFile(tmp_zip, "r") as zf:
                 zf.extractall(tmp_dir)
             tmp_zip.unlink(missing_ok=True)
 
-            # Zip has ACEForge/ at its root — find the inner folder
-            src_root = next(
-                (tmp_dir / d for d in os.listdir(tmp_dir)
-                 if (tmp_dir / d).is_dir()), tmp_dir
-            )
+            # Release zip is flat (ACEForge.exe at root, no subfolder).
+            # If exactly one subdirectory exists (source zip), use it.
+            subdirs = [tmp_dir / d for d in os.listdir(tmp_dir)
+                       if (tmp_dir / d).is_dir()]
+            src_root = subdirs[0] if len(subdirs) == 1 else tmp_dir
 
-            # ── Write a batch script that runs AFTER we exit ──────────────────
-            # Windows locks the running .exe, so we can't copy over it while
-            # it's alive.  The batch script waits for our PID to disappear,
-            # then copies every file from the extracted zip into the install
-            # root, relaunches ACEForge, and cleans up after itself.
-            pid       = os.getpid()
-            bat_path  = Path(os.environ.get("TEMP", str(Path.home()))) / "aceforge_update.bat"
+            # ── Build batch script ────────────────────────────────────────────
+            pid = os.getpid()
+
+            # Use raw backslash paths for the batch file
             install_q = str(install_root).replace("/", "\\")
             src_q     = str(src_root).replace("/", "\\")
             tmp_dir_q = str(tmp_dir).replace("/", "\\")
             exe_q     = str(exe_path).replace("/", "\\")
+            ver_q     = str(install_root / "VERSION.txt").replace("/", "\\")
 
-            bat_lines = [
-                "@echo off",
-                "setlocal enabledelayedexpansion",
-                f"echo Waiting for ACEForge to close...",
-                # Wait for the visible child process PID to exit first.
-                # Every if/goto here is a single top-level statement, never
-                # nested inside parentheses — a goto jumping out of an open
-                # if(...) block corrupts the batch parser's bracket-tracking
-                # state, a documented Windows batch quirk.
-                f":waitloop",
-                f"tasklist /FI \"PID eq {pid}\" 2>NUL | find \"{pid}\" >NUL",
-                f"if errorlevel 1 goto waitloopdone",
-                f"timeout /t 1 /nobreak >NUL",
-                f"goto waitloop",
-                f":waitloopdone",
-                # PyInstaller onefile builds run a separate bootloader parent
-                # process under the same exe name, which can hold a lock on
-                # the .exe for a short window after the visible child PID
-                # exits (it has its own temp-dir cleanup to finish). Give it
-                # a moment, then also wait until no process with this image
-                # name is running at all before attempting to copy.
-                f"timeout /t 1 /nobreak >NUL",
-                f":waitimage",
-                f"tasklist /FI \"IMAGENAME eq {exe_path.name}\" 2>NUL | find /I \"{exe_path.name}\" >NUL",
-                f"if errorlevel 1 goto waitimagedone",
-                f"timeout /t 1 /nobreak >NUL",
-                f"goto waitimage",
-                f":waitimagedone",
-                f"echo Copying update files...",
-                # Retry the copy a few times in case the file is still
-                # transiently locked (antivirus scan, slow handle release).
-                # The goto below is intentionally OUTSIDE any parenthetical
-                # block — a goto from inside nested if(...) parens corrupts
-                # the batch parser's bracket-tracking state.
-                f"set COPY_TRIES=0",
-                f":copyretry",
-                f"set /a COPY_TRIES+=1",
-                # Robocopy: source → install root, all files/subdirs, quiet
-                f"robocopy \"{src_q}\" \"{install_q}\" /E /IS /IT /IM /NFL /NDL /NJH /NJS >NUL 2>&1",
-                # Fall back to xcopy if robocopy isn't available
-                f"if errorlevel 8 xcopy /E /Y /I \"{src_q}\\*\" \"{install_q}\\\"",
-                # Verify the exe actually landed before declaring success —
-                # if the copy silently failed (file still locked), retry up
-                # to 5 times with a short pause. Each check/goto is a single
-                # top-level statement, never nested inside parentheses.
-                f"if exist \"{exe_q}\" goto copyok",
-                f"if !COPY_TRIES! GEQ 5 goto copyok",
-                f"timeout /t 2 /nobreak >NUL",
-                f"goto copyretry",
-                f":copyok",
-                f"echo Relaunching ACEForge...",
-                f"start \"\" \"{exe_q}\"",
-                # Self-delete and clean up extracted temp dir
-                f"rd /s /q \"{tmp_dir_q}\" 2>NUL",
-                f"del \"%~f0\"",
-            ]
+            # All if/goto are top-level — never nested inside parentheses.
+            # Gotos inside paren blocks corrupt batch parser bracket-tracking,
+            # a documented Windows batch quirk we explicitly avoid.
+            lines = []
+            lines.append("@echo off")
+            lines.append("setlocal enabledelayedexpansion")
+            lines.append("echo [ACEForge Updater] Waiting for ACEForge to exit...")
 
-            # Encode defensively: strip/replace anything outside ASCII rather
-            # than crashing the whole update on a single stray character —
-            # the exact failure mode that motivated this fix in the first
-            # place (a literal "…" in an echo string broke ascii encoding).
-            bat_text = "\r\n".join(bat_lines)
-            bat_path.write_text(bat_text.encode("ascii", errors="replace").decode("ascii"), encoding="ascii")
+            # Wait for the visible child PID
+            lines.append(":waitpid")
+            lines.append('tasklist /FI "PID eq {}" 2>NUL | find "{}" >NUL'.format(pid, pid))
+            lines.append("if errorlevel 1 goto waitpiddone")
+            lines.append("timeout /t 1 /nobreak >NUL")
+            lines.append("goto waitpid")
+            lines.append(":waitpiddone")
 
-            # ── Launch the batch detached, then exit ─────────────────────────
+            # PyInstaller onefile: bootloader parent holds the exe handle
+            # briefly after the child exits — wait for image name to clear.
+            lines.append("timeout /t 2 /nobreak >NUL")
+            lines.append(":waitimg")
+            lines.append('tasklist /FI "IMAGENAME eq {}" 2>NUL | find /I "{}" >NUL'.format(
+                exe_path.name, exe_path.name))
+            lines.append("if errorlevel 1 goto waitimgdone")
+            lines.append("timeout /t 1 /nobreak >NUL")
+            lines.append("goto waitimg")
+            lines.append(":waitimgdone")
+
+            # Copy — robocopy exit codes 0-7 are all success/informational;
+            # only 8+ indicate errors (per Microsoft documentation).
+            lines.append("echo [ACEForge Updater] Copying files...")
+            lines.append("set TRIES=0")
+            lines.append(":copyloop")
+            lines.append("set /a TRIES+=1")
+            lines.append('robocopy "{}" "{}" /E /IS /IT /IM /NFL /NDL /NJH /NJS'.format(src_q, install_q))
+            lines.append("set RC=%ERRORLEVEL%")
+            lines.append("if %RC% LEQ 7 goto copydone")
+            # robocopy failed — xcopy fallback
+            lines.append("echo [ACEForge Updater] robocopy failed (exit %RC%), trying xcopy...")
+            lines.append('xcopy /E /Y /I "{}\\*" "{}\\"\n'.format(src_q, install_q))
+            lines.append(":copydone")
+
+            # Verify VERSION.txt landed — this file only exists in install_root
+            # AFTER a successful copy, so it proves the copy actually ran.
+            # (The old exe-existence check always passed because the old exe
+            # was already there, making the check useless as a gate.)
+            lines.append('if exist "{}" goto verified'.format(ver_q))
+            lines.append("if %TRIES% GEQ 5 goto verified")
+            lines.append("echo [ACEForge Updater] Verification failed, retrying...")
+            lines.append("timeout /t 2 /nobreak >NUL")
+            lines.append("goto copyloop")
+            lines.append(":verified")
+
+            # Relaunch and cleanup
+            lines.append("echo [ACEForge Updater] Relaunching {}...".format(exe_path.name))
+            lines.append('start "" "{}"'.format(exe_q))
+            lines.append('rd /s /q "{}" 2>NUL'.format(tmp_dir_q))
+            lines.append('del "%~f0"')
+
+            bat_text = "\r\n".join(lines)
+            bat_path.write_text(
+                bat_text.encode("ascii", errors="replace").decode("ascii"),
+                encoding="ascii"
+            )
+
+            # ── Signal UI then launch elevated and exit ───────────────────────
             self._ollama_event("download_done",
-                "Update ready. ACEForge will restart automatically.", 100, 100)
+                "Update downloaded. A UAC prompt will appear — click Yes to install. "
+                "ACEForge will restart automatically.",
+                100, 100)
 
             def _launch_and_exit():
-                time.sleep(0.8)   # let the UI message render
+                time.sleep(0.8)   # let the UI event render
+
+                # PowerShell Start-Process -Verb RunAs triggers a UAC prompt
+                # and runs the batch with administrator rights, allowing it to
+                # write to C:\Program Files\.
+                # -WindowStyle Hidden keeps the cmd window invisible.
+                ps_cmd = (
+                    "Start-Process"
+                    " -FilePath 'cmd.exe'"
+                    " -ArgumentList '/c \"{}\"'".format(str(bat_path).replace("'", "''"))
+                    + " -Verb RunAs"
+                    " -WindowStyle Hidden"
+                )
                 subprocess.Popen(
-                    ["cmd.exe", "/c", str(bat_path)],
+                    ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
                     creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
                                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
                     close_fds=True,
                 )
-                time.sleep(0.4)   # give cmd.exe time to detach
-                os._exit(0)       # hard exit so the batch can replace the exe
+                time.sleep(0.5)
+                os._exit(0)
 
             threading.Thread(target=_launch_and_exit, daemon=True).start()
-            return {"success": True, "message": "Update ready. Restarting…"}
+            return {"success": True, "message": "Update ready. Restarting..."}
 
         except Exception as e:
             return {"success": False, "error": str(e)}
