@@ -1874,6 +1874,32 @@ Start with: /* ===== FILE: {fname} ===== */
     APP_VERSION = "0.3.09"
 
     def get_version(self) -> str:
+        """
+        Return the running version. Prefers VERSION.txt next to the exe so the
+        version display updates immediately after an auto-update overwrites the
+        file — no recompile needed. Falls back to the hardcoded APP_VERSION if
+        VERSION.txt is absent (dev mode, first run before any update).
+        """
+        import sys
+        from pathlib import Path
+
+        try:
+            if hasattr(sys, "_MEIPASS"):
+                # PyInstaller onefile: exe lives at sys.executable
+                ver_file = Path(sys.executable).parent / "VERSION.txt"
+            else:
+                # Dev mode: look next to the repo root
+                ver_file = Path(__file__).parent.parent / "VERSION.txt"
+
+            if ver_file.exists():
+                first_line = ver_file.read_text(encoding="utf-8").splitlines()[0]
+                # Expected: "ACEForge v1.2.3"
+                token = first_line.strip().split()[-1].lstrip("vV")
+                if token and all(c.isdigit() or c == "." for c in token):
+                    return token
+        except Exception:
+            pass
+
         return self.APP_VERSION
 
     def get_seen_update_version(self) -> str:
@@ -1909,15 +1935,16 @@ Start with: /* ===== FILE: {fname} ===== */
             def _ver(v):
                 try: return tuple(int(x) for x in v.split("."))
                 except: return (0,)
-            has_update = bool(latest) and _ver(latest) > _ver(self.APP_VERSION)
+            current   = self.get_version()
+            has_update = bool(latest) and _ver(latest) > _ver(current)
             return {"has_update": has_update,
                     "latest_version": latest,
-                    "current_version": self.APP_VERSION,
+                    "current_version": current,
                     "release_notes": notes,
                     "download_url": dl_url}
         except Exception as e:
             return {"has_update": False, "error": str(e),
-                    "current_version": self.APP_VERSION}
+                    "current_version": self.get_version()}
 
     def save_converter_output(self, content: str, base_name: str, ext: str) -> dict:
         """Save JSON<->SQL converter output to the configured Output folder."""
