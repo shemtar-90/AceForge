@@ -1927,16 +1927,58 @@ Start with: /* ===== FILE: {fname} ===== */
                          "Accept": "application/vnd.github+json"})
             with urllib.request.urlopen(req, timeout=5) as r:
                 data = _json.loads(r.read().decode())
-            latest = data.get("tag_name", "").lstrip("v")
-            notes  = data.get("body", "")
-            assets = data.get("assets", [])
-            dl_url = next((a["browser_download_url"] for a in assets
-                           if a["name"].endswith(".zip")), "")
+            latest    = data.get("tag_name", "").lstrip("v")
+            notes     = data.get("body", "")
+            published = data.get("published_at", "")  # ISO timestamp e.g. "2025-06-22T10:00:00Z"
+            assets    = data.get("assets", [])
+            dl_url    = next((a["browser_download_url"] for a in assets
+                              if a["name"].endswith(".zip")), "")
+
             def _ver(v):
-                try: return tuple(int(x) for x in v.split("."))
-                except: return (0,)
-            current   = self.get_version()
-            has_update = bool(latest) and _ver(latest) > _ver(current)
+                """
+                Parse a version string into a comparable tuple of ints.
+                Each segment is compared numerically so that e.g.
+                (0,3,13) < (0,3,122) — but this means 0.3.13 reads as
+                OLDER than 0.3.122.
+
+                To handle non-monotonic version numbering (where the dev
+                may reset or reuse segment values), we also accept a
+                published_at ISO timestamp as a tiebreaker: if the latest
+                release was published after the app was built, it wins
+                regardless of version tuple ordering.
+                """
+                try:
+                    return tuple(int(x) for x in str(v).split("."))
+                except Exception:
+                    return (0,)
+
+            current     = self.get_version()
+            ver_newer   = bool(latest) and _ver(latest) > _ver(current)
+
+            # Fallback: if tag-based comparison says "not newer", check the
+            # release publish date against the build date from VERSION.txt.
+            # This covers cases where version numbering is non-monotonic
+            # (e.g. 0.3.13 released after 0.3.122).
+            date_newer = False
+            if not ver_newer and published:
+                try:
+                    import sys
+                    from pathlib import Path
+                    if hasattr(sys, "_MEIPASS"):
+                        ver_file = Path(sys.executable).parent / "VERSION.txt"
+                    else:
+                        ver_file = Path(__file__).parent.parent / "VERSION.txt"
+                    if ver_file.exists():
+                        lines = ver_file.read_text(encoding="utf-8").splitlines()
+                        # VERSION.txt line 2: "Built: 2025-06-22 10:00 UTC"
+                        built_line = next((l for l in lines if l.startswith("Built:")), "")
+                        built_str  = built_line.replace("Built:", "").strip().replace(" UTC", "Z").replace(" ", "T")
+                        if built_str and published > built_str:
+                            date_newer = True
+                except Exception:
+                    pass
+
+            has_update = ver_newer or date_newer
             return {"has_update": has_update,
                     "latest_version": latest,
                     "current_version": current,
