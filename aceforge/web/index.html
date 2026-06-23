@@ -4567,6 +4567,7 @@ function importSQLToBuilder(){
       var _wHdr = sql.match(/INSERT INTO `weenie`[\s\S]+?VALUES\s*\(\s*\d+\s*,\s*'([^']+)'\s*,\s*\d+\s*,\s*'([^']+)'/i);
       window._importedClassName = _wHdr ? _wHdr[1] : null;
       window._importedTimestamp = _wHdr ? _wHdr[2] : null;
+      window._importedWcid = _iWcid ? parseInt(_iWcid) : null;
       // Preserve original filename
       if(typeof r.path === 'string'){
         var _fn=r.path.replace(/\\/g,'/').split('/').pop();
@@ -4926,6 +4927,7 @@ function scaleCreatureStats(){
 var _importedEmoteSQL = '';
 var _importedCreateListSQL = '';
 var _importedFileName = '';  // original filename from last import
+var _importedWcid     = null; // original WCID from last import (to detect user changes)
 var _importedBookSQL = '';
 var _importedWcidForReplace = '';
 
@@ -8490,10 +8492,17 @@ function renderSQLHighlight(){
 
 function writeSQLOut(text){
   const el=$('sqlOut');
-  if(el&&!_userEditingSQL){
+  if(el){
     const pos=el.selectionStart;
     el.value=text;
     try{el.selectionStart=pos;el.selectionEnd=pos;}catch(e){}
+    // Clear dirty state — regen() always produces fresh SQL from form fields,
+    // so any pending manual edit is superseded. This also ensures that edits
+    // to fWcid/fClassName/fWeenieType after an import are not silently dropped.
+    _userEditingSQL=false;
+    _sqlDirty=false;
+    const banner=$('sqlDirtyBanner');
+    if(banner) banner.style.display='none';
   }
   renderSQLHighlight();
 }
@@ -8505,7 +8514,20 @@ function saveSQL(){
   if(!sql.trim()){toast('Nothing to save.');return;}
   _d('API','save_sql(wcid='+wcid+', name='+name+', chars='+sql.length+')');
   if(window.pywebview){
-    var _saveName = _importedFileName || name;
+    // Build filename from current fields.
+    // Only reuse the imported filename if the WCID and class name are
+    // both unchanged — if either was edited, generate a fresh filename
+    // so the save reflects what's actually in the SQL, not the original.
+    var _curClassName = (document.getElementById('fClassName')||{}).value||'';
+    var _wcidChanged  = window._importedWcid !== null && wcid !== window._importedWcid;
+    var _cnChanged    = window._importedClassName !== null && _curClassName.trim() !== (window._importedClassName||'').trim();
+    var _saveName;
+    if(_importedFileName && !_wcidChanged && !_cnChanged){
+      _saveName = _importedFileName; // unchanged — keep original filename
+    } else {
+      // Something changed: build filename from current WCID + class name
+      _saveName = wcid + ' ' + (_curClassName || name) + '.sql';
+    }
     window.pywebview.api.save_sql(sql,wcid,_saveName).then(r=>{
       if(r.success){
         toast('✓ Saved: '+r.filename,3000);
@@ -10913,9 +10935,9 @@ function gearRenderWeaponFamilyList(q, list){
 
     return `<div>
       <div class="gear-cat-toggle" data-top-toggle="weapon_${tierKey}" style="padding:7px 10px;cursor:pointer;
-        display:flex;align-items:center;gap:6px;border-radius:4px">
+        display:flex;align-items:center;gap:6px;border-radius:4px;background:var(--parch-dk)">
         <span style="font-size:9px;color:var(--ink-faint)">${arrow}</span>
-        <span style="font-family:var(--ui-font);font-size:12px;font-weight:600;flex:1">${GEAR_WEAPON_TIER_LABELS[tierKey]}</span>
+        <span style="font-family:var(--ui-font);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--crimson);flex:1">${GEAR_WEAPON_TIER_LABELS[tierKey]}</span>
         <span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint)">${names.length}</span>
       </div>
       <div style="display:${expanded ? 'block' : 'none'}">${rows}</div>
@@ -11929,6 +11951,7 @@ if(!window.pywebview)init();
     <div id="debugLog"></div>
     <div id="debugStatus"><span>0 entries</span></div>
   </div>
+
 
 </body>
 </html>
