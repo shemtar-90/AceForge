@@ -273,6 +273,9 @@ ACTION_TYPE_MAP: Dict[str, int] = {
 QUEST_BRANCHING_ACTIONS = {
     'InqQuest', 'InqQuestSolves', 'InqMyQuest', 'InqMyQuestSolves',
     'InqFellowQuest', 'InqFellowNum',
+    # QuestBits inquiry actions also branch QuestSuccess/QuestFailure
+    'InqQuestBitsOn', 'InqQuestBitsOff',
+    'InqMyQuestBitsOn', 'InqMyQuestBitsOff',
 }
 # Stat-based branching: TestSuccess keyed by auto-key, TestFailure quest=NULL
 STAT_BRANCHING_ACTIONS = {
@@ -577,14 +580,35 @@ def parse_action_value(name: str, v: str, warnings: List[str]) -> dict:
         # EmoteScriptLib: Message = quest
         attrs['message'] = v.strip()
 
-    elif name in ('EraseQuest', 'EraseMyQuest',
-                  'InqQuestBitsOn', 'InqQuestBitsOff',
+    elif name in ('EraseQuest', 'EraseMyQuest'):
+        # EmoteScriptLib: Message = quest name only
+        attrs['message'] = v.strip()
+
+    elif name in ('InqQuestBitsOn', 'InqQuestBitsOff',
                   'InqMyQuestBitsOn', 'InqMyQuestBitsOff',
                   'SetQuestBitsOn', 'SetQuestBitsOff',
                   'SetMyQuestBitsOn', 'SetMyQuestBitsOff',
                   ):
-        # EmoteScriptLib: Message = quest
-        attrs['message'] = v.strip()
+        # Format: "QuestName, bitmask"  or  "QuestName@label, bitmask"
+        # message = full quest name (including optional @label suffix)
+        # amount  = integer bitmask (the bits to test/set/clear)
+        comma = v.rfind(',')
+        if comma != -1:
+            attrs['message'] = v[:comma].strip()
+            try: attrs['amount'] = int(v[comma+1:].strip().replace(',', ''))
+            except: pass
+        else:
+            attrs['message'] = v.strip()  # no bitmask supplied — store name only
+
+    elif name in ('OpenMe', 'CloseMe',
+                  'TurnToTarget', 'MoveHome', 'ResetHomePosition',
+                  'DeleteSelf', 'KillSelf', 'Activate',
+                  'RemoveVitaePenalty', 'InflictVitaePenalty',
+                  'SetAltRacialSkills', 'TeleportSelf',
+                  'LockFellow', 'StartBarber',
+                  ):
+        # No-argument actions — no columns to populate
+        pass  # attrs stays empty beyond type
 
     elif name in ('IncrementQuest', 'DecrementQuest',
                   'IncrementMyQuest', 'DecrementMyQuest',

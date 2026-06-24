@@ -1952,8 +1952,11 @@ const EMOTE_TYPES=[
   [80,'InqMyQuest'],[81,'StampMyQuest'],[82,'InqMyQuestSolves'],[83,'EraseMyQuest'],[84,'DecrementMyQuest'],
   [85,'IncrementMyQuest'],[86,'SetMyQuestCompletions'],[87,'MoveToPos'],[88,'LocalSignal'],[89,'InqPackSpace'],
   [90,'RemoveVitaePenalty'],[91,'SetEyeTexture'],[92,'SetEyePalette'],[93,'SetNoseTexture'],[94,'SetNosePalette'],[95,'SetMouthTexture'],
-  [99,'TeleportTarget'],[100,'TeleportSelf'],[110,'UntrainSkill'],[112,'SpendLuminance'],
-  [113,'AwardLuminance'],[114,'InqInt64Stat'],[115,'SetInt64Stat'],[118,'SetFloatStat']
+  [99,'TeleportTarget'],[100,'TeleportSelf'],[102,'InqQuestBitsOn'],[103,'InqQuestBitsOff'],
+  [104,'InqMyQuestBitsOn'],[105,'InqMyQuestBitsOff'],[106,'SetQuestBitsOn'],[107,'SetQuestBitsOff'],
+  [108,'SetMyQuestBitsOn'],[109,'SetMyQuestBitsOff'],[110,'UntrainSkill'],[112,'SpendLuminance'],
+  [113,'AwardLuminance'],[114,'InqInt64Stat'],[115,'SetInt64Stat'],[116,'OpenMe'],[117,'CloseMe'],
+  [118,'SetFloatStat']
 ];
 
 
@@ -3895,7 +3898,11 @@ function _actionToYAML(a, indent, _inlined, _gotoSetMap){
   else val=a.message||a.testString||'';
 
   const delay=(parseFloat(a.delay||0)>0)?'Delay: '+a.delay+', ':'';
-  let out=indent+'- '+delay+tName+(val?': '+val:'');
+  // No-argument actions: omit the colon entirely when there is no value.
+  // e.g. '- OpenMe' not '- OpenMe:'
+  const NO_ARG_TYPES=new Set([4,12,15,57,77,78,90,66,101,100,116,117]);
+  const sep=(val?': ':(NO_ARG_TYPES.has(t)?'':':'));
+  let out=indent+'- '+delay+tName+sep+val;
 
   // ── Recursive branch rendering ─────────────────────────────────────────
   if(a.branches&&BRANCH_CATS[t]){
@@ -6648,6 +6655,55 @@ function _buildActionFields(fdefs, a, i, j, aType, actRef){
       '<input type="text" value="'+(a.message||'')+'" placeholder="e.g. Do you want to accept this quest?" '+_s('message')+'"></div>'+
       '<div style="grid-column:span 3;margin-top:6px;padding:8px 10px;background:rgba(120,90,40,.12);border:1px solid rgba(180,140,60,.3);border-radius:3px;font-family:var(--ui-font);font-style:italic;font-size:12px;color:var(--ink-dim);line-height:1.6">'+
       '<strong style="font-style:normal;color:var(--crimson)">InqYesNo</strong> — branches to inline <strong style="font-style:normal">TestSuccess</strong> (Yes) and <strong style="font-style:normal">TestFailure</strong> (No) panels below.</div>';
+  }
+  if([116,117,4,12,15,57,77,78,90,66,101,100].includes(aType)){
+    const labels={
+      116:'OpenMe — opens this object (door/chest)',
+      117:'CloseMe — closes this object (door/chest)',
+      4:'MoveHome — move creature back to spawn point',
+      12:'TurnToTarget — face the player',
+      15:'Activate — activate this object',
+      57:'ResetHomePosition — set home to current position',
+      77:'DeleteSelf — remove from world',
+      78:'KillSelf — kill this creature',
+      90:'RemoveVitaePenalty',66:'LockFellow',101:'StartBarber',
+      100:'TeleportSelf — teleport to sanctuary position',
+    };
+    return '<div style="grid-column:span 3;padding:7px 10px;background:rgba(80,80,80,.12);'
+      +'border:1px solid var(--border-lt);border-radius:3px;font-family:var(--ui-font);'
+      +'font-size:11px;color:var(--ink-dim);font-style:italic">'
+      +(labels[aType]||'No parameters required.')+'</div>';
+  }
+  if([102,103,104,105].includes(aType)){
+    const isOn=[102,104].includes(aType);
+    const isMy=[104,105].includes(aType);
+    const lbl=(isMy?'My ':'')+'Quest'+(isOn?' BitsOn':' BitsOff');
+    return '<div class="fg" style="grid-column:span 2"><div class="fl">Quest Name'
+      +'<span class="fc"> (optional @label suffix)</span></div>'
+      +'<input type="text" value="'+(a.message||'')+'" placeholder="e.g. LegendaryQuestsA" '+_s('message')+'></div>'
+      +'<div class="fg"><div class="fl">Bitmask</div>'
+      +'<input type="number" value="'+(a.amount||'')+'" placeholder="e.g. 4096" '+_s('amount')+'></div>'
+      +'<div style="grid-column:span 3;margin-top:6px;padding:7px 10px;'
+      +'background:rgba(120,90,40,.12);border:1px solid rgba(180,140,60,.3);'
+      +'border-radius:3px;font-family:var(--ui-font);font-style:italic;font-size:11px;color:var(--ink-dim)">'
+      +'<strong style="font-style:normal;color:var(--crimson)">'+lbl+'</strong>'
+      +' — checks if bits are '+(isOn?'set':'cleared')
+      +' in quest MaxSolves. Branches to <strong style="font-style:normal">QuestSuccess</strong> / '
+      +'<strong style="font-style:normal">QuestFailure</strong>.</div>';
+  }
+  if([106,107,108,109].includes(aType)){
+    const isOn=[106,108].includes(aType);
+    const isMy=[108,109].includes(aType);
+    const lbl=(isMy?'My ':'')+'Quest'+(isOn?' BitsOn':' BitsOff');
+    return '<div class="fg" style="grid-column:span 2"><div class="fl">Quest Name</div>'
+      +'<input type="text" value="'+(a.message||'')+'" placeholder="e.g. LegendaryQuestsA" '+_s('message')+'></div>'
+      +'<div class="fg"><div class="fl">Bitmask</div>'
+      +'<input type="number" value="'+(a.amount||'')+'" placeholder="e.g. 4096" '+_s('amount')+'></div>'
+      +'<div style="grid-column:span 3;margin-top:6px;padding:7px 10px;'
+      +'background:rgba(80,80,80,.12);border:1px solid var(--border-lt);'
+      +'border-radius:3px;font-family:var(--ui-font);font-style:italic;font-size:11px;color:var(--ink-dim)">'
+      +'<strong style="font-style:normal;color:var(--crimson)">Set'+lbl+'</strong>'
+      +' — '+(isOn?'sets (OR)':'clears (AND NOT)')+' the bitmask in quest MaxSolves. No branching.</div>';
   }
   return fdefs.map(fd=>`<div class="fg"><div class="fl">${fd.l}</div><input type="text" value="${String(a[fd.f]||'').replace(/"/g,'&quot;')}" placeholder="${fd.ph||''}" ${_s(fd.f)}></div>`).join('');
 }
@@ -10914,31 +10970,79 @@ function gearRenderWeaponFamilyList(q, list){
 
   const sections = tierOrder.map(tierKey => {
     const families = tiers[tierKey] || {};
-    const names = Object.keys(families)
-      .filter(n => !q || n.toLowerCase().includes(q))
-      .sort((a,b) => families[b].length - families[a].length || a.localeCompare(b));
-    if(!names.length) return '';
+    // Separate group entries (keys starting with _group_) from flat sets
+    const allKeys   = Object.keys(families).sort((a,b) => a.localeCompare(b));
+    const groupKeys = allKeys.filter(k => k.startsWith('_group_'));
+    const flatKeys  = allKeys.filter(k => !k.startsWith('_group_'));
 
-    const expanded = !!_gearExpandedCategories['weapon_' + tierKey] || !!q;
-    const arrow = expanded ? '\u25bc' : '\u25b6';
-    const rows = names.map(name => {
-      const count = families[name].length;
-      const active = (name === _gearSelectedFamily && tierKey === _gearSelectedTier) ? ' active' : '';
-      return `<div class="gear-family-row${active}" data-tier="${tierKey}" data-family="${escHtml(name)}"
+    // For search: collect all visible names (flat sets + sets inside groups)
+    function setMatchesQ(name){ return !q || name.toLowerCase().includes(q); }
+
+    // Build row HTML for a single flat set entry
+    function makeSetRow(name, count, tier){
+      const active = (name === _gearSelectedFamily && tier === _gearSelectedTier) ? ' active' : '';
+      return `<div class="gear-family-row${active}" data-tier="${tier}" data-family="${escHtml(name)}"
         style="padding:6px 10px 6px 22px;cursor:pointer;border-radius:4px;margin-bottom:2px;
         ${active ? 'background:var(--accent-tint);' : ''}
         display:flex;justify-content:space-between;align-items:center">
         <span style="font-family:var(--ui-font);font-size:11px">${escHtml(name)}</span>
         <span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint)">${count} type${count!==1?'s':''}</span>
       </div>`;
-    }).join('');
+    }
+
+    // Render group accordion (sub-level)
+    function makeGroupRows(groupKey){
+      const grp      = families[groupKey];
+      const label    = grp._label;
+      const sets     = grp._sets || {};
+      const setNames = Object.keys(sets)
+        .filter(n => setMatchesQ(n))
+        .sort((a,b) => a.localeCompare(b));
+      if(!setNames.length) return '';
+
+      const expKey  = 'weapon_grp_' + tierKey + '_' + groupKey;
+      const grpExp  = !!_gearExpandedCategories[expKey] || !!q;
+      const grpArrow = grpExp ? '\u25bc' : '\u25b6';
+      const subRows  = setNames.map(n => makeSetRow(n, sets[n].length, tierKey)).join('');
+
+      return `<div>
+        <div class="gear-cat-toggle" data-grp-toggle="${escHtml(expKey)}"
+          style="padding:5px 10px 5px 22px;cursor:pointer;display:flex;align-items:center;
+          gap:6px;border-radius:4px;background:var(--parch)">
+          <span style="font-size:8px;color:var(--ink-faint)">${grpArrow}</span>
+          <span style="font-family:var(--ui-font);font-size:10px;font-weight:700;
+            letter-spacing:.05em;text-transform:uppercase;color:var(--ink-dim);flex:1">${escHtml(label)}</span>
+          <span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint)">${setNames.length}</span>
+        </div>
+        <div style="display:${grpExp?'block':'none'};padding-left:10px">${subRows}</div>
+      </div>`;
+    }
+
+    // Count visible entries (groups + flat)
+    const visibleGroups = groupKeys.filter(gk => {
+      const sets = families[gk]._sets || {};
+      return Object.keys(sets).some(n => setMatchesQ(n));
+    });
+    const visibleFlat = flatKeys.filter(n => setMatchesQ(n));
+    const totalVisible = visibleGroups.length + visibleFlat.length;
+    if(!totalVisible) return '';
+
+    const expanded = !!_gearExpandedCategories['weapon_' + tierKey] || !!q;
+    const arrow    = expanded ? '\u25bc' : '\u25b6';
+
+    // Render: groups first (alphabetical by label), then flat sets (alphabetical)
+    const groupHtml = visibleGroups
+      .sort((a,b) => families[a]._label.localeCompare(families[b]._label))
+      .map(gk => makeGroupRows(gk)).join('');
+    const flatHtml  = visibleFlat.map(n => makeSetRow(n, families[n].length, tierKey)).join('');
+    const rows = groupHtml + flatHtml;
 
     return `<div>
       <div class="gear-cat-toggle" data-top-toggle="weapon_${tierKey}" style="padding:7px 10px;cursor:pointer;
         display:flex;align-items:center;gap:6px;border-radius:4px;background:var(--parch-dk)">
         <span style="font-size:9px;color:var(--ink-faint)">${arrow}</span>
         <span style="font-family:var(--ui-font);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--crimson);flex:1">${GEAR_WEAPON_TIER_LABELS[tierKey]}</span>
-        <span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint)">${names.length}</span>
+        <span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint)">${totalVisible}</span>
       </div>
       <div style="display:${expanded ? 'block' : 'none'}">${rows}</div>
     </div>`;
@@ -10962,6 +11066,12 @@ document.addEventListener('click', function(e){
     gearRenderFamilyList();
     return;
   }
+  if(toggle && toggle.dataset.grpToggle !== undefined){
+    const grp = toggle.dataset.grpToggle;
+    _gearExpandedCategories[grp] = !_gearExpandedCategories[grp];
+    gearRenderFamilyList();
+    return;
+  }
   const row = e.target.closest('.gear-family-row');
   if(!row) return;
   if(row.dataset.tier !== undefined){
@@ -10978,6 +11088,19 @@ function gearSelectFamily(name, subcat, tier){
   _gearSelectedSubcat = subcat === undefined ? null : subcat;
   _gearSelectedTier = tier === undefined ? null : tier;
   _gearSelectedPieces = {};
+  // If this family is inside a group, resolve it from _sets
+  if(tier && _gearWeaponFamilies[tier]){
+    const tierData = _gearWeaponFamilies[tier];
+    // Check if name lives inside a _group_ key
+    for(const key of Object.keys(tierData)){
+      if(key.startsWith('_group_') && tierData[key]._sets && tierData[key]._sets[name]){
+        // Ensure the group accordion is open when navigating to a set inside it
+        const expKey = 'weapon_grp_' + tier + '_' + key;
+        _gearExpandedCategories[expKey] = true;
+        break;
+      }
+    }
+  }
   gearRenderFamilyList();
   gearRenderMainPanel();
 }
@@ -11125,7 +11248,17 @@ function gearRenderWeaponFamily(){
   const panel = document.getElementById('gearMainPanel');
   const fam = _gearSelectedFamily;
   const tier = _gearSelectedTier || 'misc';
-  const pieces = (_gearWeaponFamilies[tier] && _gearWeaponFamilies[tier][fam]) || [];
+  // Resolve members: check flat tier first, then inside _group_ entries
+  let pieces = (_gearWeaponFamilies[tier] && _gearWeaponFamilies[tier][fam]) || null;
+  if(!pieces && _gearWeaponFamilies[tier]){
+    for(const key of Object.keys(_gearWeaponFamilies[tier])){
+      if(key.startsWith('_group_')){
+        const grpSets = _gearWeaponFamilies[tier][key]._sets || {};
+        if(fam in grpSets){ pieces = grpSets[fam]; break; }
+      }
+    }
+  }
+  pieces = pieces || [];
   const tierLabel = GEAR_WEAPON_TIER_LABELS[tier] || '';
 
   let html = `<div class="sec" style="padding-top:14px">

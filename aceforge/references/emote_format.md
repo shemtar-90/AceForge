@@ -195,3 +195,65 @@ Give:
 
 Note: `Give:` fires for ANY item the player hands the NPC. Use `InqOwnsItems` inside
 the Give block to check which specific item was given. There is no `ReceiveGive` trigger.
+
+---
+
+## No-Argument Actions
+
+These actions take no value — write them **without a colon**:
+
+```
+- OpenMe
+- CloseMe
+- MoveHome
+- TurnToTarget
+- DeleteSelf
+- KillSelf
+- RemoveVitaePenalty
+- TeleportSelf
+```
+
+### Doors and Remote-Controlled Objects
+
+Doors listen for signals via `ReceiveLocalSignal`. The signal name goes in the
+trigger line (not the action). Two separate blocks handle open and close:
+
+```
+ReceiveLocalSignal: DoorOpenI
+    - OpenMe
+
+ReceiveLocalSignal: DoorCloseI
+    - CloseMe
+```
+
+The matching switch/lever sends the signal using `LocalSignal: DoorOpenI`.
+
+---
+
+## QuestBits
+
+QuestBits store binary flags packed into a single quest's `MaxSolves` integer
+as a bitmask. Each bit position tracks an independent boolean state.
+
+| Action | Value | Notes |
+|--------|-------|-------|
+| `InqQuestBitsOn: QuestName, bitmask` | Quest name, integer mask | Check if bits set — QuestSuccess/QuestFailure |
+| `InqQuestBitsOff: QuestName, bitmask` | Quest name, integer mask | Check if bits cleared — QuestSuccess/QuestFailure |
+| `SetQuestBitsOn: QuestName, bitmask` | Quest name, integer mask | OR the mask into MaxSolves |
+| `SetQuestBitsOff: QuestName, bitmask` | Quest name, integer mask | AND-NOT the mask from MaxSolves |
+| `InqMyQuestBitsOn/Off` | Same as above | Per-character scope |
+| `SetMyQuestBitsOn/Off` | Same as above | Per-character scope |
+
+The optional `@label` suffix on the quest name (e.g. `LegendaryQuestsA@3`) is a
+human-readable hint about which bit is being tested. It has no effect on behavior —
+the bitmask value in `amount` is what ACE actually checks.
+
+```
+Use:
+    - InqQuestBitsOn: LegendaryQuestsA, 4096
+        QuestSuccess:
+            - Tell: You have already proven yourself worthy.
+        QuestFailure:
+            - SetQuestBitsOn: LegendaryQuestsA, 4096
+            - Tell: You have proven yourself. The gates are open to you.
+```
