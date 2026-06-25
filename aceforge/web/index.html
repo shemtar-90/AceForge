@@ -344,7 +344,10 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 <div class="topbar">
   <div class="logo"><img src="aceforge_logo.png" alt="ACEForge" class="logo-img"><span class="logo-name">ACEFORGE</span><span class="logo-sub">— Asheron's Call Content Development Tool</span></div>
   <div class="top-spacer"></div>
-  <button class="top-btn" id="versionBtn" onclick="checkForUpdate(true)" title="Click to check for updates">v…</button>
+  <div style="position:relative;display:inline-block">
+    <button class="top-btn" id="versionBtn" onclick="versionBtnClick()" title="Click to check for updates">v…</button>
+    <span id="updateBadge" style="display:none;position:absolute;top:-5px;right:-5px;width:16px;height:16px;background:#d94040;border-radius:50%;border:2px solid #1a1a1a;align-items:center;justify-content:center;pointer-events:none;z-index:10;font-size:10px;color:#fff;font-weight:700;line-height:1">&#x2193;</span>
+  </div>
   <button class="top-btn" onclick="toggleDebug()">⚙ Debug <span id="debugErrBadge"></span></button>
   <button class="top-btn" onclick="openOutputFolder()">📂 Output</button>
   <button class="top-btn" onclick="openSettings()">⚙ Settings</button>
@@ -536,6 +539,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
     <div class="sql-hdr">
       <div class="sql-title">Generated Items</div>
       <div class="sql-btns">
+        <button class="sql-btn" onclick="gearOpenBulkEdit()" title="Edit a property across all generated items at once">&#x2261; Bulk Edit</button>
         <button class="sql-btn" onclick="gearClearAllItems()">&#x2715; Clear All</button>
         <button class="sql-btn" onclick="gearSaveSQL()">+ Save</button>
       </div>
@@ -715,6 +719,20 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
         <input type="checkbox" id="sAutoOpen" style="width:auto;border:none;border-bottom:none;padding:0;margin:0;cursor:pointer;accent-color:var(--crimson)" checked>
         <label class="sf-label" style="margin:0;cursor:pointer" for="sAutoOpen">Automatically open output folder after saving a file</label>
       </div>
+      <div class="sec-title">3D Model Preview</div>
+      <p style="font-family:var(--ui-font);font-style:italic;font-size:12px;color:var(--ink-dim);margin-bottom:10px;line-height:1.6">
+        Optional — point ACEForge to your <strong>client_portal.dat</strong> to enable 3D model previews on the Setup DID field in WeenieForge. Models are extracted on demand and cached locally.
+      </p>
+      <div id="datStatusRow" style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:8px 10px;background:var(--parch-dk);border-radius:3px">
+        <span id="datStatusDot" style="font-size:16px">&#x26AA;</span>
+        <div style="flex:1;font-family:var(--ui-font);font-size:11px;color:var(--ink-faint);font-style:italic" id="datStatusMsg">Not configured</div>
+        <button onclick="browseDat()" style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer">&#x1F4C2; Browse…</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="clearModelCache()" style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer">&#x1F5D1; Clear Model Cache</button>
+        <span id="datCacheMsg" style="font-family:var(--ui-font);font-size:10px;color:var(--ink-faint);align-self:center;font-style:italic"></span>
+      </div>
+
       <div class="sec-title">Server Configuration</div>
       <div class="sf">
         <label class="sf-label">Server Name</label>
@@ -6710,6 +6728,159 @@ function _buildActionFields(fdefs, a, i, j, aType, actRef){
 
 
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GEAR BULK EDIT
+// ═══════════════════════════════════════════════════════════════════════════
+
+var _gearBulkTab = 'int';
+
+const GEAR_BULK_PROP_TABLES = {
+  int:    PROP_INT,
+  bool:   PROP_BOOL,
+  float:  PROP_FLOAT,
+  string: PROP_STRING,
+  did:    PROP_DID,
+};
+
+function gearOpenBulkEdit(){
+  if(!_gearGeneratedItems.length){
+    toast('No generated items to edit.', 2000);
+    return;
+  }
+  var ov = document.getElementById('gearBulkEditOverlay');
+  if(!ov) return;
+  var cnt = document.getElementById('gearBulkEditCount');
+  if(cnt) cnt.textContent = _gearGeneratedItems.length;
+  ov.style.display = 'flex';
+  _gearBulkTab = 'int';
+  gearBulkSwitchTab('int');
+}
+
+function gearCloseBulkEdit(){
+  var ov = document.getElementById('gearBulkEditOverlay');
+  if(ov) ov.style.display = 'none';
+}
+
+function gearBulkSwitchTab(tab){
+  _gearBulkTab = tab;
+
+  // Update tab button styles
+  ['int','bool','float','string','did','spells'].forEach(function(t){
+    var btn = document.getElementById('gearBulkTab_' + t);
+    if(btn) btn.classList.toggle('active', t === tab);
+  });
+
+  var propRow    = document.getElementById('gearBulkPropSelect') ? document.getElementById('gearBulkPropSelect').parentNode : null;
+  var valueWrap  = document.getElementById('gearBulkValueWrap');
+  var spellsWrap = document.getElementById('gearBulkSpellsWrap');
+
+  if(tab === 'spells'){
+    // Hide property/value rows, show spells panel
+    if(propRow)    propRow.style.display    = 'none';
+    if(valueWrap)  valueWrap.style.display  = 'none';
+    if(spellsWrap) spellsWrap.style.display = '';
+    // Build the spell search/select
+    var wrap = document.getElementById('gearBulkSpellSelectWrap');
+    if(wrap){
+      var spellList = (typeof SPELLS !== 'undefined' ? SPELLS : []).map(function(s){
+        return [String(s[0]), s[1]];
+      });
+      wrap.innerHTML = buildSearchSelect('gearBulkSpellSelect', spellList, '', '', 'Search spells…');
+    }
+    return;
+  }
+
+  // Property tabs
+  if(propRow)    propRow.style.display    = '';
+  if(valueWrap)  valueWrap.style.display  = '';
+  if(spellsWrap) spellsWrap.style.display = 'none';
+
+  // Rebuild property dropdown
+  var sel = document.getElementById('gearBulkPropSelect');
+  if(!sel) return;
+  var props = GEAR_BULK_PROP_TABLES[tab] || {};
+  sel.innerHTML = Object.entries(props)
+    .sort(function(a,b){ return parseInt(a[0]) - parseInt(b[0]); })
+    .map(function(e){
+      return '<option value="' + e[0] + '">' + e[0] + ' \xb7 ' + escHtml(e[1]) + '</option>';
+    }).join('');
+
+  // Show/hide bool select vs text input
+  var textIn = document.getElementById('gearBulkValueInput');
+  var boolIn = document.getElementById('gearBulkBoolInput');
+  if(tab === 'bool'){
+    if(textIn) textIn.style.display = 'none';
+    if(boolIn) boolIn.style.display = '';
+  } else {
+    if(textIn) textIn.style.display = '';
+    if(boolIn) boolIn.style.display = 'none';
+    if(textIn) textIn.value = (tab === 'did') ? '0x00000000' : '0';
+  }
+}
+
+function gearApplyBulkEdit(){
+  var applied = 0;
+
+  if(_gearBulkTab === 'spells'){
+    // Spells: add to every item that doesn't already have it
+    var spellSel  = document.getElementById('gearBulkSpellSelect');
+    var probInput = document.getElementById('gearBulkSpellProb');
+    if(!spellSel || !spellSel.value){ toast('Select a spell first.', 2000); return; }
+    var spellId = parseInt(spellSel.value);
+    var prob    = parseFloat((probInput ? probInput.value : '2')) || 2;
+    if(!spellId){ toast('Invalid spell ID.', 2000); return; }
+
+    _gearGeneratedItems.forEach(function(item){
+      if(!item.spells) item.spells = [];
+      var already = item.spells.some(function(s){ return s.spell_id === spellId; });
+      if(!already){
+        item.spells.push({ spell_id: spellId, probability: prob });
+        applied++;
+      }
+    });
+
+    var skipped = _gearGeneratedItems.length - applied;
+    gearCloseBulkEdit();
+    var msg = '✓ Spell added to ' + applied + ' item' + (applied === 1 ? '' : 's');
+    if(skipped) msg += ' (' + skipped + ' already had it)';
+    toast(msg, 3000);
+  } else {
+    // Property tables
+    var sel    = document.getElementById('gearBulkPropSelect');
+    var textIn = document.getElementById('gearBulkValueInput');
+    var boolIn = document.getElementById('gearBulkBoolInput');
+    if(!sel) return;
+
+    var typeId   = parseInt(sel.value);
+    var propName = (GEAR_BULK_PROP_TABLES[_gearBulkTab] || {})[sel.value] || ('custom_' + sel.value);
+    var rawVal   = _gearBulkTab === 'bool'
+      ? (boolIn ? boolIn.value : 'False')
+      : (textIn ? textIn.value.trim() : '0');
+
+    if(!typeId){ toast('Select a property first.', 2000); return; }
+
+    _gearGeneratedItems.forEach(function(item){
+      if(!item[_gearBulkTab]) item[_gearBulkTab] = {};
+      item[_gearBulkTab][propName] = { type: typeId, value: rawVal };
+      applied++;
+    });
+
+    gearCloseBulkEdit();
+    toast('✓ Bulk edit applied to ' + applied + ' item' + (applied === 1 ? '' : 's') + '.', 2500);
+  }
+
+  // Refresh editor and SQL
+  if(_gearEditingItemIdx !== null) gearRenderItemEditor();
+  if(typeof gearRebuildSQL === 'function') gearRebuildSQL();
+}
+
+// Close on backdrop click
+document.addEventListener('click', function(e){
+  var ov = document.getElementById('gearBulkEditOverlay');
+  if(ov && e.target === ov) gearCloseBulkEdit();
+});
+
 // ── Event delegation for emote action rows ──────────────────────────────────
 // All action buttons/selects/inputs use data-* attributes.
 // A single delegated handler on the panel dispatches to the right function.
@@ -7011,6 +7182,12 @@ function buildAdvanced(){
         // Full composite preview appears below the + Add row — just show button here
         valCtrl='<div style="display:flex;align-items:center;gap:6px;">'
           +'<button onclick="_pickIconDID('+i+')" style="padding:3px 10px;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.05em;background:transparent;border:1px solid var(--border);cursor:pointer;color:var(--ink-dim);flex-shrink:0;white-space:nowrap">&#x1F3A8; Pick</button>'
+          +valCtrl+'</div>';
+      }
+      // DID type 1 = Setup — add 3D preview button
+      if(arrRef==='extraDID' && parseInt(r.type)===1){
+        valCtrl='<div style="display:flex;align-items:center;gap:6px;">'
+          +_setupPreviewBtnHtml(String(r.value||'0x00000000'))
           +valCtrl+'</div>';
       }
       return '<div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-lt)">'
@@ -8847,9 +9024,35 @@ window.addEventListener('ollama_setup', e=>{
   }
 });
 
+// ── Update badge state (set once when update is found) ────────────────────────
+var _updateAvailable = false;
+
+function _showUpdateBadge(dlUrl, latestVersion, currentVersion, notes){
+  _updateAvailable = true;
+  const badge = document.getElementById('updateBadge');
+  if(badge){ badge.style.display='flex'; }
+  const ov    = document.getElementById('updateOverlay');
+  const msg   = document.getElementById('updateMsg');
+  const notEl = document.getElementById('updateNotes');
+  if(msg) msg.textContent = 'ACEForge '+latestVersion+' is available (you have '+currentVersion+').';
+  if(notEl) notEl.textContent = notes||'';
+  if(ov){ ov._dlUrl=dlUrl; ov._latestVersion=latestVersion; }
+}
+
+function versionBtnClick(){
+  if(_updateAvailable){
+    // Toggle the dropdown
+    const ov=document.getElementById('updateOverlay');
+    if(!ov) return;
+    ov.style.display=(ov.style.display==='none'||!ov.style.display)?'block':'none';
+  } else {
+    checkForUpdate(true);
+  }
+}
+
 function checkForUpdate(manual){
   if(!window.pywebview) return;
-  if(manual) toast('Checking for updates…', 2000);
+  if(manual && !_updateAvailable) toast('Checking for updates…', 2000);
   window.pywebview.api.check_for_update().then(r=>{
     if(!r.has_update){
       if(manual){
@@ -8858,19 +9061,19 @@ function checkForUpdate(manual){
       }
       return;
     }
-    // Check config (not localStorage) for the dismissed version — config
-    // lives in %APPDATA%\ACEForge\config.json and survives app updates,
-    // unlike localStorage which can be wiped when a new zip is extracted.
     window.pywebview.api.get_seen_update_version().then(seen=>{
-      if(!manual && seen===r.latest_version) return; // user already dismissed this version (manual checks always show it)
-      const ov=document.getElementById('updateOverlay');
-      const msg=document.getElementById('updateMsg');
-      const notes=document.getElementById('updateNotes');
-      if(msg) msg.textContent='ACEForge '+r.latest_version+' is available (you have '+r.current_version+'). Would you like to update now?';
-      if(notes) notes.textContent=r.release_notes||'';
-      if(ov) ov.style.display='flex';
-      if(ov) ov._dlUrl=r.download_url;
-      if(ov) ov._latestVersion=r.latest_version;
+      if(!manual && seen===r.latest_version) return;
+      _showUpdateBadge(r.download_url, r.latest_version, r.current_version, r.release_notes);
+      // Auto-open the dropdown on first discovery (non-manual background check only)
+      if(!manual){
+        const ov=document.getElementById('updateOverlay');
+        if(ov) ov.style.display='block';
+        // Auto-close after 8s so it doesn\'t linger if user ignores it
+        setTimeout(function(){
+          const ov2=document.getElementById('updateOverlay');
+          if(ov2&&ov2.style.display!=='none') ov2.style.display='none';
+        }, 8000);
+      }
     });
   });
 }
@@ -8879,12 +9082,10 @@ function dismissUpdate(){
   const ov=document.getElementById('updateOverlay');
   if(!ov) return;
   ov.style.display='none';
-  // Persist the dismissed version to the config file so the user isn't
-  // re-notified on the next launch (localStorage alone doesn't survive
-  // a zip-extraction update that can wipe the WebView2 profile cache).
   if(window.pywebview && ov._latestVersion){
     window.pywebview.api.set_seen_update_version(ov._latestVersion);
   }
+  // Badge stays — user can click version button again to install
 }
 
 function doUpdate(){
@@ -9314,6 +9515,7 @@ function openSettings(){
     else applyAIMode('api');
   }, 50);
   $('settingsOverlay').classList.add('open');
+  _refreshDatStatus();
   refreshLibStatus();
   // Update Ollama status in Settings panel
   if(window.pywebview){
@@ -11961,27 +12163,400 @@ function loreError(msg){
 
 window.addEventListener('pywebviewready',init);
 if(!window.pywebview)init();
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3D MODEL PREVIEW — Settings + WeenieForge Setup DID integration
+// Self-contained, no shared state with other features.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Settings: DAT browser ─────────────────────────────────────────────────
+function browseDat(){
+  if(!window.pywebview) return;
+  window.pywebview.api.browse_portal_dat().then(r=>{
+    if(r.cancelled||r.error) return;
+    window.pywebview.api.set_portal_dat(r.path).then(r2=>{
+      if(r2.success){
+        toast('\u2713 client_portal.dat loaded — '+r2.setup_count+' Setup entries found', 3000);
+        _refreshDatStatus();
+      } else {
+        toast('\u2717 Failed to load DAT: '+r2.error, 4000);
+      }
+    });
+  });
+}
+
+function _refreshDatStatus(){
+  if(!window.pywebview) return;
+  window.pywebview.api.get_portal_dat_status().then(r=>{
+    var dot = document.getElementById('datStatusDot');
+    var msg = document.getElementById('datStatusMsg');
+    if(!dot||!msg) return;
+    if(r.configured){
+      dot.textContent='\uD83D\uDFE2'; // green circle
+      msg.textContent=r.path;
+      msg.style.color='var(--ink)';
+    } else if(r.path){
+      dot.textContent='\uD83D\uDD34'; // red circle
+      msg.textContent='File not found: '+r.path;
+    } else {
+      dot.textContent='\u26AA';
+      msg.textContent='Not configured — click Browse to select client_portal.dat';
+    }
+  });
+}
+
+function clearModelCache(){
+  if(!window.pywebview) return;
+  window.pywebview.api.clear_model_cache().then(r=>{
+    var el = document.getElementById('datCacheMsg');
+    if(el) el.textContent = r.success
+      ? 'Cleared '+r.deleted+' cached model'+(r.deleted===1?'':'s')+'.'
+      : 'Error: '+r.error;
+    setTimeout(function(){ if(el) el.textContent=''; }, 3000);
+  });
+}
+
+// Refresh DAT status when Settings opens
+// DAT status refresh is called directly from openSettings (patched below)
+
+// ── 3D Preview: WebGL renderer (no external deps, vanilla WebGL) ───────────
+var _mp = {
+  gl: null, prog: null, buf: null,
+  rotation: [0, 0], lastMouse: null, dragging: false, zoom: -4.0,
+  meshes: [],   // [{vbo, nbo, tbo, ibo, count, tex}]
+  textures: {},
+  animFrame: null,
+};
+
+var _MP_VERT = [
+  'attribute vec3 aPos; attribute vec3 aNorm; attribute vec2 aUV;',
+  'uniform mat4 uMVP; uniform mat4 uModel;',
+  'varying vec3 vNorm; varying vec2 vUV;',
+  'void main(){',
+  '  vNorm=(uModel*vec4(aNorm,0.0)).xyz;',
+  '  vUV=aUV;',
+  '  gl_Position=uMVP*vec4(aPos,1.0);',
+  '}',
+].join('\n');
+
+var _MP_FRAG = [
+  'precision mediump float;',
+  'varying vec3 vNorm; varying vec2 vUV;',
+  'uniform sampler2D uTex; uniform int uHasTex;',
+  'uniform vec3 uLightDir;',
+  'void main(){',
+  '  vec3 n=normalize(vNorm);',
+  '  float diff=max(dot(n,normalize(uLightDir)),0.0)*0.7+0.3;',
+  '  vec4 col=uHasTex==1 ? texture2D(uTex,vUV) : vec4(0.7,0.7,0.75,1.0);',
+  '  gl_FragColor=vec4(col.rgb*diff,col.a);',
+  '}',
+].join('\n');
+
+function _mpMat4Mul(a,b){
+  var r=new Float32Array(16);
+  for(var i=0;i<4;i++) for(var j=0;j<4;j++){
+    var s=0; for(var k=0;k<4;k++) s+=a[i*4+k]*b[k*4+j];
+    r[i*4+j]=s;
+  }
+  return r;
+}
+function _mpPerspective(fov,aspect,near,far){
+  var f=1.0/Math.tan(fov*0.5),nf=1/(near-far);
+  return new Float32Array([f/aspect,0,0,0, 0,f,0,0,
+    0,0,(far+near)*nf,-1, 0,0,2*far*near*nf,0]);
+}
+function _mpRotY(a){ var c=Math.cos(a),s=Math.sin(a);
+  return new Float32Array([c,0,s,0, 0,1,0,0, -s,0,c,0, 0,0,0,1]); }
+function _mpRotX(a){ var c=Math.cos(a),s=Math.sin(a);
+  return new Float32Array([1,0,0,0, 0,c,-s,0, 0,s,c,0, 0,0,0,1]); }
+function _mpTranslate(x,y,z){ var m=new Float32Array(16);
+  m[0]=m[5]=m[10]=m[15]=1; m[12]=x;m[13]=y;m[14]=z; return m; }
+
+function _mpInitGL(canvas){
+  var gl=canvas.getContext('webgl')||canvas.getContext('experimental-webgl');
+  if(!gl) return null;
+  function sh(type,src){
+    var s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+    if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))
+      { console.error('shader:',gl.getShaderInfoLog(s)); return null; }
+    return s;
+  }
+  var vs=sh(gl.VERTEX_SHADER,_MP_VERT);
+  var fs=sh(gl.FRAGMENT_SHADER,_MP_FRAG);
+  var p=gl.createProgram();
+  gl.attachShader(p,vs); gl.attachShader(p,fs); gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS))
+    { console.error('link:',gl.getProgramInfoLog(p)); return null; }
+  gl.useProgram(p);
+  _mp.prog=p;
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.CULL_FACE);
+  gl.cullFace(gl.BACK);
+  return gl;
+}
+
+function _mpLoadGLB(glb_data_b64){
+  var binary=atob(glb_data_b64);
+  var buf=new Uint8Array(binary.length);
+  for(var i=0;i<binary.length;i++) buf[i]=binary.charCodeAt(i);
+  var ab=buf.buffer;
+  var dv=new DataView(ab);
+  // GLB header
+  if(dv.getUint32(0,true)!==0x46546C67) return false; // 'glTF'
+  var json_len=dv.getUint32(12,true);
+  var json_str=new TextDecoder().decode(new Uint8Array(ab,20,json_len));
+  var gltf=JSON.parse(json_str);
+  var bin_off=20+json_len+8;
+  var bin=new Uint8Array(ab,bin_off);
+
+  var gl=_mp.gl;
+
+  function bv_data(bv_idx){
+    var bv=gltf.bufferViews[bv_idx];
+    return new Uint8Array(bin.buffer,bin.byteOffset+(bv.byteOffset||0),bv.byteLength);
+  }
+  function acc_data(acc_idx){
+    var acc=gltf.accessors[acc_idx];
+    var raw=bv_data(acc.bufferView);
+    // Typed arrays require byteOffset to be a multiple of their element size.
+    // If not aligned, copy into a fresh ArrayBuffer first.
+    function aligned(raw,ctor,elemsPerCount,count){
+      var n=count*elemsPerCount;
+      var bytes=n*(ctor===Float32Array||ctor===Uint32Array?4:2);
+      if(raw.byteOffset%( ctor===Float32Array||ctor===Uint32Array?4:2)===0){
+        return new ctor(raw.buffer,raw.byteOffset,n);
+      }
+      // Unaligned — copy to new buffer
+      var copy=raw.buffer.slice(raw.byteOffset,raw.byteOffset+bytes);
+      return new ctor(copy);
+    }
+    var elems=acc.type==='VEC3'?3:acc.type==='VEC2'?2:1;
+    if(acc.componentType===5126) return aligned(raw,Float32Array,elems,acc.count);
+    if(acc.componentType===5123) return aligned(raw,Uint16Array,1,acc.count);
+    if(acc.componentType===5125) return aligned(raw,Uint32Array,1,acc.count);
+    return raw;
+  }
+
+  // Load textures
+  var gltf_textures=[];
+  if(gltf.images){
+    gltf.images.forEach(function(img,ii){
+      var raw=bv_data(img.bufferView);
+      var blob=new Blob([raw],{type:img.mimeType||'image/png'});
+      var url=URL.createObjectURL(blob);
+      var tex=gl.createTexture();
+      var image=new Image();
+      image.onload=function(){
+        gl.bindTexture(gl.TEXTURE_2D,tex);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,image);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+        URL.revokeObjectURL(url);
+      };
+      image.src=url;
+      gltf_textures[ii]=tex;
+    });
+  }
+
+  _mp.meshes=[];
+  (gltf.meshes||[]).forEach(function(mesh){
+    (mesh.primitives||[]).forEach(function(prim){
+      var posData=acc_data(prim.attributes['POSITION']);
+      var nrmData=prim.attributes['NORMAL']!=null?acc_data(prim.attributes['NORMAL']):null;
+      var uvData =prim.attributes['TEXCOORD_0']!=null?acc_data(prim.attributes['TEXCOORD_0']):null;
+      var idxData=acc_data(prim.indices);
+
+      function mkbuf(data,target){
+        var b=gl.createBuffer(); gl.bindBuffer(target,b);
+        gl.bufferData(target,data,gl.STATIC_DRAW); return b;
+      }
+      var vbo=mkbuf(posData,gl.ARRAY_BUFFER);
+      var nbo=nrmData?mkbuf(nrmData,gl.ARRAY_BUFFER):null;
+      var tbo=uvData?mkbuf(uvData,gl.ARRAY_BUFFER):null;
+      var ibo=mkbuf(idxData,gl.ELEMENT_ARRAY_BUFFER);
+
+      var tex=null;
+      var mat=gltf.materials&&gltf.materials[prim.material];
+      if(mat){
+        var pbr=mat.pbrMetallicRoughness;
+        if(pbr&&pbr.baseColorTexture!=null){
+          var ti=gltf.textures[pbr.baseColorTexture.index];
+          if(ti) tex=gltf_textures[ti.source];
+        }
+      }
+      var idxType=idxData instanceof Uint32Array?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT;
+      _mp.meshes.push({vbo:vbo,nbo:nbo,tbo:tbo,ibo:ibo,
+                       count:idxData.length,tex:tex,idxType:idxType});
+    });
+  });
+  return true;
+}
+
+function _mpDraw(){
+  var gl=_mp.gl; if(!gl) return;
+  gl.clearColor(0.08,0.08,0.1,1);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  if(!_mp.meshes.length) return;
+  var p=_mp.prog;
+  var W=gl.canvas.width, H=gl.canvas.height;
+  var proj=_mpPerspective(0.8,W/H,0.1,200);
+  var view=_mpTranslate(0,0,_mp.zoom);
+  var rx=_mpRotX(_mp.rotation[1]);
+  var ry=_mpRotY(_mp.rotation[0]);
+  var model=_mpMat4Mul(rx,ry);
+  var mv=_mpMat4Mul(view,model);
+  var mvp=_mpMat4Mul(proj,mv);
+  var uMVP=gl.getUniformLocation(p,'uMVP');
+  var uModel=gl.getUniformLocation(p,'uModel');
+  var uTex=gl.getUniformLocation(p,'uTex');
+  var uHasTex=gl.getUniformLocation(p,'uHasTex');
+  var uLight=gl.getUniformLocation(p,'uLightDir');
+  gl.uniformMatrix4fv(uMVP,false,mvp);
+  gl.uniformMatrix4fv(uModel,false,model);
+  gl.uniform3fv(uLight,[0.6,1.0,0.8]);
+  gl.uniform1i(uTex,0);
+  var aPos=gl.getAttribLocation(p,'aPos');
+  var aNorm=gl.getAttribLocation(p,'aNorm');
+  var aUV=gl.getAttribLocation(p,'aUV');
+  _mp.meshes.forEach(function(m){
+    gl.bindBuffer(gl.ARRAY_BUFFER,m.vbo);
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos,3,gl.FLOAT,false,0,0);
+    if(m.nbo&&aNorm>=0){
+      gl.bindBuffer(gl.ARRAY_BUFFER,m.nbo);
+      gl.enableVertexAttribArray(aNorm);
+      gl.vertexAttribPointer(aNorm,3,gl.FLOAT,false,0,0);
+    }
+    if(m.tbo&&aUV>=0){
+      gl.bindBuffer(gl.ARRAY_BUFFER,m.tbo);
+      gl.enableVertexAttribArray(aUV);
+      gl.vertexAttribPointer(aUV,2,gl.FLOAT,false,0,0);
+    }
+    if(m.tex){
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D,m.tex);
+      gl.uniform1i(uHasTex,1);
+    } else {
+      gl.uniform1i(uHasTex,0);
+    }
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.ibo);
+    gl.drawElements(gl.TRIANGLES,m.count,m.idxType,0);
+  });
+  _mp.animFrame=requestAnimationFrame(_mpDraw);
+}
+
+function openModelPreview(setup_id_hex, label){
+  var panel=document.getElementById('modelPreviewPanel');
+  var canvas=document.getElementById('modelPreviewCanvas');
+  var msg=document.getElementById('modelPreviewMsg');
+  var title=document.getElementById('modelPreviewTitle');
+  if(!panel||!canvas) return;
+
+  if(title) title.textContent='3D PREVIEW — '+(label||setup_id_hex);
+  msg.textContent='Loading model\u2026';
+  msg.style.display='flex';
+  panel.style.display='';
+
+  if(_mp.animFrame){ cancelAnimationFrame(_mp.animFrame); _mp.animFrame=null; }
+  _mp.meshes=[];
+
+  if(!_mp.gl){
+    _mp.gl=_mpInitGL(canvas);
+    if(!_mp.gl){ msg.textContent='WebGL not supported in this environment.'; return; }
+    // Mouse/touch controls
+    canvas.addEventListener('mousedown',function(e){_mp.dragging=true;_mp.lastMouse=[e.clientX,e.clientY];});
+    canvas.addEventListener('mouseup',function(){_mp.dragging=false;});
+    canvas.addEventListener('mousemove',function(e){
+      if(!_mp.dragging||!_mp.lastMouse) return;
+      _mp.rotation[0]+=(e.clientX-_mp.lastMouse[0])*0.01;
+      _mp.rotation[1]+=(e.clientY-_mp.lastMouse[1])*0.01;
+      _mp.lastMouse=[e.clientX,e.clientY];
+    });
+    canvas.addEventListener('wheel',function(e){
+      _mp.zoom=Math.max(-20,Math.min(-1,_mp.zoom+e.deltaY*0.01));
+      e.preventDefault();
+    },{passive:false});
+  }
+
+  if(!window.pywebview){
+    msg.textContent='3D preview requires the desktop app.';
+    return;
+  }
+
+  window.pywebview.api.get_model_glb(setup_id_hex).then(function(r){
+    if(!r.success){
+      msg.textContent='No 3D model available for this Setup DID.\n('+r.error+')';
+      return;
+    }
+    var ok=_mpLoadGLB(r.data_b64);
+    if(!ok){ msg.textContent='Failed to parse model data.'; return; }
+    msg.style.display='none';
+    _mpDraw();
+  });
+}
+
+function closeModelPreview(){
+  var panel=document.getElementById('modelPreviewPanel');
+  if(panel) panel.style.display='none';
+  if(_mp.animFrame){ cancelAnimationFrame(_mp.animFrame); _mp.animFrame=null; }
+}
+
+// ── Setup DID 3D Preview button ───────────────────────────────────────────
+// Returns HTML for a "3D Preview" button given a hex value string.
+// Called from _buildSetupPreviewBtn() which is injected into extraRows
+// for DID type 1 (Setup) entries.
+function _setupPreviewBtnHtml(hexVal){
+  var val=hexVal||'0x00000000';
+  return '<button onclick="openModelPreview(\''+val+'\',\'Setup '+val+'\')" '
+    +'title="Preview 3D model for this Setup DID" '
+    +'style="font-family:var(--ui-font);font-size:8px;font-weight:700;'
+    +'padding:2px 8px;border:1px solid var(--crimson);background:transparent;'
+    +'color:var(--crimson);cursor:pointer;white-space:nowrap;flex-shrink:0">'
+    +'&#x1F4E6; 3D</button>';
+}
+
+// Init DAT status check on startup
+document.addEventListener('DOMContentLoaded', function(){
+  // nothing extra needed — button is injected via extraRows patch below
+});
+
 </script>
-<!-- UPDATE OVERLAY -->
-<div id="updateOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;align-items:center;justify-content:center">
-  <div style="background:var(--parch);border:1px solid var(--gold);border-radius:4px;width:480px;box-shadow:0 8px 40px rgba(0,0,0,.6)">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
-      <div style="font-family:var(--ui-font);font-size:13px;font-weight:700;letter-spacing:.1em;color:var(--gold)">⬆ UPDATE AVAILABLE</div>
-      <button onclick="dismissUpdate()" style="background:none;border:none;font-size:16px;cursor:pointer;color:var(--ink-dim)">✕</button>
+<!-- UPDATE DROPDOWN (replaces full-screen overlay) -->
+<div id="updateOverlay" style="display:none;position:fixed;top:46px;left:0;z-index:500;
+  background:var(--parch);border:1px solid var(--gold);border-radius:0 0 4px 4px;
+  width:340px;box-shadow:0 6px 24px rgba(0,0,0,.5)">
+  <div style="display:flex;align-items:center;justify-content:space-between;
+    padding:10px 14px;border-bottom:1px solid var(--border)">
+    <div style="font-family:var(--ui-font);font-size:11px;font-weight:700;
+      letter-spacing:.08em;color:var(--gold)">&#x2B07; UPDATE AVAILABLE</div>
+    <button onclick="dismissUpdate()" style="background:none;border:none;font-size:14px;
+      cursor:pointer;color:var(--ink-dim);line-height:1;padding:0 2px">&times;</button>
+  </div>
+  <div style="padding:12px 14px">
+    <p id="updateMsg" style="font-family:var(--ui-font);font-size:11px;color:var(--ink-dim);
+      margin:0 0 10px;line-height:1.5"></p>
+    <pre id="updateNotes" style="font-family:'JetBrains Mono',monospace;font-size:9px;
+      color:var(--ink-dim);background:var(--parch-dk);border:1px solid var(--border);
+      padding:8px;border-radius:2px;max-height:80px;overflow-y:auto;
+      white-space:pre-wrap;margin:0 0 10px"></pre>
+    <div id="updateProgress" style="display:none;margin-bottom:10px">
+      <div style="font-family:var(--ui-font);font-size:10px;color:var(--gold);
+        margin-bottom:4px" id="updateProgressMsg">Downloading…</div>
+      <div style="background:var(--parch-dk);border:1px solid var(--border);
+        border-radius:2px;height:5px">
+        <div id="updateProgressBar" style="background:var(--gold);height:100%;
+          width:0%;transition:width .3s"></div>
+      </div>
     </div>
-    <div style="padding:20px">
-      <p id="updateMsg" style="font-family:var(--ui-font);font-style:italic;font-size:13px;color:var(--ink-dim);margin-bottom:14px;line-height:1.6"></p>
-      <pre id="updateNotes" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-dim);background:var(--parch-dk);border:1px solid var(--border);padding:10px;border-radius:2px;max-height:120px;overflow-y:auto;white-space:pre-wrap;margin-bottom:16px"></pre>
-      <div id="updateProgress" style="display:none;margin-bottom:12px">
-        <div style="font-family:var(--ui-font);font-size:10px;color:var(--gold);margin-bottom:4px" id="updateProgressMsg">Downloading…</div>
-        <div style="background:var(--parch-dk);border:1px solid var(--border);border-radius:2px;height:6px">
-          <div id="updateProgressBar" style="background:var(--gold);height:100%;width:0%;transition:width .3s"></div>
-        </div>
-      </div>
-      <div style="display:flex;gap:10px">
-        <button id="updateBtn" class="top-btn" onclick="doUpdate()" style="background:var(--gold);border-color:var(--gold);color:#1a1200;padding:8px 20px;font-size:11px">⬆ Update Now</button>
-        <button class="top-btn" onclick="dismissUpdate()" style="padding:8px 14px;font-size:11px;background:transparent">Later</button>
-      </div>
+    <div style="display:flex;gap:8px">
+      <button id="updateBtn" class="top-btn" onclick="doUpdate()"
+        style="background:var(--gold);border-color:var(--gold);color:#1a1200;
+        padding:6px 14px;font-size:10px">&#x2B07; Update Now</button>
+      <button class="top-btn" onclick="dismissUpdate()"
+        style="padding:6px 10px;font-size:10px;background:transparent">Later</button>
     </div>
   </div>
 </div>
@@ -12084,6 +12659,142 @@ if(!window.pywebview)init();
     <div id="debugLog"></div>
     <div id="debugStatus"><span>0 entries</span></div>
   </div>
+
+
+
+<!-- 3D MODEL PREVIEW PANEL (shown next to Setup DID in WeenieForge) -->
+<div id="modelPreviewPanel" style="display:none;position:fixed;top:50%;left:50%;
+  transform:translate(-50%,-50%);z-index:400;
+  background:var(--parch);border:1px solid var(--border);border-radius:4px;
+  width:480px;box-shadow:0 8px 40px rgba(0,0,0,.6)">
+  <div style="display:flex;align-items:center;justify-content:space-between;
+    padding:10px 14px;border-bottom:1px solid var(--border)">
+    <div id="modelPreviewTitle" style="font-family:var(--ui-font);font-size:11px;
+      font-weight:700;letter-spacing:.08em;color:var(--crimson)">3D PREVIEW</div>
+    <button onclick="closeModelPreview()" style="background:none;border:none;
+      font-size:16px;cursor:pointer;color:var(--ink-dim);line-height:1">&times;</button>
+  </div>
+  <div style="position:relative;background:#111;height:340px">
+    <canvas id="modelPreviewCanvas" width="478" height="338"
+      style="display:block;width:100%;height:100%"></canvas>
+    <div id="modelPreviewMsg" style="position:absolute;inset:0;display:flex;
+      align-items:center;justify-content:center;font-family:var(--ui-font);
+      font-size:10px;color:var(--ink-faint);font-style:italic;text-align:center;
+      padding:20px;overflow:auto;word-break:break-word;white-space:pre-wrap;
+      align-items:flex-start;padding-top:30px">Loading 3D model…</div>
+    <div style="position:absolute;bottom:6px;right:8px;font-family:var(--ui-font);
+      font-size:9px;color:rgba(255,255,255,.3)">Drag to rotate &bull; Scroll to zoom</div>
+  </div>
+</div>
+
+
+<!-- GEAR BULK EDIT OVERLAY -->
+<div id="gearBulkEditOverlay" style="display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.6);z-index:600;align-items:center;justify-content:center">
+  <div style="background:var(--parch);border:1px solid var(--border);border-radius:4px;
+    width:540px;box-shadow:0 8px 40px rgba(0,0,0,.6);display:flex;flex-direction:column">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;
+      padding:14px 18px;border-bottom:1px solid var(--border)">
+      <div style="font-family:var(--ui-font);font-size:11px;font-weight:700;
+        letter-spacing:.1em;color:var(--crimson)">&#x2261; BULK EDIT</div>
+      <button onclick="gearCloseBulkEdit()" style="background:none;border:none;
+        font-size:16px;cursor:pointer;color:var(--ink-dim);line-height:1">&times;</button>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:18px 18px 14px">
+
+      <p style="font-family:var(--ui-font);font-size:11px;color:var(--ink-dim);
+        font-style:italic;margin-bottom:14px;line-height:1.5">
+        Select a property and value — it will be applied to
+        <strong id="gearBulkEditCount">all</strong> generated items.
+        Existing values are overwritten; new entries are added where absent.
+      </p>
+
+      <!-- Property type selector -->
+      <div style="display:flex;gap:2px;margin-bottom:12px">
+        <button class="prop-stab active" id="gearBulkTab_int"
+          onclick="gearBulkSwitchTab('int')">Integer</button>
+        <button class="prop-stab" id="gearBulkTab_bool"
+          onclick="gearBulkSwitchTab('bool')">Boolean</button>
+        <button class="prop-stab" id="gearBulkTab_float"
+          onclick="gearBulkSwitchTab('float')">Float</button>
+        <button class="prop-stab" id="gearBulkTab_string"
+          onclick="gearBulkSwitchTab('string')">String</button>
+        <button class="prop-stab" id="gearBulkTab_did"
+          onclick="gearBulkSwitchTab('did')">Data ID</button>
+        <button class="prop-stab" id="gearBulkTab_spells"
+          onclick="gearBulkSwitchTab('spells')">Spells</button>
+      </div>
+
+      <!-- Property dropdown -->
+      <div style="margin-bottom:10px">
+        <div style="font-family:var(--ui-font);font-size:10px;font-weight:700;
+          letter-spacing:.06em;color:var(--ink-faint);margin-bottom:4px">PROPERTY</div>
+        <select id="gearBulkPropSelect"
+          style="width:100%;font-family:var(--ui-font);font-size:12px;
+          background:var(--parch-dk);border:1px solid var(--border);padding:7px 8px;
+          border-radius:2px;color:var(--ink)">
+        </select>
+      </div>
+
+      <!-- Value input -->
+      <div style="margin-bottom:18px" id="gearBulkValueWrap">
+        <div style="font-family:var(--ui-font);font-size:10px;font-weight:700;
+          letter-spacing:.06em;color:var(--ink-faint);margin-bottom:4px">VALUE</div>
+        <input type="text" id="gearBulkValueInput"
+          style="width:100%;font-family:JetBrains Mono,monospace;font-size:13px;
+          font-weight:600;background:var(--parch-dk);border:1px solid var(--border);
+          padding:7px 8px;border-radius:2px;color:var(--ink);box-sizing:border-box"
+          placeholder="Enter value…">
+        <!-- Bool gets a select instead -->
+        <select id="gearBulkBoolInput" style="display:none;width:100%;
+          font-family:JetBrains Mono,monospace;font-size:13px;font-weight:600;
+          background:var(--parch-dk);border:1px solid var(--border);
+          padding:7px 8px;border-radius:2px;color:var(--ink)">
+          <option value="True">True</option>
+          <option value="False">False</option>
+        </select>
+      </div>
+
+      <!-- Spells panel (shown only in spells tab) -->
+      <div id="gearBulkSpellsWrap" style="display:none;margin-bottom:18px">
+        <div style="font-family:var(--ui-font);font-size:10px;font-weight:700;
+          letter-spacing:.06em;color:var(--ink-faint);margin-bottom:4px">SPELL</div>
+        <div id="gearBulkSpellSelectWrap" style="margin-bottom:8px"></div>
+        <div style="font-family:var(--ui-font);font-size:10px;font-weight:700;
+          letter-spacing:.06em;color:var(--ink-faint);margin-bottom:4px">PROBABILITY</div>
+        <input type="text" id="gearBulkSpellProb" value="2"
+          style="width:100%;font-family:JetBrains Mono,monospace;font-size:13px;
+          font-weight:600;background:var(--parch-dk);border:1px solid var(--border);
+          padding:7px 8px;border-radius:2px;color:var(--ink);box-sizing:border-box"
+          placeholder="e.g. 2">
+        <div style="font-family:var(--ui-font);font-size:10px;color:var(--ink-faint);
+          font-style:italic;margin-top:6px;line-height:1.4">
+          Adds this spell to every item. Items that already have it keep their existing probability.
+        </div>
+      </div>
+
+      <!-- Footer buttons -->
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button onclick="gearCloseBulkEdit()"
+          style="padding:8px 18px;font-family:var(--ui-font);font-size:10px;
+          font-weight:700;letter-spacing:.06em;background:transparent;
+          border:1px solid var(--border);cursor:pointer;color:var(--ink-dim)">
+          Cancel
+        </button>
+        <button onclick="gearApplyBulkEdit()"
+          style="padding:8px 22px;font-family:var(--ui-font);font-size:10px;
+          font-weight:700;letter-spacing:.06em;background:var(--crimson);
+          border:1px solid var(--crimson);cursor:pointer;color:#fff;border-radius:2px">
+          &#x2714; Apply to All
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 
 </body>

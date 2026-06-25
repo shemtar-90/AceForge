@@ -1871,6 +1871,177 @@ Start with: /* ===== FILE: {fname} ===== */
         return {"items": items, "generating": self._generating}
 
 
+
+    # ── DAT Loader — 3D model preview ────────────────────────────────────────
+
+    def browse_portal_dat(self) -> dict:
+        """Open a file dialog for the user to locate client_portal.dat."""
+        try:
+            if self._window is None:
+                return {"error": "Window not ready"}
+            result = self._window.create_file_dialog(
+                dialog_type=10,
+                allow_multiple=False,
+                file_types=("DAT Files (*.dat)", "All Files (*.*)")
+            )
+            if not result:
+                return {"cancelled": True}
+            path = result[0] if isinstance(result, (list, tuple)) else result
+            return {"path": str(path)}
+        except Exception:
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                root = tk.Tk(); root.withdraw()
+                path = filedialog.askopenfilename(
+                    title="Select client_portal.dat",
+                    filetypes=[("DAT files", "*.dat"), ("All files", "*.*")]
+                )
+                root.destroy()
+                if not path:
+                    return {"cancelled": True}
+                return {"path": str(path)}
+            except Exception as e2:
+                return {"error": str(e2)}
+
+    def set_portal_dat(self, path: str) -> dict:
+        """Save the client_portal.dat path to config and verify it opens."""
+        try:
+            from aceforge.dat_loader import DatDatabase
+            db = DatDatabase(path)
+            n  = len(db.files_by_type(0x02))
+            db.close()
+            self.config.set("portal_dat", path)
+            self.config.save()
+            return {"success": True, "setup_count": n}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_portal_dat_status(self) -> dict:
+        """Return the configured DAT path and whether it's valid."""
+        path = self.config.get("portal_dat", "")
+        if not path:
+            return {"configured": False, "path": ""}
+        from pathlib import Path
+        exists = Path(path).exists()
+        return {"configured": exists, "path": path}
+
+    def get_model_glb(self, setup_id_hex: str) -> dict:
+        """
+        Return a base64-encoded GLB for the given Setup DID (as hex string).
+        Uses the cache — extracts from DAT on first request, cached thereafter.
+        Result: {success, data_b64} or {success: False, error}
+        """
+        import base64, traceback
+        try:
+            setup_id = int(setup_id_hex.strip(), 16)
+        except ValueError:
+            return {"success": False, "error": "Invalid setup ID"}
+
+        from aceforge.dat_loader import (cached_glb_path, DatDatabase,
+                                          get_or_export_glb, export_setup_glb,
+                                          parse_setup, parse_gfxobj)
+        from pathlib import Path
+
+        cached = cached_glb_path(setup_id)
+        if cached.exists():
+            return {"success": True,
+                    "data_b64": base64.b64encode(cached.read_bytes()).decode()}
+
+        path = self.config.get("portal_dat", "")
+        if not path or not Path(path).exists():
+            return {"success": False, "error": "client_portal.dat not configured"}
+
+        try:
+            db = DatDatabase(path)
+
+            # ── Diagnostics ───────────────────────────────────────────────────
+            total_setups  = len(db.files_by_type(0x02))
+            total_gfxobjs = len(db.files_by_type(0x01))
+            in_index      = setup_id in db.entries
+            # Include block_size — if wrong, all file reads produce garbage
+            entry_info = ""
+            if setup_id in db.entries:
+                e = db.entries[setup_id]
+                entry_info = f"entry: offset={e.file_offset} size={e.file_size}. "
+            diag = (f"DAT indexed {len(db.entries)} total entries, "
+                    f"{total_setups} setups (0x02), "
+                    f"{total_gfxobjs} gfxobjs (0x01). "
+                    f"block_size={db.block_size}. "
+                    f"dat_type={db.dat_type}. "
+                    f"0x{setup_id:08X} in index: {in_index}. "
+                    f"{entry_info}")
+
+            raw = db.read_file(setup_id)
+            if raw is None:
+                db.close()
+                return {"success": False,
+                        "error": f"Setup 0x{setup_id:08X} not found in DAT. {diag}"}
+
+            setup = parse_setup(raw)
+            if setup is None:
+                db.close()
+                return {"success": False,
+                        "error": f"parse_setup returned None for 0x{setup_id:08X}. "
+                                 f"Raw data: {len(raw)} bytes, first 32: {raw[:32].hex()}. {diag}"}
+
+            if not setup.parts:
+                db.close()
+                return {"success": False,
+                        "error": f"Setup 0x{setup_id:08X} has 0 parts. "
+                                 f"Flags=0x{raw[4]:02X}{raw[5]:02X}{raw[6]:02X}{raw[7]:02X}. {diag}"}
+
+            # Check first GfxObj
+            first_gid = setup.parts[0].gfxobj_id
+            gfx_raw   = db.read_file(first_gid)
+            if gfx_raw is None:
+                db.close()
+                return {"success": False,
+                        "error": f"GfxObj 0x{first_gid:08X} not found (first part of setup). "
+                                 f"Setup has {len(setup.parts)} parts. {diag}"}
+
+            try:
+                gfx = parse_gfxobj(gfx_raw)
+            except Exception as gfx_err:
+                db.close()
+                return {"success": False,
+                        "error": f"parse_gfxobj error for 0x{first_gid:08X}: {gfx_err}. "
+                                 f"Raw: {len(gfx_raw)} bytes, b8-64: {gfx_raw[8:64].hex()}"}
+            if gfx is None:
+                db.close()
+                return {"success": False,
+                        "error": f"parse_gfxobj returned None for 0x{first_gid:08X}. "
+                                 f"Raw: {len(gfx_raw)} bytes, b8-64: {gfx_raw[8:64].hex()}"}
+
+            gfx_diag = (f"GfxObj 0x{first_gid:08X}: "
+                        f"{len(gfx.vertices)} verts, {len(gfx.polygons)} polys, "
+                        f"{len(gfx.surfaces)} surfaces. ")
+            # ── End diagnostics ───────────────────────────────────────────────
+
+            glb_path = get_or_export_glb(db, setup_id)
+            db.close()
+            if glb_path is None:
+                return {"success": False,
+                        "error": f"export_setup_glb returned None. {diag}{gfx_diag}"}
+            return {"success": True,
+                    "data_b64": base64.b64encode(glb_path.read_bytes()).decode()}
+        except Exception as e:
+            return {"success": False,
+                    "error": f"Exception: {e}\n{traceback.format_exc()[-800:]}"}
+
+    def clear_model_cache(self) -> dict:
+        """Delete all cached GLB files."""
+        try:
+            from aceforge.dat_loader import get_cache_dir
+            d = get_cache_dir()
+            count = 0
+            for f in d.glob("*.glb"):
+                f.unlink()
+                count += 1
+            return {"success": True, "deleted": count}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     APP_VERSION = "0.3.09"
 
     def get_version(self) -> str:
