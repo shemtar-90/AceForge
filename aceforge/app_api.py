@@ -329,7 +329,7 @@ class AppAPI(LoreMixin):
         lines = [
             f"DELETE FROM `weenie` WHERE `class_Id` = {new_wcid};\n",
             "INSERT INTO `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)",
-            f"VALUES ({new_wcid}, '{item['class_name']}', {item.get('weenie_type', 1)}, NOW());\n",
+            f"VALUES ({new_wcid}, '{item['class_name']}', {item.get('weenie_type', 1)}, '{__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}');\n",
             emit_block("int", item.get("int", {}), lambda v: v),
             emit_block("bool", item.get("bool", {}), lambda v: v),
             emit_block("float", item.get("float", {}), lambda v: v),
@@ -442,7 +442,7 @@ class AppAPI(LoreMixin):
         lines = [
             f"DELETE FROM `weenie` WHERE `class_Id` = {new_wcid};\n",
             "INSERT INTO `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)",
-            f"VALUES ({new_wcid}, '{class_name}', {source.get('weenie_type', 1)}, NOW());\n",
+            f"VALUES ({new_wcid}, '{class_name}', {source.get('weenie_type', 1)}, '{__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}');\n",
             emit_block("int", int_props, lambda v: v),
             emit_block("bool", bool_props, lambda v: v),
             emit_block("float", float_props, lambda v: v),
