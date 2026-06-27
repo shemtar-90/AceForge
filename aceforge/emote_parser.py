@@ -703,7 +703,7 @@ def parse_action_value(name: str, v: str, warnings: List[str]) -> dict:
             warnings.append(f'Could not parse AwardLevelProportionalXP: {v!r}')
 
     elif name in ('AwardLuminance', 'SpendLuminance'):
-        # EmoteScriptLib: Amount64 = amount → amount_64 column
+        # Stored in amount_64 (column 17) — matches the existing DB format
         try:    attrs['amount_64'] = int(re.sub(r'[,\s]', '', v.split()[0]))
         except: warnings.append(f'Could not parse luminance: {v!r}')
 

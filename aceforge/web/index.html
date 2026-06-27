@@ -2208,8 +2208,8 @@ const EA_FIELDS={
   49:[{f:'percent',l:'XP Percent',ph:'0.0 – 1.0   e.g. 0.15 = 15%'}],
   1: [{f:'amount64',l:'XP Amount (flat)',ph:'e.g. 1000000'}],
   62:[{f:'amount64',l:'XP Amount (no share)',ph:'e.g. 1000000'}],
-  112:[{f:'heroXP64',l:'Luminance to Spend',ph:'e.g. 5000'}],
-  113:[{f:'heroXP64',l:'Luminance to Award',ph:'e.g. 5000'}],
+  112:[{f:'amount64',l:'Luminance to Spend',ph:'e.g. 5000'}],
+  113:[{f:'amount64',l:'Luminance to Award',ph:'e.g. 5000'}],
   48:[{f:'amount64',l:'Vitae Penalty',ph:'e.g. 5'}],
   90:[{f:'amount64',l:'Remove Vitae (0=all)',ph:'0'}],
 
@@ -3979,8 +3979,9 @@ function _actionToYAML(a, indent, _inlined, _gotoSetMap){
     }
   }
   else if(t===113||t===112){
-    var lv=parseInt(a.heroXP64||0);
-    val=lv?lv.toLocaleString('en-US'):'0';
+    // Value stored in amount_64 col → a.amount64; fall back to heroXP64 for older data
+    var lv=parseInt(a.amount64||a.heroXP64||0);
+    val=String(lv||0);
   }
   else if([1,2,62,47,48,90].includes(t)) val=String(a.amount64||'');
   else if([14,19,27,73].includes(t)){
@@ -6779,7 +6780,7 @@ function _buildActionFields(fdefs, a, i, j, aType, actRef){
   if(aType===112||aType===113){
     const lbl={112:'Luminance to Spend',113:'Luminance to Award'}[aType];
     return '<div class="fg" style="grid-column:span 3"><div class="fl">'+lbl+'</div>'+
-      '<input type="number" value="'+(a.heroXP64||'')+'" placeholder="e.g. 5000" '+_s('heroXP64')+'"></div>';
+      '<input type="number" value="'+(a.amount64||a.heroXP64||'')+'" placeholder="e.g. 5000" '+_s('amount64')+'"></div>';
   }
   if(aType===110){
     const skillSel=buildSearchSelect('ea_skill_'+pid,ALL_SKILLS.map(([id,name])=>[id,name+' (SK-'+id+')']),a.stat||'',_s('stat'),'Search skills…');
@@ -8630,7 +8631,9 @@ function buildSQL(){
       const spV =(a.spellId&&a.spellId!=='')?_n(a.spellId):'NULL';
       const isLoc=LOC_SQL_TYPES.has(at);
       const locV=k=>isLoc&&a[k]?a[k]:'NULL';
-      return `${prefix}(@parent_id, ${order}, ${at} /* ${tn} */, ${_n(a.delay)||0}, ${(a.extent!==undefined&&a.extent!=='')?Number(a.extent):1}, ${motV}, ${_q(a.message)}, ${_q(a.testString)}, ${_n(a.min)}, ${_n(a.max)}, ${min64}, ${max64}, ${minDblV}, ${maxDblV}, ${stV}, NULL, ${_n(a.amount)}, NULL, ${_n(a.heroXP64)}, ${_n(a.percent)}, ${spV}, NULL, NULL, NULL, NULL, NULL, NULL, ${wcV}, ${_n(a.stackSize)}, NULL, NULL, NULL, ${locV('cell')}, ${locV('ox')}, ${locV('oy')}, ${locV('oz')}, ${locV('aw')}, ${locV('ax')}, ${locV('ay')}, ${locV('az')})`;
+      const _lum112=(at===112||at===113);
+      const _lumVal=_n(a.amount64)||_n(a.heroXP64);
+      return `${prefix}(@parent_id, ${order}, ${at} /* ${tn} */, ${_n(a.delay)||0}, ${(a.extent!==undefined&&a.extent!=='')?Number(a.extent):1}, ${motV}, ${_q(a.message)}, ${_q(a.testString)}, ${_n(a.min)}, ${_n(a.max)}, ${min64}, ${max64}, ${minDblV}, ${maxDblV}, ${stV}, NULL, ${_lum112?'NULL':_n(a.amount)}, ${_lum112?_lumVal:'NULL'}, ${_lum112?'NULL':_n(a.heroXP64)}, ${_n(a.percent)}, ${spV}, NULL, NULL, NULL, NULL, NULL, NULL, ${wcV}, ${_n(a.stackSize)}, NULL, NULL, NULL, ${locV('cell')}, ${locV('ox')}, ${locV('oy')}, ${locV('oz')}, ${locV('aw')}, ${locV('ax')}, ${locV('ay')}, ${locV('az')})`;
     }
 
     function _branchKeys(a, ownsCtr){
