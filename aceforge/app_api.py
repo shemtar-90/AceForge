@@ -2023,8 +2023,10 @@ Start with: /* ===== FILE: {fname} ===== */
             if glb_path is None:
                 return {"success": False,
                         "error": f"export_setup_glb returned None. {diag}{gfx_diag}"}
+            glb_bytes = glb_path.read_bytes()
             return {"success": True,
-                    "data_b64": base64.b64encode(glb_path.read_bytes()).decode()}
+                    "data_b64": base64.b64encode(glb_bytes).decode(),
+                    "info": f"{len(setup.parts)} parts, {gfx_diag}glb={len(glb_bytes)}B"}
         except Exception as e:
             return {"success": False,
                     "error": f"Exception: {e}\n{traceback.format_exc()[-800:]}"}

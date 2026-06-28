@@ -1505,20 +1505,9 @@ def generate_delivery(params: dict, config) -> list[dict]:
     ]
     wcids = alloc_wcids(config, needed)
 
-    # Apply user WCID overrides for delivery NPCs and item
-    # npc_defs is ordered a, b, c... — map wcid_npc_a → index 0, wcid_npc_b → 1, etc.
-    npc_wcid_list = list(wcids["custom_npcs"])
-    for i, letter in enumerate([d["letter"].lower() for d in npc_defs]):
-        override = params.get(f"wcid_npc_{letter}", "").strip()
-        try:
-            v = int(override)
-            if v > 0:
-                npc_wcid_list[i] = v
-        except (ValueError, TypeError):
-            pass
-
+    npc_wcid_list = wcids["custom_npcs"]
     item_wcids    = list(wcids["custom_items"])
-    item_wcid     = _user_wcid(params, "wcid_item", item_wcids.pop(0))
+    item_wcid     = item_wcids.pop(0)
 
     # Assign WCIDs to new reward items
     for r in _rp["reward_items"]:

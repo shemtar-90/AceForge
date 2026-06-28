@@ -237,6 +237,24 @@ def _smart_array_count(data: bytes, off: int) -> Tuple[int, int]:
     return n, off
 
 
+def _packed_dword(data: bytes, off: int) -> Tuple[int, int]:
+    """
+    AC PackedDWORD: variable-length integer encoding.
+    If high bit of first byte is 0: value is just that byte (7-bit value, 0-127).
+    If bits 7-6 are 10: 2-byte value (14-bit, mask off top 2 bits).
+    If bits 7-6 are 11: 4-byte value (30-bit, mask off top 2 bits).
+    """
+    b0 = data[off]
+    if (b0 & 0x80) == 0:
+        return b0, off + 1
+    elif (b0 & 0xC0) == 0x80:
+        val = struct.unpack_from(">H", data, off)[0] & 0x3FFF
+        return val, off + 2
+    else:
+        val = struct.unpack_from(">I", data, off)[0] & 0x3FFFFFFF
+        return val, off + 4
+
+
 # ── Texture parsing ───────────────────────────────────────────────────────────
 
 # SurfacePixelFormat values we can handle
@@ -435,20 +453,19 @@ class GfxObj:
 
 
 # BSP node type constants (4-char ASCII tags stored little-endian as uint32)
-_BSP_LEAF = 0x4C454146   # 'LEAF'
-_BSP_PORT = 0x504F5254   # 'PORT'
-# Interior node types — uppercase letter = has that child, lowercase = no child
-# P/p = positive child, N/n = negative child
+_BSP_LEAF = 0x4641454c   # 'LEAF' as LE u32
+_BSP_PORT = 0x54524f50   # 'PORT' as LE u32
+# Interior node types — tag bytes read as little-endian u32
 _BSP_INTERIOR = {
-    0x42506E6E,   # 'BPnn' — no children
-    0x4250496E,   # 'BPIn' — positive child only
-    0x4270494E,   # 'BpIN' — negative child only
-    0x42706E4E,   # 'BpnN' — negative child only (alt)
-    0x4250494E,   # 'BPIN' — both children
-    0x42506E4E,   # 'BPnN' — both children (alt)
+    0x6e6e5042,   # 'BPnn' — no children
+    0x6e495042,   # 'BPIn' — positive child only
+    0x4e497042,   # 'BpIN' — negative child only
+    0x4e6e7042,   # 'BpnN' — negative child only (alt)
+    0x4e495042,   # 'BPIN' — both children
+    0x4e6e5042,   # 'BPnN' — both children (alt)
 }
-_BSP_HAS_POS = {0x4250496E, 0x4250494E, 0x42506E4E}   # BPIn, BPIN, BPnN
-_BSP_HAS_NEG = {0x4270494E, 0x42706E4E, 0x4250494E, 0x42506E4E}  # BpIN, BpnN, BPIN, BPnN
+_BSP_HAS_POS = {0x6e495042, 0x4e495042, 0x4e6e5042}   # BPIn, BPIN, BPnN
+_BSP_HAS_NEG = {0x4e497042, 0x4e6e7042, 0x4e495042, 0x4e6e5042}  # BpIN, BpnN, BPIN, BPnN
 
 
 def _skip_bsp_tree(data: bytes, off: int, bsp_type: str = "Drawing",
@@ -625,6 +642,10 @@ def parse_gfxobj(data: bytes) -> Optional[GfxObj]:
 
         return GfxObj(obj_id, surfaces, vertices, polygons)
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"parse_gfxobj failed at checkpoints {_checkpoints}: {e}"
+        )
         return None  # parse failed — caller skips this GfxObj
 
 
@@ -636,8 +657,8 @@ def _parse_polygon_flat(data: bytes, off: int) -> Tuple[AcPolygon, int]:
     numpts, off  = _u8(data, off)
     stippling, off = _u8(data, off)
     sides,  off  = _i32(data, off)
-    possurf, off = _i16(data, off)
-    negsurf, off = _i16(data, off)
+    possurf, off = _u16(data, off)
+    negsurf, off = _u16(data, off)
 
     # Sanity-check numpts — a real polygon won't have hundreds of points
     if numpts > 64:
@@ -646,7 +667,7 @@ def _parse_polygon_flat(data: bytes, off: int) -> Tuple[AcPolygon, int]:
     vids = []
     for _ in range(numpts):
         if off + 2 > len(data): break
-        vid, off = _i16(data, off)
+        vid, off = _u16(data, off)  # vertex indices are unsigned, match the vertex dict keys
         vids.append(vid)
 
     NO_POS = 0x04
@@ -663,7 +684,7 @@ def _parse_polygon_flat(data: bytes, off: int) -> Tuple[AcPolygon, int]:
             if off >= len(data): break
             _, off = _u8(data, off)   # neg UV indices — skip
 
-    surf_idx = max(0, possurf) if possurf >= 0 else 0
+    surf_idx = possurf if possurf != 0xFFFF else 0  # 0xFFFF = no surface
     return AcPolygon(surf_idx, vids, puvidx), off
 
 
@@ -672,38 +693,64 @@ def _parse_polygon_flat(data: bytes, off: int) -> Tuple[AcPolygon, int]:
 @dataclass
 class SetupPart:
     gfxobj_id: int
-    # scale / parent / position info omitted for initial render
 
+@dataclass
+class PartFrame:
+    """Position + rotation for one part in the default placement pose."""
+    ox: float; oy: float; oz: float          # origin (translation)
+    qw: float; qx: float; qy: float; qz: float  # quaternion (rotation)
 
 @dataclass
 class AcSetup:
-    setup_id:    int
-    parts:       List[SetupPart]
+    setup_id:     int
+    parts:        List[SetupPart]
     default_scale: float
+    frames:       List[PartFrame]   # one per part, from placement frame 0
+
+
+def _parse_frame(data: bytes, off: int) -> Tuple["PartFrame", int]:
+    """Parse one Frame (Origin + Quaternion) = 28 bytes."""
+    ox, oy, oz, qw, qx, qy, qz = struct.unpack_from("<7f", data, off)
+    return PartFrame(ox, oy, oz, qw, qx, qy, qz), off + 28
 
 
 def parse_setup(data: bytes) -> Optional[AcSetup]:
     """
-    Parse a Setup (0x02xxxxxx) binary blob.
+    Parse a Setup (0x02xxxxxx) binary blob, including placement frame transforms.
 
-    SetupFlags (from ACE source ACE.Entity.Enum.SetupFlags):
-      HasParent        = 0x1  -> numParts × uint32 parent indices
-      HasDefaultScale  = 0x2  -> numParts × Vector3 (12 bytes each) per-part scale
-      AllowFreeHeading = 0x4  -> flag only, no data
-      HasPhysicsBSP    = 0x8  -> flag only, no data
-
-    We only need the Parts list for 3D rendering; everything after the
-    optional parent/scale arrays is skipped.
+    Binary layout (from ACE DatLoader/FileTypes/Setup.cs):
+      uint32  setup_id
+      uint32  flags
+        0x1 = HasParent       -> uint32[nparts] parent indices
+        0x2 = HasDefaultScale -> Vector3[nparts] per-part scale
+      uint32  num_parts
+      uint32[num_parts]  gfxobj_ids
+      [if HasParent]        uint32[nparts]
+      [if HasDefaultScale]  float[nparts*3]
+      uint32  num_cylspheres  + CylSphere[n] (5 floats each = 20 bytes)
+      uint32  num_spheres     + Sphere[n]    (4 floats each = 16 bytes)
+      float   height, radius, step_down_height, step_up_height
+      Sphere  sorting_sphere  (16 bytes)
+      Sphere  selection_sphere (16 bytes)
+      uint32  num_lights      + Light[n] (skipped, variable size — use try/except)
+      uint32  default_anim    (DID)
+      uint32  default_script  (DID)
+      float   default_scale
+      uint32  num_placementtypes
+      for each placement type:
+        uint32  placement_id
+        uint32  num_animframes
+        for each animframe:
+          Frame[num_parts]   (28 bytes each: vec3 origin + quat)
     """
+    import math
     try:
         off = 0
         setup_id, off = _u32(data, off)
         flags,    off = _u32(data, off)
 
-        HAS_PARENT       = 0x1
+        HAS_PARENT        = 0x1
         HAS_DEFAULT_SCALE = 0x2
-        # 0x4 = AllowFreeHeading (no data)
-        # 0x8 = HasPhysicsBSP    (no data)
 
         nparts, off = _u32(data, off)
         parts = []
@@ -711,18 +758,116 @@ def parse_setup(data: bytes) -> Optional[AcSetup]:
             gid, off = _u32(data, off)
             parts.append(SetupPart(gid))
 
-        # ParentIndex: one uint32 per part
         if flags & HAS_PARENT:
             for _ in range(nparts):
                 _, off = _u32(data, off)
 
-        # DefaultScale: one Vector3 (3 floats = 12 bytes) per part
         if flags & HAS_DEFAULT_SCALE:
-            off += nparts * 12   # skip numParts × vec3
+            off += 4   # DefaultScale is one float for whole setup, NOT per-part
 
-        return AcSetup(setup_id, parts, 1.0)
-    except Exception:
-        return None
+        import logging as _log
+        _logger = _log.getLogger(__name__)
+
+        def _rd_u32(label):
+            nonlocal off
+            v = struct.unpack_from("<I", data, off)[0]
+            _logger.warning(f"  [{off:4d}] {label} = {v} (0x{v:08X})")
+            off += 4
+            return v
+
+        def _rd_f32(label):
+            nonlocal off
+            v = struct.unpack_from("<f", data, off)[0]
+            _logger.warning(f"  [{off:4d}] {label} = {v:.6f}")
+            off += 4
+            return v
+
+        def _skip(n, label):
+            nonlocal off
+            _logger.warning(f"  [{off:4d}] skip {n} bytes ({label})")
+            off += n
+
+        _logger.warning(f"parse_setup trace: id=0x{setup_id:08X} flags=0x{flags:08X} nparts={nparts} off={off} buflen={len(data)}")
+
+        # Array counts use PackedDWORD (variable length), not u32
+        def _rd_packed(label):
+            nonlocal off
+            v, off = _packed_dword(data, off)
+            _logger.warning(f"  [{off:4d}] {label} = {v} (PackedDWORD)")
+            return v
+
+        ncyl = _rd_packed("num_cylspheres")
+        if ncyl > 64: raise RuntimeError(f"Bad CylSphere count: {ncyl}")
+        _skip(ncyl * 20, f"{ncyl} CylSpheres")
+
+        nsph = _rd_packed("num_spheres")
+        if nsph > 64: raise RuntimeError(f"Bad Sphere count: {nsph}")
+        _skip(nsph * 16, f"{nsph} Spheres")
+
+        _rd_f32("height")
+        _rd_f32("radius")
+        _rd_f32("step_down_height")
+        _rd_f32("step_up_height")
+
+        _skip(16, "sorting_sphere")
+        _skip(16, "selection_sphere")
+
+        nlights = _rd_packed("num_lights")
+        if nlights > 64: raise RuntimeError(f"Bad Light count: {nlights}")
+        _skip(nlights * 44, f"{nlights} Lights")
+
+        # Dump next 32 bytes raw to see what's actually here
+        _logger.warning(f"  [{off:4d}] next 32 raw bytes: {data[off:off+32].hex()}")
+
+        # Scan for valid placement type count by trying different byte offsets
+        # Valid: n_ptypes in 1-10, placement_id in 0-7, n_aframes in 1-10
+        frames: List[PartFrame] = [PartFrame(0,0,0, 1,0,0,0)] * nparts
+        n_ptypes = None
+        scan_start = off
+        for skip in [0, 4, 8, 12, 16, 20]:
+            toff = scan_start + skip
+            if toff + 20 > len(data): break
+            try:
+                tc, t1 = _packed_dword(data, toff)
+                if not (1 <= tc <= 10): continue
+                pid, t2 = _packed_dword(data, t1)
+                if not (0 <= pid <= 7): continue
+                naf, t3 = _packed_dword(data, t2)
+                if not (1 <= naf <= 10): continue
+                # Check that enough bytes remain for the frame data
+                needed = naf * nparts * 28
+                if t3 + needed > len(data) + 28: continue  # allow slight overrun
+                _logger.warning(f"  SCAN: skip={skip} → n_ptypes={tc} pid={pid} naf={naf} (start={toff})")
+                off = toff
+                n_ptypes = tc
+                break
+            except Exception as se:
+                _logger.warning(f"  SCAN skip={skip} failed: {se}")
+
+        if n_ptypes is None:
+            raise RuntimeError(f"Cannot find valid placement frames near offset {scan_start}")
+
+        default_scale = 1.0
+        for pt_i in range(n_ptypes):
+            placement_id, off = _packed_dword(data, off)
+            n_aframes, off    = _packed_dword(data, off)
+            _logger.warning(f"  [{off:4d}] placement_id={placement_id} n_aframes={n_aframes}")
+            for af_i in range(n_aframes):
+                part_frames = []
+                for _ in range(nparts):
+                    pf, off = _parse_frame(data, off)
+                    part_frames.append(pf)
+                # Use the first placement type, first animframe as default rest pose
+                if pt_i == 0 and af_i == 0:
+                    frames = part_frames
+
+        return AcSetup(setup_id, parts, default_scale, frames)
+    except Exception as e:
+        # Fall back to no-transform if parse fails
+        import logging
+        logging.getLogger(__name__).warning(f"parse_setup placement frames failed: {e}")
+        return AcSetup(setup_id, parts, 1.0,
+                       [PartFrame(0,0,0, 1,0,0,0)] * len(parts))
 
 
 # ── GLB builder (minimal but valid GLTF 2.0 binary) ──────────────────────────
@@ -785,7 +930,22 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
             texture_ids.append(st_id)
         return tex_id_map[st_id]
 
-    for part in setup.parts:
+    import math
+
+    def quat_rotate(q, v):
+        """Rotate vector v by quaternion q (qw,qx,qy,qz)."""
+        qw, qx, qy, qz = q
+        # v' = q * (0,v) * q_conj
+        tx = 2.0 * (qy * v[2] - qz * v[1])
+        ty = 2.0 * (qz * v[0] - qx * v[2])
+        tz = 2.0 * (qx * v[1] - qy * v[0])
+        return (
+            v[0] + qw * tx + qy * tz - qz * ty,
+            v[1] + qw * ty + qz * tx - qx * tz,
+            v[2] + qw * tz + qx * ty - qy * tx,
+        )
+
+    for part_idx, part in enumerate(setup.parts):
         raw_g = db.read_file(part.gfxobj_id)
         if not raw_g:
             continue
@@ -793,7 +953,15 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
         if not gfx or not gfx.polygons:
             continue
 
-        # Triangulate polygons
+        # Get this part's placement transform (rest pose)
+        if part_idx < len(setup.frames):
+            pf = setup.frames[part_idx]
+            has_transform = not (pf.ox == 0 and pf.oy == 0 and pf.oz == 0
+                                 and abs(pf.qw - 1.0) < 1e-5)
+        else:
+            has_transform = False
+
+        # Triangulate polygons with transform applied
         for poly in gfx.polygons:
             if len(poly.vertex_ids) < 3:
                 continue
@@ -801,10 +969,9 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
             tex_idx = -1
             if 0 <= poly.surface_idx < len(gfx.surfaces):
                 surf_id = gfx.surfaces[poly.surface_idx]
-                # Surface (0x08) → SurfaceTexture (0x05) → Texture (0.06)
                 surf_data = db.read_file(surf_id)
                 if surf_data and len(surf_data) >= 12:
-                    st_id_raw, _ = _u32(surf_data, 8)  # texture ID at offset 8
+                    st_id_raw, _ = _u32(surf_data, 8)
                     tex_idx = get_tex_index(st_id_raw)
 
             verts = []
@@ -814,7 +981,17 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
                     continue
                 _uvi = poly.uv_indices[i] if (poly.uv_indices and i < len(poly.uv_indices)) else 0
                 uv = v.uvs[_uvi] if (v.uvs and _uvi < len(v.uvs)) else (0.0, 0.0)
-                verts.append((v.pos, v.nrm, uv))
+
+                # Apply placement frame transform: rotate then translate
+                if has_transform:
+                    q = (pf.qw, pf.qx, pf.qy, pf.qz)
+                    pos = quat_rotate(q, v.pos)
+                    pos = (pos[0] + pf.ox, pos[1] + pf.oy, pos[2] + pf.oz)
+                    nrm = quat_rotate(q, v.nrm)
+                else:
+                    pos, nrm = v.pos, v.nrm
+
+                verts.append((pos, nrm, uv))
 
             # Fan triangulation
             indices = []
@@ -825,6 +1002,11 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
                 meshes.append((verts, indices, tex_idx))
 
     if not meshes:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"export_setup_glb: no renderable meshes for setup 0x{setup_id:08X} "
+            f"({len(setup.parts)} parts checked)"
+        )
         return None
 
     # ── Build GLTF binary buffer ──────────────────────────────────────────────
@@ -1003,6 +1185,9 @@ def _rgba_to_png(rgba: bytes, w: int, h: int) -> bytes:
 
 # ── Cache helpers (used by app_api.py) ───────────────────────────────────────
 
+# Increment this when parse logic changes — forces cache invalidation
+_PARSER_VERSION = "v10"
+
 def get_cache_dir() -> Path:
     appdata = os.environ.get("APPDATA", str(Path.home()))
     d = Path(appdata) / "ACEForge" / "model_cache"
@@ -1011,7 +1196,8 @@ def get_cache_dir() -> Path:
 
 
 def cached_glb_path(setup_id: int) -> Path:
-    return get_cache_dir() / f"{setup_id:08X}.glb"
+    # Version in filename forces re-parse when parser changes
+    return get_cache_dir() / f"{setup_id:08X}_{_PARSER_VERSION}.glb"
 
 
 def get_or_export_glb(db: DatDatabase, setup_id: int) -> Optional[Path]:
