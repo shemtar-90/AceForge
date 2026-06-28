@@ -555,17 +555,48 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 <!-- MANUAL WORKSPACE -->
 <div class="workspace active" id="manualWS">
   <div class="form-panel">
-    <div class="wb-header">
+    <div class="wb-header" id="wbHeader" style="display:none">
       <div>
-        <div class="wb-title" id="wbTitle">✠ Creature <span>· Workbench</span></div>
-        <div class="wb-desc" id="wbDesc">Hostile creatures with combat, loot, and behavior.</div>
+        <div class="wb-title" id="wbTitle">&#x2692; <span style="font-weight:700">Weenie Editor</span><span style="font-weight:400"> · Workbench</span></div>
+        <div class="wb-desc" id="wbDesc">Import any weenie SQL to view and edit all properties.</div>
       </div>
     </div>
-    <div class="inner-tabs" id="innerTabs"></div>
+    <div class="inner-tabs" id="innerTabs">
+      <button class="itab active" data-type="weenie" onclick="switchType(this.dataset.type,this)"><span style="margin-right:4px">&#x2692;</span>WEENIE</button>
+      <button class="itab" data-type="recipe" onclick="switchType(this.dataset.type,this)"><span style="margin-right:4px"><img src="recipe_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain"></span>RECIPE</button>
+      <button class="itab" data-type="quest" onclick="switchType(this.dataset.type,this)"><span style="margin-right:4px"><img src="quest_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain"></span>QUEST</button>
+      <button class="itab" data-type="event" onclick="switchType(this.dataset.type,this)"><span style="margin-right:4px">&#x1F525;</span>EVENT</button>
+    </div>
     <div class="id-row" id="idRow"></div>
     <div class="ctab-bar" id="subTabs"></div>
     <div class="presets" id="presetsRow"></div>
-    <div class="form-scroll" id="formContent"></div>
+    <div id="weenieWelcome" style="display:flex;flex-direction:column;align-items:center;
+      justify-content:center;padding:60px 20px;text-align:center;flex:1">
+      <div style="font-family:var(--ui-font);font-size:13px;font-weight:700;
+        color:var(--ink-mid);letter-spacing:.08em;margin-bottom:16px">&#x2692; WEENIE EDITOR</div>
+      <div style="font-family:var(--ui-font);font-size:11px;color:var(--ink-faint);
+        line-height:1.7;max-width:380px;margin:0 auto 24px">
+        Import any weenie SQL file to load its properties for viewing and editing.
+        All property types are supported — Int, Bool, Float, String, DID, Spellbook, Body Parts, and Emotes.
+      </div>
+      <button onclick="importSQLToBuilder()"
+        style="display:inline-flex;align-items:center;gap:8px;background:var(--crimson);
+          border:none;color:#fff;cursor:pointer;font-family:var(--ui-font);font-size:10px;
+          font-weight:700;letter-spacing:.1em;padding:12px 24px;border-radius:2px">
+        &#x2B06; IMPORT WEENIE SQL
+      </button>
+      <button onclick="openTemplateModal()"
+        style="display:inline-flex;align-items:center;gap:8px;margin-top:10px;
+          background:transparent;border:1px solid var(--crimson);color:var(--crimson);
+          cursor:pointer;font-family:var(--ui-font);font-size:10px;font-weight:700;
+          letter-spacing:.1em;padding:11px 24px;border-radius:2px">
+        &#x2B1C; IMPORT FROM TEMPLATE
+      </button>
+      <div style="margin-top:16px;font-family:var(--ui-font);font-size:9px;color:var(--ink-faint)">
+        Or use the Properties sub-tabs above to build from scratch.
+      </div>
+    </div>
+    <div class="form-scroll" id="formContent" style="display:none"></div>
   </div>
   <div class="sql-resize" id="sqlResize"></div>
   <div class="sql-panel" id="sqlPanel">
@@ -772,6 +803,13 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 <script>
+const $   = id => document.getElementById(id);
+function opt(arr,selVal){return arr.map(function(r){return '<option value="'+r[0]+'"'+(r[0]==selVal?' selected':'')+'>'+r[0]+' · '+r[1]+'</option>';}).join('');}
+const g   = (id,d='')  => {const e=$(id);return e?e.value:d;};
+const gi  = (id,d=0)   => parseInt(g(id,d))||d;
+const gf  = (id,d=0.0) => parseFloat(g(id,d))||d;
+const _n  = v => (v===''||v===null||v===undefined)?'NULL':v;
+
 
 // ── TOAST NOTIFICATION ───────────────────────────────
 var _toastTimer=null;
@@ -1939,13 +1977,6 @@ const PROP_DID={
   61:'OlthoiDeathTreasureType'
 };
 const EMOTE_CATS=[[1,'Refuse'],[2,'Vendor'],[3,'Death'],[4,'Portal'],[5,'HeartBeat'],[6,'Give'],[7,'Use'],[8,'Activation'],[9,'Generation'],[10,'PickUp'],[11,'Drop'],[12,'QuestSuccess'],[13,'QuestFailure'],[14,'Taunt'],[15,'WoundedTaunt'],[16,'KillTaunt'],[17,'NewEnemy'],[18,'Scream'],[19,'Homesick'],[20,'ReceiveCritical'],[21,'ResistSpell'],[22,'TestSuccess'],[23,'TestFailure'],[24,'HearChat'],[25,'Wield'],[26,'UnWield'],[27,'EventSuccess'],[28,'EventFailure'],[29,'TestNoQuality'],[31,'TestNoFellow'],[32,'GotoSet'],[33,'NumFellowsSuccess'],[34,'NumFellowsFailure'],[35,'NumCharacterTitlesSuccess'],[36,'NumCharacterTitlesFailure'],[37,'ReceiveLocalSignal'],[38,'ReceiveTalkDirect']];
-// ── CORE HELPERS ─────────────────────────────────────────────────────────────
-const $   = id => document.getElementById(id);
-const opt = (arr,selVal) => arr.map(r=>`<option value="${r[0]}"${r[0]==selVal?' selected':''} >${r[0]} · ${r[1]}</option>`).join('');
-const g   = (id,d='')  => {const e=$(id);return e?e.value:d;};
-const gi  = (id,d=0)   => parseInt(g(id,d))||d;
-const gf  = (id,d=0.0) => parseFloat(g(id,d))||d;
-const _n  = v => (v===''||v===null||v===undefined)?'NULL':v;
 const _q  = v => (v===''||v===null||v===undefined)?'NULL':`'${String(v).replace(/'/g,"''")}'`;
 const nm  = (id,d='')  => g(id,d);
 const lookupName = (arr,val) => {const f=arr.find(r=>r[0]==val);return f?f[1]:String(val);};
@@ -2818,6 +2849,13 @@ function buildWeenieProps(){
           letter-spacing:.1em;padding:12px 24px;border-radius:2px">
         &#x2B06; IMPORT WEENIE SQL
       </button>
+      <button onclick="openTemplateModal()"
+        style="display:inline-flex;align-items:center;gap:8px;margin-top:10px;
+          background:transparent;border:1px solid var(--crimson);color:var(--crimson);cursor:pointer;
+          font-family:var(--ui-font);font-size:10px;font-weight:700;
+          letter-spacing:.1em;padding:11px 24px;border-radius:2px">
+        &#x2B1C; IMPORT FROM TEMPLATE
+      </button>
       <div style="margin-top:16px;font-family:var(--ui-font);font-size:9px;
         color:var(--ink-faint)">
         Or use the Properties sub-tabs above to build from scratch.
@@ -3207,12 +3245,6 @@ function filterSkillSearch(q){
     ?matches.map(([id,name])=>`<div class=\"sdrop-item\" onclick=\"addSkillById(${id})\">${name}<small>SK-${id}</small></div>`).join('')
     :'<div class=\"sdrop-none\">No skills found</div>';
   drop.classList.add('open');
-}
-
-function removeCoreSkill(id){
-  const idx=CORE_SKILL_IDS.indexOf(id);
-  if(idx>=0) CORE_SKILL_IDS.splice(idx,1);
-  rebuildPanel('skills');
 }
 
 function addSkillById(id){
@@ -4607,8 +4639,46 @@ function _parseRecipeSQL(sql){
   // regen() is called by importSQLToBuilder after buildSubContent()
 }
 
-function importSQLToBuilder(){
-  if(!window.pywebview){ toast('File import requires the desktop app.'); return; }
+function _showImportChoice(){
+  if(_weenieHasContent){
+    var ov=document.getElementById('importChoiceOverlay');
+    if(ov){ ov.style.display='flex'; return; }
+  }
+  importSQLToBuilder();
+}
+function importSQLBrowse(){ importSQLToBuilder(); }
+
+function importSQLToBuilder(){ _weenieHasContent=true;
+  if(!window.pywebview){
+    // Fallback: use native file input when pywebview isn't available
+    var _inp = document.createElement('input');
+    _inp.type = 'file'; _inp.accept = '.sql';
+    _inp.onchange = function(e){
+      var f = e.target.files[0]; if(!f) return;
+      var fr = new FileReader();
+      fr.onload = function(ev){
+        _weenieHasContent = true;
+        var sql = ev.target.result;
+        var ftype = _detectSQLFileType ? _detectSQLFileType(sql) : 'weenie';
+        if(ftype !== curType && typeof switchType === 'function') switchType(ftype);
+        setTimeout(function(){
+          var so = document.getElementById('sqlOut');
+          if(so){ so.value = sql; if(typeof renderSQLHighlight==='function') renderSQLHighlight(); }
+          if(typeof _extractImportedSections==='function') _extractImportedSections(sql, null);
+          if(typeof _parseGeneratorSQL==='function') _parseGeneratorSQL(sql);
+          if(typeof syncAdvancedFromSQL==='function') syncAdvancedFromSQL(true);
+          if(typeof _parseSpellbookFromSQL==='function') _parseSpellbookFromSQL(sql, null);
+          if(typeof _parseEmotesFromImportedSQL==='function') _parseEmotesFromImportedSQL(sql);
+          if(typeof _syncImportedToFormFields==='function') _syncImportedToFormFields(sql);
+          if(typeof rebuildPanel==='function') rebuildPanel('properties');
+          if(typeof regen==='function') regen();
+        }, 150);
+      };
+      fr.readAsText(f);
+    };
+    _inp.click();
+    return;
+  }
   window.pywebview.api.import_sql().then(function(r){
     if(!r||r.cancelled) return;
     if(r.error){ toast('Import failed: '+r.error); return; }
@@ -6329,7 +6399,7 @@ function buildForm(){
       const wTypeOpts=c.wTypes?c.wTypes.map(w=>'<option value="'+w[0]+'"'+'>'+w[0]+' · '+w[1]+'</option>').join(''):'';
       if(curType==='quest'||curType==='recipe'||curType==='event'){
         var _tabLabel=curType.charAt(0).toUpperCase()+curType.slice(1);
-        idRow.innerHTML='<button onclick="importSQLToBuilder()" style="font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;padding:8px 18px;border:1px solid var(--border);background:transparent;color:var(--ink-mid);cursor:pointer">⬆ Import '+_tabLabel+'</button>';
+        idRow.innerHTML='<button onclick="_showImportChoice()" style="font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;padding:8px 18px;border:1px solid var(--border);background:transparent;color:var(--ink-mid);cursor:pointer">⬆ Import '+_tabLabel+'</button>';
       } else {
         idRow.innerHTML=
           '<div class="fg" style="max-width:90px"><div class="fl">WCID <span class="fc">key</span></div>'
@@ -6397,7 +6467,7 @@ const TYPE_CFG={
       {l:'Kill Timer',d:{fName:'NewQuestKTTimer',fMinDelta:'72000',fMaxSolves:'-1',fMsg:'NewQuestKTTimer'}},
       {l:'Daily Timer',d:{fName:'NewQuestTimer',fMinDelta:'86400',fMaxSolves:'-1',fMsg:'NewQuestTimer'}},
     ]},
-  event:{label:'Event',icon:'\u{1F525}',desc:'Server events — start/stop conditions and state.',
+  event:{label:'Event',icon:'🔥',desc:'Server events — start/stop conditions and state.',
     wcidFrom:'',wcidTo:'',wcidRange:'',
     wTypes:null,
     subTabs:['properties'],
@@ -6478,7 +6548,7 @@ function buildInnerTabs(){
     {k:'weenie',      icon:'&#x2692;',  label:'WEENIE'},
     {k:'recipe',      icon:'<img src="recipe_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'RECIPE'},
     {k:'quest',       icon:'<img src="quest_tab_icon.png" style="width:18px;height:18px;vertical-align:middle;object-fit:contain">', label:'QUEST'},
-    {k:'event',       icon:'\u{1F525}', label:'EVENT'},
+    {k:'event',       icon:'🔥', label:'EVENT'},
   ];
   const parts=types.map(function(t){
     const active=t.k===curType?' active':'';
@@ -7011,6 +7081,760 @@ function _rcpToggle(bodyId){
   var arrowMap = {rcpIdentBody:'rcpIdentArrow', rcpSuccessBody:'rcpSuccessArrow', rcpFailBody:'rcpFailArrow'};
   var arrowEl = document.getElementById(arrowMap[bodyId]);
   if(arrowEl) arrowEl.innerHTML = open ? '&#x25B6;' : '&#x25BC;';
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WEENIE TEMPLATE SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+
+const TMPL_CHEST_SETUPS = [{"wcid": 143, "name": "Chest", "setup": "0x0200007C", "icon": "0x06001022", "file": "00143 Chest.sql"}, {"wcid": 145, "name": "Coffer", "setup": "0x0200007C", "icon": "0x06001018", "file": "00145 Coffer.sql"}, {"wcid": 146, "name": "Coffin", "setup": "0x020000CE", "icon": "0x06001022", "file": "00146 Coffin.sql"}, {"wcid": 167, "name": "Sarcophagus", "setup": "0x020000CE", "icon": "0x060012C7", "file": "00167 Sarcophagus.sql"}, {"wcid": 1114, "name": "Simple Lockbox", "setup": "0x0200007C", "icon": "0x06001020", "file": "01114 Simple Lockbox.sql"}, {"wcid": 5864, "name": "Standing Stone", "setup": "0x0200031D", "icon": "0x06001B13", "file": "05864 Standing Stone.sql"}, {"wcid": 9288, "name": "Singularity Trove", "setup": "0x02000A09", "icon": "0x06001FE9", "file": "09288 Singularity Trove.sql"}, {"wcid": 14538, "name": "Prism of Acid", "setup": "0x02000BF1", "icon": "0x060023E9", "file": "14538 Prism of Acid.sql"}, {"wcid": 14871, "name": "Martinate Singularity Trove", "setup": "0x02000A09", "icon": "0x06002461", "file": "14871 Martinate Singularity Trove.sql"}, {"wcid": 15843, "name": "Locked Rewards Chest", "setup": "0x0200007C", "icon": "0x06002536", "file": "15843 Locked Rewards Chest.sql"}, {"wcid": 22566, "name": "Runed Chest", "setup": "0x02000E4F", "icon": "0x06001020", "file": "22566 Runed Chest.sql"}, {"wcid": 23922, "name": "Lock Box", "setup": "0x02000A7F", "icon": "0x0600218D", "file": "23922 Lock Box.sql"}, {"wcid": 24476, "name": "Sturdy Steel Chest", "setup": "0x02000F7A", "icon": "0x06002B6A", "file": "24476 Sturdy Steel Chest.sql"}, {"wcid": 25451, "name": "Crate", "setup": "0x02000FA1", "icon": "0x06002CEF", "file": "25451 Crate.sql"}, {"wcid": 27455, "name": "Sealed Lugian Chest", "setup": "0x020010A4", "icon": "0x0600334C", "file": "27455 Sealed Lugian Chest.sql"}, {"wcid": 27658, "name": "Burun Mud-packed Chest", "setup": "0x020010D7", "icon": "0x060033B0", "file": "27658 Burun Mud-packed Chest.sql"}];
+const TMPL_DOOR_SETUPS  = [{"wcid": 278, "name": "Door", "setup": "0x0200024F", "icon": "0x06001317", "file": "00278 Door.sql"}, {"wcid": 412, "name": "Door", "setup": "0x0200027C", "icon": "0x06001317", "file": "00412 Door.sql"}, {"wcid": 720, "name": "Sliding Door", "setup": "0x02000310", "icon": "0x06001317", "file": "00720 Sliding Door.sql"}, {"wcid": 721, "name": "Door", "setup": "0x02000312", "icon": "0x06001317", "file": "00721 Door.sql"}, {"wcid": 1148, "name": "Door", "setup": "0x0200037E", "icon": "0x06001317", "file": "01148 Door.sql"}, {"wcid": 1666, "name": "Fortress-Door", "setup": "0x02000422", "icon": "0x06001317", "file": "01666 Fortress-Door.sql"}, {"wcid": 2179, "name": "Door", "setup": "0x02000281", "icon": "0x06001317", "file": "02179 Door.sql"}, {"wcid": 7885, "name": "Metal Door", "setup": "0x020005F1", "icon": "0x06001317", "file": "07885 Metal Door.sql"}, {"wcid": 8513, "name": "Vault Door", "setup": "0x020009A9", "icon": "0x06001317", "file": "08513 Vault Door.sql"}, {"wcid": 9108, "name": "Reinforced Door", "setup": "0x02000281", "icon": "0x06001412", "file": "09108 Reinforced Door.sql"}, {"wcid": 11699, "name": "Gate", "setup": "0x02000A7E", "icon": "0x06001317", "file": "11699 Gate.sql"}, {"wcid": 14467, "name": "Fireplace", "setup": "0x02000BDE", "icon": "0x060023AD", "file": "14467 Fireplace.sql"}, {"wcid": 14564, "name": "Swirling Portal", "setup": "0x02000C07", "icon": "0x0600106B", "file": "14564 Swirling Portal.sql"}, {"wcid": 15301, "name": "Bookcase", "setup": "0x02000C56", "icon": "0x06001356", "file": "15301 Bookcase.sql"}, {"wcid": 16919, "name": "Pedestal Weak Spot", "setup": "0x02000D55", "icon": "0x06001317", "file": "16919 Pedestal Weak Spot.sql"}, {"wcid": 25464, "name": "Door", "setup": "0x020005F2", "icon": "0x06001317", "file": "25464 Door.sql"}, {"wcid": 25564, "name": "Bone Door", "setup": "0x02000FDB", "icon": "0x06002D62", "file": "25564 Bone Door.sql"}, {"wcid": 25565, "name": "Sealed Door", "setup": "0x02000FDA", "icon": "0x06002D61", "file": "25565 Sealed Door.sql"}, {"wcid": 25581, "name": "Sarcophagus", "setup": "0x02000FE6", "icon": "0x06001317", "file": "25581 Sarcophagus.sql"}, {"wcid": 25582, "name": "Magic Wall", "setup": "0x02000FE7", "icon": "0x06001317", "file": "25582 Magic Wall.sql"}, {"wcid": 29963, "name": "Crypt Door", "setup": "0x02001204", "icon": "0x06001317", "file": "29963 Crypt Door.sql"}, {"wcid": 30641, "name": "Shrine Door", "setup": "0x020005DA", "icon": "0x06001317", "file": "30641 Shrine Door.sql"}];
+
+// ── Modal open/close ───────────────────────────────────────────────────────
+function openTemplateModal(){
+  var ov = document.getElementById('weenieTemplateModal');
+  if(ov){ ov.style.display='flex'; _tmplSwitchType('creature_mob'); }
+}
+function closeTemplateModal(){
+  var ov = document.getElementById('weenieTemplateModal');
+  if(ov) ov.style.display='none';
+}
+
+// ── Type switch ────────────────────────────────────────────────────────────
+var _tmplType = 'creature_mob';
+function _tmplSwitchType(t){
+  _tmplType = t;
+  var tabs = ['creature_mob','creature_npc','generator','door','chest','event'];
+  tabs.forEach(function(id){
+    var btn = document.getElementById('tmplTab_'+id);
+    if(btn) btn.classList.toggle('active', id===t);
+  });
+  _tmplRenderOptions();
+}
+
+function _tmplIconUrl(didHex){
+  // Convert "0x06001020" → padded hex → icon URL
+  var n = parseInt(didHex, 16)||0;
+  if(!n) return '';
+  return _iconsBaseUrl + '/' + n.toString(16).toUpperCase().padStart(8,'0') + '.png';
+}
+
+function _tmplSetupPickerHtml(id, setups){
+  // Render a visual icon grid picker for setup options
+  var rows = setups.map(function(s,i){
+    var iurl = _tmplIconUrl(s.icon);
+    var img  = iurl ? '<img src="'+iurl+'" style="width:36px;height:36px;object-fit:contain;image-rendering:pixelated;display:block;margin:0 auto 2px" onerror="this.style.display=\'none\'">' : '';
+    return '<label style="display:flex;flex-direction:column;align-items:center;'
+         + 'padding:6px 4px;border:2px solid var(--border);border-radius:3px;cursor:pointer;'
+         + 'background:var(--parch-dk);min-width:68px;flex-shrink:0;gap:0" '
+         + 'title="'+escHtml(s.name)+' ('+s.setup+')">'
+         + '<input type="radio" name="'+id+'" value="'+i+'" '+(i===0?'checked':'')+' '
+         + 'style="position:absolute;opacity:0;pointer-events:none">'
+         + img
+         + '<span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-dim);'
+         + 'text-align:center;line-height:1.2;word-break:break-word;max-width:66px">'
+         + escHtml(s.name)+'</span>'
+         + '</label>';
+  }).join('');
+  return '<div id="'+id+'_grid" style="display:flex;flex-wrap:wrap;gap:6px;'
+       + 'max-height:220px;overflow-y:auto;padding:8px;background:var(--parch-lt);'
+       + 'border:1px solid var(--border);border-radius:3px">'
+       + rows + '</div>';
+}
+
+function _tmplGetPickerVal(id){
+  var checked = document.querySelector('input[name="'+id+'"]:checked');
+  return checked ? parseInt(checked.value) : 0;
+}
+
+function _tmplRenderOptions(){
+  var wrap = document.getElementById('tmplOptions');
+  if(!wrap) return;
+  var html = '';
+
+  if(_tmplType === 'creature_mob'){
+    html = `
+      <div class="fl" style="margin-bottom:4px">Level (used to auto-scale attributes &amp; skills)</div>
+      <input type="number" id="tmplMobLevel" value="50" min="1" max="275"
+        style="width:100%;margin-bottom:10px">
+      <div class="note" style="margin-bottom:0">
+        Base: Drudge Prowler. Stats scale linearly from level 1 baseline to level 275 cap.
+        Attributes, vitals, and skills are all scaled. Tune per-property after loading.
+      </div>`;
+
+  } else if(_tmplType === 'creature_npc'){
+    html = `
+      <div class="fl" style="margin-bottom:4px">NPC Type</div>
+      <select id="tmplNpcType" style="width:100%;margin-bottom:0">
+        <option value="quest">Quest NPC</option>
+        <option value="vendor">Vendor NPC</option>
+      </select>`;
+
+  } else if(_tmplType === 'generator'){
+    html = `
+      <div class="fl" style="margin-bottom:4px">Generator Type</div>
+      <select id="tmplGenType" style="width:100%;margin-bottom:0">
+        <option value="standard">Standard</option>
+        <option value="event">Event</option>
+        <option value="linked">Linked</option>
+        <option value="linked_event">Linked Event</option>
+      </select>`;
+
+  } else if(_tmplType === 'door'){
+    html = `
+      <div class="fl" style="margin-bottom:4px">Door Type</div>
+      <select id="tmplDoorType" style="width:100%;margin-bottom:10px">
+        <option value="standard">Standard</option>
+        <option value="picklock">Pick Lockable</option>
+        <option value="keylock">Key Lock</option>
+        <option value="pick_or_key">Pick or Key</option>
+        <option value="localsignal">Lever / Local Signal</option>
+      </select>
+      <div id="tmplDoorKeyCodeWrap" style="display:none;margin-bottom:10px">
+        <div class="fl" style="margin-bottom:4px">KeyCode (string)</div>
+        <input type="text" id="tmplDoorKeyCode" value="MyDoorKey" style="width:100%">
+      </div>
+      <div id="tmplDoorLocalSignalWrap" style="display:none;margin-bottom:10px">
+        <div class="fl" style="margin-bottom:4px">Local Signal Quest Name (Open trigger)</div>
+        <input type="text" id="tmplDoorLocalOpen" value="DoorOpenI" style="width:100%;margin-bottom:6px">
+        <div class="fl" style="margin-bottom:4px">Local Signal Quest Name (Close trigger)</div>
+        <input type="text" id="tmplDoorLocalClose" value="DoorCloseI" style="width:100%">
+      </div>
+      <div class="fl" style="margin-bottom:6px">Appearance</div>
+      ${_tmplSetupPickerHtml('tmplDoorSetup', TMPL_DOOR_SETUPS)}`;
+
+  } else if(_tmplType === 'chest'){
+    html = `
+      <div class="fl" style="margin-bottom:4px">Chest Type</div>
+      <select id="tmplChestType" style="width:100%;margin-bottom:10px">
+        <option value="unlocked">Unlocked</option>
+        <option value="picklock">Lock Pickable</option>
+        <option value="keylock">Locked Needs Key</option>
+        <option value="questflag">Quest Flag</option>
+      </select>
+      <div id="tmplChestKeyCodeWrap" style="display:none;margin-bottom:10px">
+        <div class="fl" style="margin-bottom:4px">KeyCode (string)</div>
+        <input type="text" id="tmplChestKeyCode" value="MyChestKey" style="width:100%">
+      </div>
+      <div id="tmplChestQuestWrap" style="display:none;margin-bottom:10px">
+        <div class="fl" style="margin-bottom:4px">Quest Flag (string)</div>
+        <input type="text" id="tmplChestQuestFlag" value="MyQuestFlag" style="width:100%">
+      </div>
+      <div class="fl" style="margin-bottom:6px">Appearance</div>
+      ${_tmplSetupPickerHtml('tmplChestSetup', TMPL_CHEST_SETUPS)}`;
+
+  } else if(_tmplType === 'event'){
+    html = '<div class="note">Loads Event Controller (WCID 70820). Start/stop server events. Load Stopgap separately via its own tab.</div>';
+  } else if(_tmplType === 'stopgap'){
+    html = '<div class="note">Loads Stopgap (WCID 70821). Paired weenie for an Event Controller. Set GeneratorEvent string to match your event name after loading.</div>';
+  }
+
+  wrap.innerHTML = html;
+
+  // Wire door type → show/hide extra fields
+  var dtSel = document.getElementById('tmplDoorType');
+  if(dtSel){
+    function _updateDoorFields(){
+      var v = dtSel.value;
+      var kw = document.getElementById('tmplDoorKeyCodeWrap');
+      var lw = document.getElementById('tmplDoorLocalSignalWrap');
+      if(kw) kw.style.display = (v==='keylock'||v==='pick_or_key') ? '' : 'none';
+      if(lw) lw.style.display = (v==='localsignal') ? '' : 'none';
+    }
+    dtSel.addEventListener('change', _updateDoorFields);
+    _updateDoorFields();
+  }
+
+  // Wire chest type → show/hide extra fields
+  var ctSel = document.getElementById('tmplChestType');
+  if(ctSel){
+    function _updateChestFields(){
+      var v = ctSel.value;
+      var kw = document.getElementById('tmplChestKeyCodeWrap');
+      var qw = document.getElementById('tmplChestQuestWrap');
+      if(kw) kw.style.display = (v==='keylock') ? '' : 'none';
+      if(qw) qw.style.display = (v==='questflag') ? '' : 'none';
+    }
+    ctSel.addEventListener('change', _updateChestFields);
+    _updateChestFields();
+  }
+
+  // Visual radio selection highlight
+  wrap.querySelectorAll('input[type=radio]').forEach(function(r){
+    r.addEventListener('change', function(){
+      var grid = this.closest('[id$="_grid"]');
+      if(!grid) return;
+      grid.querySelectorAll('label').forEach(function(l){ l.style.borderColor='var(--border)'; l.style.background='var(--parch-dk)'; });
+      var lbl = this.closest('label');
+      if(lbl){ lbl.style.borderColor='var(--crimson)'; lbl.style.background='rgba(192,64,64,.08)'; }
+    });
+    // Highlight the initially-checked one
+    if(r.checked){
+      var lbl = r.closest('label');
+      if(lbl){ lbl.style.borderColor='var(--crimson)'; lbl.style.background='rgba(192,64,64,.08)'; }
+    }
+  });
+}
+
+// ── Load template ──────────────────────────────────────────────────────────
+function loadTemplate(){
+  var sql = _buildTemplateSql();
+  if(!sql){ toast('Could not build template SQL.',2000); return; }
+  closeTemplateModal();
+  _weenieHasContent = true;
+  importSQLString(sql);
+}
+
+// importSQLString: inject SQL as if imported from file (no pywebview needed)
+// Replicates the importSQLToBuilder pipeline without pywebview dependency.
+function importSQLString(sql){
+  _weenieHasContent = true;
+  window._importedFileName = '';
+  var fileType = _detectSQLFileType(sql);
+
+  // ── Recipe / Quest / Event ────────────────────────────────────────────
+  if(fileType==='recipe'||fileType==='quest'||fileType==='event'){
+    if(fileType!==curType) switchType(fileType);
+    setTimeout(function(){
+      var sqlOut=document.getElementById('sqlOut');
+      if(sqlOut){ sqlOut.value=sql; renderSQLHighlight(); }
+      if(typeof buildSubContent==='function') buildSubContent();
+      if(fileType==='quest')   _parseQuestSQL(sql);
+      else if(fileType==='event')   _parseEventSQL(sql);
+      else if(fileType==='recipe')  _parseRecipeSQL(sql);
+      if(fileType==='recipe' && typeof buildSubContent==='function') buildSubContent();
+      regen();
+      toast('\u2713 Template loaded.',2000);
+    },150);
+    return;
+  }
+
+  // ── Weenie ────────────────────────────────────────────────────────────
+  var info = _parseWeenieSQL(sql);
+
+  // Clear skill arrays same as importSQLToBuilder does
+  while(CORE_SKILL_IDS.length) CORE_SKILL_IDS.pop();
+  extraSkills.length = 0;
+
+  if(curType!=='weenie') switchType('weenie');
+
+  setTimeout(function(){
+    // Full state reset (mirrors importSQLToBuilder)
+    window._weenieSavedState = null;
+    extraInt=[];extraInt64=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];generatorRows=[];
+    spells=[];emotes=[];extraSkills=[];
+    createList=[];positions=[];bookPages=[];bookMeta={maxPages:2,maxChars:1000};window._weenieTabType=0;
+    _importedEmoteSQL='';_importedCreateListSQL='';_importedBookSQL='';
+    window._importedClassName=null;window._importedTimestamp=null;
+    window._importedBodyParts=null;window._importedCoreSkills=null;
+    while(CORE_SKILL_IDS.length) CORE_SKILL_IDS.pop();
+
+    // Load SQL into output panel
+    var sqlOut=document.getElementById('sqlOut');
+    if(sqlOut){ sqlOut.value=sql; }
+    renderSQLHighlight();
+
+    // Extract WCID
+    var _iWcid = (info&&info.wcid)||null;
+    if(!_iWcid){ var _dm=sql.match(/DELETE FROM `weenie` WHERE `class_Id`\s*=\s*(\d+)/i); if(_dm) _iWcid=_dm[1]; }
+    if(!_iWcid){ var _pm=sql.match(/VALUES\s*\(\s*(\d{1,7})\s*,/i); if(_pm) _iWcid=_pm[1]; }
+    window._importedWcid = _iWcid ? parseInt(_iWcid) : null;  // store before buildForm
+    if(_iWcid){ var _fwEl=document.getElementById('fWcid'); if(_fwEl) _fwEl.value=_iWcid; }
+
+    // Header fields
+    window._isImported = true;
+    var _wHdr=sql.match(/INSERT INTO `weenie`[\s\S]+?VALUES\s*\(\s*\d+\s*,\s*'([^']+)'\s*,\s*\d+\s*,\s*'([^']+)'/i);
+    window._importedClassName = _wHdr?_wHdr[1]:null;
+    window._importedTimestamp = _wHdr?_wHdr[2]:null;
+    window._importedWcid = _iWcid?parseInt(_iWcid):null;
+
+    var _fcnEl=document.getElementById('fClassName');
+    if(_fcnEl&&window._importedClassName) _fcnEl.value=window._importedClassName;
+
+    if(info&&info.typeNum){
+      var fWT=document.getElementById('fWeenieType'); if(fWT) fWT.value=info.typeNum;
+      window._weenieTabType=info.typeNum;
+    }
+    if(info&&info.name){ var fNm=document.getElementById('fName'); if(fNm) fNm.value=info.name; }
+
+    // Parse all sections
+    _extractImportedSections(sql, _iWcid);
+    _parseCreateListSQL(_importedCreateListSQL);
+    _parsePositionSQL(sql);
+    _parseGeneratorSQL(sql);
+    syncAdvancedFromSQL(true);
+    _parseSpellbookFromSQL(sql, _iWcid);
+    _parseEmotesFromImportedSQL(sql);
+    if(emotes.length){
+      var _nested=_nestSQLEmotes(emotes.slice());
+      emotes.splice(0,emotes.length);
+      _nested.forEach(function(e){emotes.push(e);});
+    }
+    _syncImportedToFormFields(sql);
+
+    // Rebuild all sub-panels via buildForm (creates spellbook/emotes panels)
+    if(typeof buildForm==='function') buildForm();
+    // Re-apply WCID/className/weenieType BEFORE rebuilding properties panel
+    var _reapplyWcid = _iWcid || (window._importedWcid ? String(window._importedWcid) : null);
+    if(_reapplyWcid){
+      var _fw2=document.getElementById('fWcid'); if(_fw2) _fw2.value=_reapplyWcid;
+    }
+    if(window._importedClassName){
+      var _fc2=document.getElementById('fClassName'); if(_fc2) _fc2.value=window._importedClassName;
+    }
+    if(info&&info.typeNum){
+      var _fwt=document.getElementById('fWeenieType'); if(_fwt){ _fwt.value=info.typeNum; window._weenieTabType=info.typeNum; }
+    }
+    // Now rebuild properties panel — fields are correct so summary shows right values
+    if(typeof rebuildPanel==='function') rebuildPanel('properties');
+    regen();
+    toast('\u2713 Template loaded.',2000);
+  },150);
+}
+
+// ── Template SQL builders ──────────────────────────────────────────────────
+function _buildTemplateSql(){
+  var now = new Date().toISOString().replace('T',' ').substring(0,19);
+  if(_tmplType==='creature_mob')    return _tmplMobSQL(now);
+  if(_tmplType==='creature_npc')    return _tmplNpcSQL(now);
+  if(_tmplType==='generator')       return _tmplGeneratorSQL(now);
+  if(_tmplType==='door')            return _tmplDoorSQL(now);
+  if(_tmplType==='chest')           return _tmplChestSQL(now);
+  if(_tmplType==='event')           return _tmplEventSQL(now);
+  if(_tmplType==='stopgap')         return _tmplStopgapSQL(now);
+  return null;
+}
+
+// ── Creature (Mob) ─────────────────────────────────────────────────────────
+// Drudge Prowler (WCID 192) base stats at level 1 and cap at 275
+// Linear scale: stat = base + (cap - base) * (level - 1) / 274
+function _tmplMobSQL(now){
+  var level = Math.max(1, Math.min(275, parseInt((document.getElementById('tmplMobLevel')||{}).value||50)||50));
+  var t = (level - 1) / 274;  // 0..1
+
+  function scale(lo, hi){ return Math.round(lo + (hi-lo)*t); }
+
+  // Attributes: [base_lvl1, cap_lvl275]
+  var str  = scale(100, 400); var end_ = scale(100, 400);
+  var crd  = scale(100, 400); var qck  = scale(100, 400);
+  var fcs  = scale(100, 400); var slf  = scale(100, 400);
+
+  // Vitals derived from attributes
+  var hp   = scale(20,  3000);
+  var sta  = scale(20,  2000);
+  var mana = scale(20,  2000);
+
+  // Skills (melee offense, melee defense, missile defense, creature enchant, etc.)
+  var melee_off  = scale(15, 400);
+  var melee_def  = scale(15, 350);
+  var miss_def   = scale(15, 300);
+  var run        = scale(15, 300);
+  var creature_m = scale(15, 350);
+
+  return `DELETE FROM \`weenie\` WHERE \`class_Id\` = 192;
+
+INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)
+VALUES (192, 'drudgeprowler', 10, '${now}') /* Creature */;
+
+INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (192,   1,         10) /* ItemType - Creature */
+     , (192,   2,          2) /* CreatureType - Human */
+     , (192,  16,          1) /* ItemUseable */
+     , (192,  25,     ${level}) /* Level */
+     , (192,  93,       8388608) /* PhysicsState */
+     , (192, 113,          1) /* CreatureType */;
+
+INSERT INTO \`weenie_properties_bool\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (192,   1, True ) /* Stuck */
+     , (192,  19, True ) /* Attackable */;
+
+INSERT INTO \`weenie_properties_float\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (192,   1,      60) /* HeartbeatInterval */
+     , (192,   2,       0) /* HeartbeatTimestamp */
+     , (192,   3,       2) /* HealthRate */
+     , (192,   4,       1) /* StaminaRate */
+     , (192,   5,       1) /* ManaRate */
+     , (192,  19,       2.5) /* WalkRunThreshold */
+     , (192,  20,       3) /* RunSkill */
+     , (192,  39,       1) /* SlashProt */
+     , (192,  40,       1) /* PierceProt */
+     , (192,  41,       1) /* BludgProt */
+     , (192,  42,       1) /* FireProt */
+     , (192,  43,       1) /* ColdProt */
+     , (192,  44,       1) /* AcidProt */
+     , (192,  45,       1) /* ElectricProt */;
+
+INSERT INTO \`weenie_properties_string\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (192,   1, 'Drudge Prowler') /* Name */;
+
+INSERT INTO \`weenie_properties_d_i_d\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (192,   1, 0x02000001) /* Setup */
+     , (192,   2, 0x09000001) /* MotionTable */
+     , (192,   3, 0x20000001) /* SoundTable */
+     , (192,   8, 0x06001139) /* Icon */
+     , (192,  9, 0x10000003) /* DefaultCombatStyle */;
+
+INSERT INTO \`weenie_properties_attribute\` (\`object_Id\`, \`type\`, \`init_Level\`, \`level_From_C_P\`, \`c_P_Spent\`)
+VALUES (192, 1, ${str},  0, 0) /* Strength */
+     , (192, 2, ${end_}, 0, 0) /* Endurance */
+     , (192, 3, ${qck},  0, 0) /* Quickness */
+     , (192, 4, ${crd},  0, 0) /* Coordination */
+     , (192, 5, ${fcs},  0, 0) /* Focus */
+     , (192, 6, ${slf},  0, 0) /* Self */;
+
+INSERT INTO \`weenie_properties_attribute_2nd\` (\`object_Id\`, \`type\`, \`init_Level\`, \`level_From_C_P\`, \`c_P_Spent\`, \`current_Level\`)
+VALUES (192, 1, ${hp},   0, 0, ${hp})   /* Health */
+     , (192, 3, ${sta},  0, 0, ${sta})  /* Stamina */
+     , (192, 5, ${mana}, 0, 0, ${mana}) /* Mana */;
+
+INSERT INTO \`weenie_properties_skill\` (\`object_Id\`, \`type\`, \`level_From_P_P\`, \`s_a_c\`, \`p_p\`, \`init_Level\`, \`resistance_At_Last_Check\`, \`last_Used_Time\`)
+VALUES (192,  6, 0, 3, 0, ${melee_off}, 0, 0) /* MeleeDefense - Trained */
+     , (192,  7, 0, 3, 0, ${melee_def}, 0, 0) /* MissileDefense - Trained */
+     , (192, 34, 0, 3, 0, ${melee_off}, 0, 0) /* LightWeapons - Trained */
+     , (192, 45, 0, 1, 0, ${run},       0, 0) /* Run - Untrained */;`;
+}
+
+// ── Creature (NPC) ─────────────────────────────────────────────────────────
+function _tmplNpcSQL(now){
+  var npcType = (document.getElementById('tmplNpcType')||{}).value||'quest';
+  var isVendor = npcType === 'vendor';
+  var wcid  = isVendor ? 710 : 24248;
+  var cname = isVendor ? 'shopkeep' : 'royalguard';
+  var dname = isVendor ? 'Shopkeeper' : 'Royal Guard';
+  var vendorExtra = isVendor ? `
+     , (${wcid},  11,      1) /* MerchandiseItemTypes */
+     , (${wcid},  12,      0) /* MerchandiseMinValue */
+     , (${wcid},  13, 100000) /* MerchandiseMaxValue */
+     , (${wcid},  14,      5) /* NumItemsSoldPerInterval */` : '';
+  return `DELETE FROM \`weenie\` WHERE \`class_Id\` = ${wcid};
+
+INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)
+VALUES (${wcid}, '${cname}', 10, '${now}') /* Creature */;
+
+INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (${wcid},   1,         10) /* ItemType - Creature */
+     , (${wcid},  16,          1) /* ItemUseable */
+     , (${wcid},  25,         50) /* Level */
+     , (${wcid},  93,    8388608) /* PhysicsState */${vendorExtra};
+
+INSERT INTO \`weenie_properties_bool\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (${wcid},   1, True ) /* Stuck */
+     , (${wcid},  19, False) /* Attackable */;
+
+INSERT INTO \`weenie_properties_float\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (${wcid},   1,  60) /* HeartbeatInterval */
+     , (${wcid},   2,   0) /* HeartbeatTimestamp */;
+
+INSERT INTO \`weenie_properties_string\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (${wcid}, 1, '${dname}') /* Name */;
+
+INSERT INTO \`weenie_properties_d_i_d\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (${wcid},  1, 0x0200007D) /* Setup */
+     , (${wcid},  2, 0x09000001) /* MotionTable */
+     , (${wcid},  3, 0x20000001) /* SoundTable */
+     , (${wcid},  8, 0x06001139) /* Icon */;
+
+INSERT INTO \`weenie_properties_attribute\` (\`object_Id\`, \`type\`, \`init_Level\`, \`level_From_C_P\`, \`c_P_Spent\`)
+VALUES (${wcid}, 1, 200, 0, 0) /* Strength */
+     , (${wcid}, 2, 200, 0, 0) /* Endurance */
+     , (${wcid}, 3, 200, 0, 0) /* Quickness */
+     , (${wcid}, 4, 200, 0, 0) /* Coordination */
+     , (${wcid}, 5, 200, 0, 0) /* Focus */
+     , (${wcid}, 6, 200, 0, 0) /* Self */;
+
+INSERT INTO \`weenie_properties_attribute_2nd\` (\`object_Id\`, \`type\`, \`init_Level\`, \`level_From_C_P\`, \`c_P_Spent\`, \`current_Level\`)
+VALUES (${wcid}, 1, 1000, 0, 0, 1000) /* Health */
+     , (${wcid}, 3,  500, 0, 0,  500) /* Stamina */
+     , (${wcid}, 5,  500, 0, 0,  500) /* Mana */;`;
+}
+
+// ── Generator ──────────────────────────────────────────────────────────────
+function _tmplGeneratorSQL(now){
+  var gt = (document.getElementById('tmplGenType')||{}).value||'standard';
+  if(gt==='linked'){
+    return `DELETE FROM \`weenie\` WHERE \`class_Id\` = 3955;
+
+INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)
+VALUES (3955, 'linkmonstergen15minutes', 1, '${now}') /* Generic */;
+
+INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (3955,  66, 1) /* CheckpointStatus */
+     , (3955,  81, 0) /* MaxGeneratedObjects */
+     , (3955,  82, 0) /* InitGeneratedObjects */
+     , (3955,  93, 1044) /* PhysicsState */;
+
+INSERT INTO \`weenie_properties_bool\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (3955,  1, True) /* Stuck */
+     , (3955, 11, True) /* IgnoreCollisions */
+     , (3955, 18, True) /* Visibility */;
+
+INSERT INTO \`weenie_properties_float\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (3955, 41, 900) /* RegenerationInterval */
+     , (3955, 43,   1) /* GeneratorRadius */;
+
+INSERT INTO \`weenie_properties_string\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (3955, 1, 'Linkable Monster Gen (15 min.)') /* Name */;
+
+INSERT INTO \`weenie_properties_d_i_d\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (3955, 1, 0x0200026B) /* Setup */
+     , (3955, 8, 0x06001066) /* Icon */;
+
+INSERT INTO \`weenie_properties_generator\` (\`object_Id\`, \`probability\`, \`weenie_Class_Id\`, \`delay\`, \`init_Create\`, \`max_Create\`, \`when_Create\`, \`where_Create\`, \`stack_Size\`, \`palette_Id\`, \`shade\`, \`obj_Cell_Id\`, \`origin_X\`, \`origin_Y\`, \`origin_Z\`, \`angles_W\`, \`angles_X\`, \`angles_Y\`, \`angles_Z\`)
+VALUES (3955, -1, 3666, 900, 1, 1, 1, 4, -1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0);`;
+  }
+  if(gt==='linked_event'){
+    return `DELETE FROM \`weenie\` WHERE \`class_Id\` = 220005;
+
+INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)
+VALUES (220005, '220005epiclinkablegenerator2h', 1, '${now}') /* Generic */;
+
+INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (220005,  66, 1) /* CheckpointStatus */
+     , (220005,  81, 0) /* MaxGeneratedObjects */
+     , (220005,  82, 0) /* InitGeneratedObjects */
+     , (220005,  93, 1044) /* PhysicsState */
+     , (220005, 142, 3) /* GeneratorTimeType */
+     , (220005, 145, 2) /* GeneratorEndDestructionType */;
+
+INSERT INTO \`weenie_properties_bool\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (220005,  1, True) /* Stuck */
+     , (220005, 11, True) /* IgnoreCollisions */
+     , (220005, 18, True) /* Visibility */;
+
+INSERT INTO \`weenie_properties_float\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (220005, 41, 0) /* RegenerationInterval */
+     , (220005, 43, 1) /* GeneratorRadius */;
+
+INSERT INTO \`weenie_properties_string\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (220005, 1, 'Epic Linkable Generator (2h)') /* Name */
+     , (220005, 34, 'MyEvent') /* GeneratorEvent */;
+
+INSERT INTO \`weenie_properties_d_i_d\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (220005, 1, 0x0200026B) /* Setup */
+     , (220005, 8, 0x06001066) /* Icon */;
+
+INSERT INTO \`weenie_properties_generator\` (\`object_Id\`, \`probability\`, \`weenie_Class_Id\`, \`delay\`, \`init_Create\`, \`max_Create\`, \`when_Create\`, \`where_Create\`, \`stack_Size\`, \`palette_Id\`, \`shade\`, \`obj_Cell_Id\`, \`origin_X\`, \`origin_Y\`, \`origin_Z\`, \`angles_W\`, \`angles_X\`, \`angles_Y\`, \`angles_Z\`)
+VALUES (220005, -1, 3666, 7200, 1, 1, 1, 4, -1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0);`;
+  }
+  // Standard (385) and Event (80022) - simplified generic generator
+  var wcid = gt==='event' ? 80022 : 385;
+  var name = gt==='event' ? 'pumpkingenerator' : 'cowgenerator';
+  var dispName = gt==='event' ? 'Pumpkin Buffer Generator' : 'Cow Generator';
+  var delay = gt==='event' ? 3600 : 300;
+  var event_rows = gt==='event' ? `
+     , (${wcid}, 142, 3) /* GeneratorTimeType */
+     , (${wcid}, 145, 2) /* GeneratorEndDestructionType */` : '';
+  var event_str = gt==='event' ? `\nINSERT INTO \`weenie_properties_string\` (\`object_Id\`, \`type\`, \`value\`)\nVALUES (${wcid}, 1, '${dispName}') /* Name */\n     , (${wcid}, 34, 'MyEvent') /* GeneratorEvent */;` : `\nINSERT INTO \`weenie_properties_string\` (\`object_Id\`, \`type\`, \`value\`)\nVALUES (${wcid}, 1, '${dispName}') /* Name */;`;
+  return `DELETE FROM \`weenie\` WHERE \`class_Id\` = ${wcid};
+
+INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)
+VALUES (${wcid}, '${name}', 1, '${now}') /* Generic */;
+
+INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (${wcid},  66, 1) /* CheckpointStatus */
+     , (${wcid},  81, 0) /* MaxGeneratedObjects */
+     , (${wcid},  82, 0) /* InitGeneratedObjects */
+     , (${wcid},  93, 1044) /* PhysicsState */
+     , (${wcid}, 142, 1) /* GeneratorTimeType */${event_rows};
+
+INSERT INTO \`weenie_properties_bool\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (${wcid},  1, True) /* Stuck */
+     , (${wcid}, 11, True) /* IgnoreCollisions */
+     , (${wcid}, 18, True) /* Visibility */;
+
+INSERT INTO \`weenie_properties_float\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (${wcid}, 41, ${delay}) /* RegenerationInterval */
+     , (${wcid}, 43, 1) /* GeneratorRadius */;
+${event_str}
+INSERT INTO \`weenie_properties_d_i_d\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (${wcid}, 1, 0x0200026B) /* Setup */
+     , (${wcid}, 8, 0x06001066) /* Icon */;
+
+INSERT INTO \`weenie_properties_generator\` (\`object_Id\`, \`probability\`, \`weenie_Class_Id\`, \`delay\`, \`init_Create\`, \`max_Create\`, \`when_Create\`, \`where_Create\`, \`stack_Size\`, \`palette_Id\`, \`shade\`, \`obj_Cell_Id\`, \`origin_X\`, \`origin_Y\`, \`origin_Z\`, \`angles_W\`, \`angles_X\`, \`angles_Y\`, \`angles_Z\`)
+VALUES (${wcid}, -1, 3666, ${delay}, 1, 1, 1, 4, -1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0);`;
+}
+
+// ── Door ───────────────────────────────────────────────────────────────────
+function _tmplDoorSQL(now){
+  var dtype  = (document.getElementById('tmplDoorType')||{}).value||'standard';
+  var sidx   = _tmplGetPickerVal('tmplDoorSetup');
+  var setup  = TMPL_DOOR_SETUPS[sidx] || TMPL_DOOR_SETUPS[0];
+  var locked = (dtype==='picklock'||dtype==='keylock'||dtype==='pick_or_key');
+  var keycode= (dtype==='keylock'||dtype==='pick_or_key') ?
+                ((document.getElementById('tmplDoorKeyCode')||{}).value||'MyDoorKey') : null;
+  var localOpen  = (document.getElementById('tmplDoorLocalOpen')||{}).value||'DoorOpenI';
+  var localClose = (document.getElementById('tmplDoorLocalClose')||{}).value||'DoorCloseI';
+
+  var lockedBool = locked ? `     , (412,  35, True ) /* DefaultLocked */\n` : '';
+  var keyStr = keycode
+    ? `\nINSERT INTO \`weenie_properties_string\` (\`object_Id\`, \`type\`, \`value\`)\nVALUES (412,   1, 'Door') /* Name */\n     , (412,  13, '${keycode}') /* KeyCode */;`
+    : `\nINSERT INTO \`weenie_properties_string\` (\`object_Id\`, \`type\`, \`value\`)\nVALUES (412,   1, 'Door') /* Name */\n     , (412,  14, 'This door cannot be activated from here') /* Use */;`;
+
+  var emoteRows = dtype==='localsignal' ? `
+INSERT INTO \`weenie_properties_emote\` (\`object_Id\`, \`category\`, \`probability\`, \`weenie_Class_Id\`, \`style\`, \`substyle\`, \`quest\`, \`vendor_Type\`, \`min_Health\`, \`max_Health\`)
+VALUES (412, 37 /* ReceiveLocalSignal */, 1, NULL, NULL, NULL, '${localOpen}', NULL, NULL, NULL);
+SET @parent_id = LAST_INSERT_ID();
+INSERT INTO \`weenie_properties_emote_action\` (\`emote_Id\`, \`order\`, \`type\`, \`delay\`, \`extent\`, \`motion\`, \`message\`, \`test_String\`, \`min\`, \`max\`, \`min_64\`, \`max_64\`, \`min_Dbl\`, \`max_Dbl\`, \`stat\`, \`display\`, \`amount\`, \`amount_64\`, \`hero_X_P_64\`, \`percent\`, \`spell_Id\`, \`wealth_Rating\`, \`treasure_Class\`, \`treasure_Type\`, \`p_Script\`, \`sound\`, \`destination_Type\`, \`weenie_Class_Id\`, \`stack_Size\`, \`palette\`, \`shade\`, \`try_To_Bond\`, \`obj_Cell_Id\`, \`origin_X\`, \`origin_Y\`, \`origin_Z\`, \`angles_W\`, \`angles_X\`, \`angles_Y\`, \`angles_Z\`)
+VALUES (@parent_id, 0, 116 /* OpenMe */, 0, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+
+INSERT INTO \`weenie_properties_emote\` (\`object_Id\`, \`category\`, \`probability\`, \`weenie_Class_Id\`, \`style\`, \`substyle\`, \`quest\`, \`vendor_Type\`, \`min_Health\`, \`max_Health\`)
+VALUES (412, 37 /* ReceiveLocalSignal */, 1, NULL, NULL, NULL, '${localClose}', NULL, NULL, NULL);
+SET @parent_id = LAST_INSERT_ID();
+INSERT INTO \`weenie_properties_emote_action\` (\`emote_Id\`, \`order\`, \`type\`, \`delay\`, \`extent\`, \`motion\`, \`message\`, \`test_String\`, \`min\`, \`max\`, \`min_64\`, \`max_64\`, \`min_Dbl\`, \`max_Dbl\`, \`stat\`, \`display\`, \`amount\`, \`amount_64\`, \`hero_X_P_64\`, \`percent\`, \`spell_Id\`, \`wealth_Rating\`, \`treasure_Class\`, \`treasure_Type\`, \`p_Script\`, \`sound\`, \`destination_Type\`, \`weenie_Class_Id\`, \`stack_Size\`, \`palette\`, \`shade\`, \`try_To_Bond\`, \`obj_Cell_Id\`, \`origin_X\`, \`origin_Y\`, \`origin_Z\`, \`angles_W\`, \`angles_X\`, \`angles_Y\`, \`angles_Z\`)
+VALUES (@parent_id, 0, 117 /* CloseMe */, 0, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);` : '';
+
+  return `DELETE FROM \`weenie\` WHERE \`class_Id\` = 412;
+
+INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)
+VALUES (412, 'door', 19, '${now}') /* Door */;
+
+INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (412,   1,   128) /* ItemType */
+     , (412,   8,   500) /* Mass */
+     , (412,  16,     1) /* ItemUseable */
+     , (412,  19,     0) /* Value */
+     , (412,  93,    24) /* PhysicsState */
+     , (412, 290,     1) /* HearLocalSignals */
+     , (412, 291,   120) /* HearLocalSignalsRadius */;
+
+INSERT INTO \`weenie_properties_bool\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (412,   1, True ) /* Stuck */
+     , (412,   2, False) /* Open */
+     , (412,  12, True ) /* ReportCollisions */
+     , (412,  13, False) /* Ethereal */
+     , (412,  14, False) /* GravityStatus */
+     , (412,  33, False) /* ResetMessagePending */
+     , (412,  34, False) /* DefaultOpen */
+${lockedBool};
+
+INSERT INTO \`weenie_properties_float\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (412,  11,   0) /* ResetInterval */
+     , (412,  54,   2) /* UseRadius */;
+${keyStr}
+
+INSERT INTO \`weenie_properties_d_i_d\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (412,  1, ${setup.setup}) /* Setup */
+     , (412,  2, 0x09000086) /* MotionTable */
+     , (412,  3, 0x20000023) /* SoundTable */
+     , (412,  8, ${setup.icon}) /* Icon */
+     , (412, 22, 0x3400002B) /* PhysicsEffectTable */;
+${emoteRows}`;
+}
+
+// ── Chest ──────────────────────────────────────────────────────────────────
+function _tmplChestSQL(now){
+  var ct    = (document.getElementById('tmplChestType')||{}).value||'unlocked';
+  var sidx  = _tmplGetPickerVal('tmplChestSetup');
+  var setup = TMPL_CHEST_SETUPS[sidx] || TMPL_CHEST_SETUPS[0];
+
+  var baseWcid = ct==='picklock' ? 3961 : ct==='keylock' ? 33609 : 1946;
+  var keycode  = ct==='keylock' ? ((document.getElementById('tmplChestKeyCode')||{}).value||'MyChestKey') : null;
+  var qFlag    = ct==='questflag' ? ((document.getElementById('tmplChestQuestFlag')||{}).value||'MyQuestFlag') : null;
+
+  var lockRows = (ct==='picklock'||ct==='keylock'||ct==='questflag')
+    ? `     , (${baseWcid},  35, True ) /* DefaultLocked */\n` : '';
+  var extraStr = '';
+  if(keycode)  extraStr = `\n     , (${baseWcid},  13, '${keycode}') /* KeyCode */`;
+  if(qFlag)    extraStr = `\n     , (${baseWcid},  33, '${qFlag}') /* Quest */`;
+
+  return `DELETE FROM \`weenie\` WHERE \`class_Id\` = ${baseWcid};
+
+INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)
+VALUES (${baseWcid}, 'chest', 2, '${now}') /* Container */;
+
+INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (${baseWcid},   1, 128) /* ItemType */
+     , (${baseWcid},  16,   1) /* ItemUseable */
+     , (${baseWcid},  19,   0) /* Value */
+     , (${baseWcid},  93,  24) /* PhysicsState */;
+
+INSERT INTO \`weenie_properties_bool\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (${baseWcid},   1, True ) /* Stuck */
+     , (${baseWcid},   2, False) /* Open */
+     , (${baseWcid},  13, False) /* Ethereal */
+${lockRows};
+
+INSERT INTO \`weenie_properties_float\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (${baseWcid}, 11,   0) /* ResetInterval */
+     , (${baseWcid}, 54,   2) /* UseRadius */;
+
+INSERT INTO \`weenie_properties_string\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (${baseWcid}, 1, 'Chest') /* Name */${extraStr};
+
+INSERT INTO \`weenie_properties_d_i_d\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (${baseWcid}, 1, ${setup.setup}) /* Setup */
+     , (${baseWcid}, 2, 0x09000086) /* MotionTable */
+     , (${baseWcid}, 3, 0x20000023) /* SoundTable */
+     , (${baseWcid}, 8, ${setup.icon}) /* Icon */;`;
+}
+
+// ── Event Controller / Stopgap ─────────────────────────────────────────────
+function _tmplEventSQL(now){
+  var parts = [];
+  var ctrl = true; var stop = false;
+  if(ctrl) parts.push(`DELETE FROM \`weenie\` WHERE \`class_Id\` = 70820;
+
+INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)
+VALUES (70820, 'eventcontroller', 1, '${now}') /* Generic */;
+
+INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (70820,  66, 1) /* CheckpointStatus */
+     , (70820,  93, 1044) /* PhysicsState */;
+
+INSERT INTO \`weenie_properties_bool\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (70820,  1, True) /* Stuck */
+     , (70820, 11, True) /* IgnoreCollisions */
+     , (70820, 18, True) /* Visibility */;
+
+INSERT INTO \`weenie_properties_string\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (70820, 1, 'Event Controller') /* Name */
+     , (70820, 34, 'MyEvent') /* GeneratorEvent */;
+
+INSERT INTO \`weenie_properties_d_i_d\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (70820, 1, 0x0200026B) /* Setup */
+     , (70820, 8, 0x06001066) /* Icon */;`);
+  if(stop) parts.push(`DELETE FROM \`weenie\` WHERE \`class_Id\` = 70821;
+
+INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)
+VALUES (70821, 'eventcontrollerstopgap', 1, '${now}') /* Generic */;
+
+INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (70821,  66, 1) /* CheckpointStatus */
+     , (70821,  93, 1044) /* PhysicsState */;
+
+INSERT INTO \`weenie_properties_bool\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (70821,  1, True) /* Stuck */
+     , (70821, 11, True) /* IgnoreCollisions */
+     , (70821, 18, True) /* Visibility */;
+
+INSERT INTO \`weenie_properties_string\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (70821, 1, 'Event Stopgap') /* Name */
+     , (70821, 34, 'MyEvent') /* GeneratorEvent */;
+
+INSERT INTO \`weenie_properties_d_i_d\` (\`object_Id\`, \`type\`, \`value\`)
+VALUES (70821, 1, 0x0200026B) /* Setup */
+     , (70821, 8, 0x06001066) /* Icon */;`);
+  return parts.join('\n\n') || null;
+}
+
+function _tmplStopgapSQL(now){
+  return 'DELETE FROM `weenie` WHERE `class_Id` = 70821;\n\n'
+    +'INSERT INTO `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)\n'
+    +"VALUES (70821, 'eventcontrollerstopgap', 1, '"+ now +"') /* Generic */;\n\n"
+    +'INSERT INTO `weenie_properties_int` (`object_Id`, `type`, `value`)\n'
+    +'VALUES (70821,  66, 1) /* CheckpointStatus */\n'
+    +'     , (70821,  93, 1044) /* PhysicsState */;\n\n'
+    +'INSERT INTO `weenie_properties_bool` (`object_Id`, `type`, `value`)\n'
+    +'VALUES (70821,  1, True) /* Stuck */\n'
+    +'     , (70821, 11, True) /* IgnoreCollisions */\n'
+    +'     , (70821, 18, True) /* Visibility */;\n\n'
+    +'INSERT INTO `weenie_properties_string` (`object_Id`, `type`, `value`)\n'
+    +"VALUES (70821, 1, 'Event Stopgap') /* Name */\n"
+    +"     , (70821, 34, 'MyEvent') /* GeneratorEvent */;\n\n"
+    +'INSERT INTO `weenie_properties_d_i_d` (`object_Id`, `type`, `value`)\n'
+    +'VALUES (70821, 1, 0x0200026B) /* Setup */\n'
+    +'     , (70821, 8, 0x06001066) /* Icon */;';
 }
 
 // ── Recipe Cookbook Auto-populate ─────────────────────────────────────────
@@ -7742,12 +8566,25 @@ let _userEditingSQL=false;
 let _sqlEditTimer=null;
 let _sqlDirty=false; // true when user has manually edited the SQL
 
+var _weenieHasContent = false;  // start blank; set true on import or template load
+
 function regen(){
   if(_regenLock) return;
   _regenLock=true;
   _d('BUILD','regen()');
   try{buildSQL();}catch(e){_d('ERR','buildSQL threw: '+e.message);console.error('SQL:',e);}
   _regenLock=false;
+  // Toggle welcome panel (defined in template script)
+  if(typeof _applyWeenieWelcomeState==='function') _applyWeenieWelcomeState();
+  // If no content yet, blank the preview
+  if(!_weenieHasContent){
+    var _so=document.getElementById('sqlOut');
+    var _sh=document.getElementById('sqlOutHl');
+    if(_so) _so.value='';
+    if(_sh) _sh.innerHTML='';
+    _regenLock=false;
+    return;
+  }
   // Regen from form always clears any manual SQL edits
   if(_sqlDirty) markSQLClean();
   // Snapshot current SQL into _lastSQLProps for the Properties tab display
@@ -9627,14 +10464,15 @@ function detectOllamaModels(){
         const hintsEl=$('sModelHints');
         hintsEl.innerHTML='<div style="font-family:var(--ui-font);font-size:9px;color:var(--green);margin-bottom:4px">✓ Ollama running — '+models.length+' model(s) installed:</div>'
           +models.map(m=>`<button onclick="setV('sModel','${m}')" style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.05em;padding:4px 12px;border:1px solid var(--green);background:transparent;color:var(--green);cursor:pointer;border-radius:10px;margin:2px" onmouseover="this.style.background='var(--green)';this.style.color='#000'" onmouseout="this.style.background='transparent';this.style.color='var(--green)'">${m}</button>`).join('');
-        // Auto-select first model if none set
-        if(!$('sModel').value||$('sModel').value==='deepseek-r1:14b')
+        // Auto-select first model if none set — guard in case panel closed
+        if($('sModel')&&(!$('sModel').value||$('sModel').value==='deepseek-r1:14b'))
           setV('sModel',models[0]);
       }
     })
     .catch(()=>{
-      // Ollama not running — show helpful message
+      // Ollama not running — panel may have closed by now, guard against null
       const note=$('sProviderNote');
+      if(!note) return;
       note.innerHTML='⚠ Ollama not detected at localhost:11434. <a href="https://ollama.com" style="color:var(--gold)">Install Ollama</a> and run <code>ollama serve</code>, then reopen Settings.';
       note.style.color='var(--gold)';
     });
@@ -12742,8 +13580,31 @@ function _setupPreviewBtnHtml(hexVal){
 }
 
 // Init DAT status check on startup
+function _applyWeenieWelcomeState(){
+  // Only applies when on the weenie tab
+  if(typeof curType !== 'undefined' && curType !== 'weenie') return;
+  var welcome  = document.getElementById('weenieWelcome');
+  var wbHdr    = document.getElementById('wbHeader');
+  var idRow    = document.getElementById('idRow');
+  var subTabs  = document.getElementById('subTabs');
+  var presets  = document.getElementById('presetsRow');
+  var fc       = document.getElementById('formContent');
+  // NOTE: innerTabs (Weenie/Recipe/Quest/Event selector) is ALWAYS visible
+  if(!welcome || !fc) return;
+  var blank = !_weenieHasContent;
+  welcome.style.display   = blank ? 'flex' : 'none';
+  fc.style.display        = blank ? 'none' : '';
+  if(wbHdr)   wbHdr.style.display   = blank ? 'none' : '';
+  if(idRow)   idRow.style.display    = blank ? 'none' : '';
+  if(subTabs) subTabs.style.display  = blank ? 'none' : '';
+  if(presets) presets.style.display  = blank ? 'none' : '';
+}
+
 document.addEventListener('DOMContentLoaded', function(){
-  // nothing extra needed — button is injected via extraRows patch below
+  // Apply welcome state once DOM and scripts are ready
+  setTimeout(function(){
+    if(typeof _applyWeenieWelcomeState==='function') _applyWeenieWelcomeState();
+  }, 80);
 });
 
 </script>
@@ -13019,6 +13880,94 @@ document.addEventListener('DOMContentLoaded', function(){
   </div>
 </div>
 
+
+<!-- WEENIE TEMPLATE MODAL -->
+<div id="weenieTemplateModal" style="display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.65);z-index:700;align-items:center;justify-content:center">
+  <div style="background:var(--parch);border:1px solid var(--border);border-radius:4px;
+    width:540px;max-height:85vh;overflow-y:auto;
+    box-shadow:0 10px 50px rgba(0,0,0,.7);display:flex;flex-direction:column">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;
+      padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <div style="font-family:var(--ui-font);font-size:11px;font-weight:700;
+        letter-spacing:.1em;color:var(--crimson)">&#x2B1C; IMPORT FROM TEMPLATE</div>
+      <button onclick="closeTemplateModal()" style="background:none;border:none;
+        font-size:18px;cursor:pointer;color:var(--ink-dim);line-height:1">&times;</button>
+    </div>
+
+    <!-- Type selector tabs -->
+    <div style="display:flex;flex-wrap:wrap;gap:4px;padding:12px 18px 0;flex-shrink:0">
+      <button class="prop-stab active" id="tmplTab_creature_mob"
+        onclick="_tmplSwitchType('creature_mob')">Creature (Mob)</button>
+      <button class="prop-stab" id="tmplTab_creature_npc"
+        onclick="_tmplSwitchType('creature_npc')">Creature (NPC)</button>
+      <button class="prop-stab" id="tmplTab_generator"
+        onclick="_tmplSwitchType('generator')">Generator</button>
+      <button class="prop-stab" id="tmplTab_door"
+        onclick="_tmplSwitchType('door')">Door</button>
+      <button class="prop-stab" id="tmplTab_chest"
+        onclick="_tmplSwitchType('chest')">Chest</button>
+      <button class="prop-stab" id="tmplTab_event"
+        onclick="_tmplSwitchType('event')">Event Controller</button>
+      <button class="prop-stab" id="tmplTab_stopgap"
+        onclick="_tmplSwitchType('stopgap')">Stopgap</button>
+    </div>
+
+    <!-- Options body -->
+    <div id="tmplOptions" style="padding:16px 18px;flex:1"></div>
+
+    <!-- Footer -->
+    <div style="display:flex;gap:10px;justify-content:flex-end;
+      padding:12px 18px;border-top:1px solid var(--border);flex-shrink:0">
+      <button onclick="closeTemplateModal()"
+        style="padding:8px 18px;font-family:var(--ui-font);font-size:10px;
+        font-weight:700;letter-spacing:.06em;background:transparent;
+        border:1px solid var(--border);cursor:pointer;color:var(--ink-dim)">
+        Cancel
+      </button>
+      <button onclick="loadTemplate()"
+        style="padding:8px 22px;font-family:var(--ui-font);font-size:10px;
+        font-weight:700;letter-spacing:.06em;background:var(--crimson);
+        border:1px solid var(--crimson);cursor:pointer;color:#fff;border-radius:2px">
+        &#x2714; Load Template
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- IMPORT CHOICE OVERLAY -->
+<div id="importChoiceOverlay" style="display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.6);z-index:800;align-items:center;justify-content:center">
+  <div style="background:var(--parch);border:1px solid var(--border);border-radius:4px;
+    width:360px;box-shadow:0 10px 40px rgba(0,0,0,.6)">
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);
+      font-family:var(--ui-font);font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--crimson)">
+      &#x2B06; IMPORT
+    </div>
+    <div style="padding:20px 18px;display:flex;flex-direction:column;gap:10px">
+      <button onclick="document.getElementById('importChoiceOverlay').style.display='none';importSQLBrowse();"
+        style="padding:12px 20px;font-family:var(--ui-font);font-size:10px;font-weight:700;
+          letter-spacing:.08em;background:var(--crimson);border:none;color:#fff;
+          cursor:pointer;border-radius:2px;text-align:left">
+        &#x1F4C2; Browse for SQL File
+      </button>
+      <button onclick="document.getElementById('importChoiceOverlay').style.display='none';openTemplateModal();"
+        style="padding:12px 20px;font-family:var(--ui-font);font-size:10px;font-weight:700;
+          letter-spacing:.08em;background:transparent;border:1px solid var(--crimson);
+          color:var(--crimson);cursor:pointer;border-radius:2px;text-align:left">
+        &#x2B1C; Import from Template
+      </button>
+    </div>
+    <div style="padding:0 18px 14px;text-align:right">
+      <button onclick="document.getElementById('importChoiceOverlay').style.display='none';"
+        style="font-family:var(--ui-font);font-size:10px;color:var(--ink-dim);
+          background:none;border:none;cursor:pointer">Cancel</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
