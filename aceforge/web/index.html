@@ -361,6 +361,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
   <button class="top-btn" onclick="toggleDebug()">⚙ Debug <span id="debugErrBadge"></span></button>
   <button class="top-btn" onclick="openOutputFolder()">📂 Output</button>
   <button class="top-btn" onclick="openSettings()">⚙ Settings</button>
+  <button class="top-btn" onclick="openTTKCalc()" title="Time-to-Kill Calculator">⚔ TTK Calc</button>
   <button class="top-btn danger" onclick="resetForm()">↺ Reset</button>
 </div>
 
@@ -4294,18 +4295,42 @@ function openIconPicker(onSelect){
   // Build category list from ICON_CATEGORY_MAP
   var _catNames = ['All'].concat(Object.keys(ICON_CATEGORY_MAP).sort());
 
+  // Track collapsed state for Armor/Weapons tier groups
+  var _collapsedTierGroups = {};
+
   function buildSidebar(){
     sidebar.innerHTML = '';
-    // Group subcategories under their parent heading
-    var groups = {};  // parent -> [{cat, count}]
+    // Three-level grouping: parent -> tier -> [{cat, leaf, count}]
+    // For Armor/* and Weapons/* paths are parent/tier/leaf (3 parts)
+    // For everything else paths are parent/leaf (2 parts)
+    var TIERED = {Armor:true, Weapons:true};
+    var groups = {};   // parent -> { _flat: [], tiers: {tier -> [items]} }
     _catNames.forEach(function(cat){
       if(cat === 'All') return;
       var parts = cat.split('/');
       var parent = parts[0];
-      var sub = parts.slice(1).join('/') || parent;
-      if(!groups[parent]) groups[parent] = [];
-      groups[parent].push({cat: cat, sub: sub, count: ICON_CATEGORY_MAP[cat] ? ICON_CATEGORY_MAP[cat].length : 0});
+      var count  = ICON_CATEGORY_MAP[cat] ? ICON_CATEGORY_MAP[cat].length : 0;
+      if(!groups[parent]) groups[parent] = {_flat:[], tiers:{}};
+      if(TIERED[parent] && parts.length === 3){
+        var tier = parts[1];
+        var leaf = parts[2];
+        if(!groups[parent].tiers[tier]) groups[parent].tiers[tier] = [];
+        groups[parent].tiers[tier].push({cat:cat, leaf:leaf, count:count});
+      } else {
+        var sub = parts.slice(1).join('/') || parent;
+        groups[parent]._flat.push({cat:cat, sub:sub, count:count});
+      }
     });
+
+    // Sort parents — force Armor then Weapons to top of their alpha position,
+    // keeping them adjacent: sort normally but swap Weapons to follow Armor
+    var parentKeys = Object.keys(groups).sort();
+    var wIdx = parentKeys.indexOf('Weapons');
+    var aIdx = parentKeys.indexOf('Armor');
+    if(wIdx > -1 && aIdx > -1 && wIdx !== aIdx + 1){
+      parentKeys.splice(wIdx, 1);
+      parentKeys.splice(aIdx + 1, 0, 'Weapons');
+    }
 
     // "All" button first
     var allBtn = document.createElement('button');
@@ -4318,10 +4343,11 @@ function openIconPicker(onSelect){
     allBtn.addEventListener('click', function(){ _activeCat='All'; search.value=''; buildSidebar(); applyFilter(); });
     sidebar.appendChild(allBtn);
 
-    // Group headings + sub-items
-    Object.keys(groups).sort().forEach(function(parent){
-      var subs = groups[parent];
-      // Parent heading (not clickable unless it's also a cat)
+    parentKeys.forEach(function(parent){
+      var grp  = groups[parent];
+      var hasTiers = Object.keys(grp.tiers).length > 0;
+
+      // ── Parent heading ──────────────────────────────────────────────────
       var hdr = document.createElement('div');
       hdr.style.cssText = 'padding:6px 10px 2px;font-family:var(--ui-font);font-size:9px;'
         + 'font-weight:700;letter-spacing:.08em;color:var(--gold);text-transform:uppercase;'
@@ -4329,7 +4355,8 @@ function openIconPicker(onSelect){
       hdr.textContent = parent;
       sidebar.appendChild(hdr);
 
-      subs.forEach(function(item){
+      // ── Flat sub-items (non-tiered categories under this parent) ────────
+      grp._flat.forEach(function(item){
         var btn = document.createElement('button');
         btn.style.cssText = 'width:100%;text-align:left;padding:3px 10px 3px 18px;background:none;border:none;'
           + 'cursor:pointer;font-family:var(--ui-font);font-size:10px;color:var(--ink-dim);'
@@ -4337,14 +4364,60 @@ function openIconPicker(onSelect){
         btn.innerHTML = item.sub + ' <span style="color:var(--ink-faint);font-size:9px">('+item.count+')</span>';
         btn.title = item.cat + ' ('+item.count+')';
         if(item.cat === _activeCat) btn.style.background = 'rgba(192,64,64,.15)';
-        btn.addEventListener('click', function(){
-          _activeCat = item.cat;
-          search.value = '';
-          buildSidebar();
-          applyFilter();
-        });
+        btn.addEventListener('click', function(){ _activeCat=item.cat; search.value=''; buildSidebar(); applyFilter(); });
         sidebar.appendChild(btn);
       });
+
+      // ── Tiered sub-groups (Armor, Weapons) ──────────────────────────────
+      if(hasTiers){
+        var tierOrder = ['Standard','Themed','Rare','Elemental'];
+        var tierKeys  = Object.keys(grp.tiers).sort(function(a,b){
+          var ai = tierOrder.indexOf(a), bi = tierOrder.indexOf(b);
+          if(ai<0) ai=999; if(bi<0) bi=999;
+          return ai!==bi ? ai-bi : a.localeCompare(b);
+        });
+
+        tierKeys.forEach(function(tier){
+          var items   = grp.tiers[tier];
+          var groupKey = parent+'__'+tier;
+          var isCollapsed = _collapsedTierGroups[groupKey] !== false; // default collapsed
+
+          // Tier toggle row
+          var tierHdr = document.createElement('div');
+          tierHdr.style.cssText = 'display:flex;align-items:center;padding:3px 10px 3px 10px;'
+            + 'cursor:pointer;font-family:var(--ui-font);font-size:9px;font-weight:700;'
+            + 'color:var(--ink-mid);letter-spacing:.06em;text-transform:uppercase;'
+            + 'user-select:none;';
+          var arrow = isCollapsed ? '▶' : '▼';
+          var tierTotal = items.reduce(function(s,i){return s+i.count;},0);
+          tierHdr.innerHTML = '<span style="margin-right:5px;font-size:8px;color:var(--ink-dim)">'
+            +arrow+'</span>'+tier
+            +' <span style="color:var(--ink-faint);font-size:9px;font-weight:400;margin-left:4px">('+items.length+')</span>';
+          tierHdr.addEventListener('click', function(){
+            _collapsedTierGroups[groupKey] = !isCollapsed;
+            buildSidebar();
+          });
+          sidebar.appendChild(tierHdr);
+
+          if(!isCollapsed){
+            items.sort(function(a,b){return a.leaf.localeCompare(b.leaf);});
+            items.forEach(function(item){
+              var btn = document.createElement('button');
+              btn.style.cssText = 'width:100%;text-align:left;padding:2px 10px 2px 28px;background:none;border:none;'
+                + 'cursor:pointer;font-family:var(--ui-font);font-size:10px;color:var(--ink-dim);'
+                + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;';
+              btn.innerHTML = item.leaf
+                +' <span style="color:var(--ink-faint);font-size:9px">('+item.count+')</span>';
+              btn.title = item.cat+' ('+item.count+')';
+              if(item.cat === _activeCat) btn.style.background = 'rgba(192,64,64,.15)';
+              btn.addEventListener('click', function(){
+                _activeCat=item.cat; search.value=''; buildSidebar(); applyFilter();
+              });
+              sidebar.appendChild(btn);
+            });
+          }
+        });
+      }
     });
   }
 
@@ -10673,7 +10746,6 @@ function onProviderChange(){
   var note=$('sProviderNote'); if(note) note.innerHTML='';
   var hints=MODEL_HINTS['ollama']||[];
   var hintsEl=$('sModelHints');
-  if(hintsEl) hintsEl.innerHTML=hints.map(m=>`<button onclick="setV('sModel','${m}')" style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.05em;padding:4px 12px;border:1px solid var(--green);background:transparent;color:var(--green);cursor:pointer;border-radius:10px;margin:2px" onmouseover="this.style.background='var(--green)';this.style.color='#000'" onmouseout="this.style.background='transparent';this.style.color='var(--green)'">${m}</button>`).join('');
   detectOllamaModels();
 }
 
@@ -10686,7 +10758,6 @@ function detectOllamaModels(){
       if(models.length){
         const hintsEl=$('sModelHints');
         hintsEl.innerHTML='<div style="font-family:var(--ui-font);font-size:9px;color:var(--green);margin-bottom:4px">✓ Ollama running — '+models.length+' model(s) installed:</div>'
-          +models.map(m=>`<button onclick="setV('sModel','${m}')" style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.05em;padding:4px 12px;border:1px solid var(--green);background:transparent;color:var(--green);cursor:pointer;border-radius:10px;margin:2px" onmouseover="this.style.background='var(--green)';this.style.color='#000'" onmouseout="this.style.background='transparent';this.style.color='var(--green)'">${m}</button>`).join('');
         // Auto-select first model if none set — guard in case panel closed
         if($('sModel')&&(!$('sModel').value||$('sModel').value==='deepseek-r1:14b'))
           setV('sModel',models[0]);
@@ -12685,7 +12756,6 @@ function gearArmorCoverageOption(groupKey, pieces, label, defaultChecked){
     const hasAlts = p.wcids.length > 1;
     const checkedAttr = defaultChecked ? 'checked' : '';
     const mainRow = `<label for="${checkboxId}" style="display:flex;align-items:center;gap:8px;padding:5px 8px;
-      border-radius:3px;cursor:pointer" onmouseover="this.style.background='var(--accent-tint)'" onmouseout="this.style.background=''">
       <input type="checkbox" id="${checkboxId}" data-piece-group="${groupKey}_${primaryWcid}" data-wcid="${primaryWcid}"
         ${checkedAttr} onchange="gearTogglePiece(this)">
       ${gearIconThumb(primaryWcid)}
@@ -14405,6 +14475,1143 @@ document.addEventListener('DOMContentLoaded', function(){
     </div>
   </div>
 </div>
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     TTK CALCULATOR MODAL — self-contained, no interaction with app
+     ═══════════════════════════════════════════════════════════════ -->
+<style>
+#ttkOverlay{
+  position:fixed;inset:0;background:rgba(20,10,0,.55);z-index:1200;
+  display:none;align-items:center;justify-content:center;padding:16px;
+}
+#ttkOverlay.open{display:flex;}
+#ttkBox{
+  background:var(--parch-lt);border:1px solid var(--border);
+  border-radius:10px;width:min(1200px,98vw);height:min(88vh,860px);
+  display:flex;flex-direction:column;overflow:hidden;
+  box-shadow:var(--shadow-md);
+}
+#ttkHdr{
+  padding:12px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+  background:var(--parch);
+}
+#ttkHdr-title{
+  font-family:var(--ui-font);font-size:13px;font-weight:800;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--crimson);
+  display:flex;align-items:center;gap:8px;
+}
+#ttkHdr-sub{
+  font-family:var(--ui-font);font-size:10px;color:var(--ink-dim);
+  letter-spacing:.04em;flex:1;
+}
+.ttk-close-btn{
+  font-size:20px;background:none;border:none;color:var(--ink-dim);
+  cursor:pointer;line-height:1;font-weight:700;padding:2px 6px;
+}
+.ttk-close-btn:hover{color:var(--crimson);}
+
+/* ── two-col body + results row ── */
+#ttkBody{
+  flex:1;overflow:hidden;display:grid;
+  grid-template-columns:1fr 1fr;
+  grid-template-rows:1fr auto;
+  gap:0;background:var(--border);
+  border-top:1px solid var(--border);
+}
+.ttk-pane{
+  background:var(--parch-lt);overflow-y:auto;padding:16px 18px;
+}
+.ttk-pane::-webkit-scrollbar{width:8px;}
+.ttk-pane::-webkit-scrollbar-thumb{background:var(--ink-faint);border-radius:4px;}
+.ttk-results{
+  grid-column:1/-1;background:var(--parch);
+  border-top:2px solid var(--gold);padding:14px 18px;
+  flex-shrink:0;
+}
+/* ── section headers (reuse .sh/.st/.sl pattern) ── */
+.ttk-sh{
+  display:flex;align-items:center;gap:10px;margin:14px 0 8px;
+}
+.ttk-st{
+  font-family:var(--ui-font);font-size:10px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink-mid);
+  white-space:nowrap;
+}
+.ttk-sl{flex:1;height:1px;background:var(--border-lt);}
+
+/* ── import bar ── */
+.ttk-import{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+.ttk-import input[type="text"]{
+  flex:1;min-width:90px;border-radius:6px;
+  font-size:12px;padding:6px 9px;
+}
+.ttk-status{
+  font-family:var(--ui-font);font-size:9px;
+  color:var(--ink-dim);width:100%;padding:2px 0;
+}
+.ttk-status.ok{color:var(--green);}
+.ttk-status.err{color:var(--crimson);}
+
+/* ── field grids ── */
+.ttk-g2{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;}
+.ttk-g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 10px;}
+.ttk-field{display:flex;flex-direction:column;gap:3px;}
+.ttk-field label{
+  font-family:var(--ui-font);font-size:9px;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim);
+}
+.ttk-field input,.ttk-field select{
+  font-size:12px;padding:5px 8px;border-radius:4px;width:100%;
+}
+
+/* ── skill table ── */
+.ttk-skill-row{
+  display:grid;grid-template-columns:148px 70px 1fr;
+  gap:6px;align-items:center;padding:3px 0;
+  border-bottom:1px solid var(--border-lt);
+}
+.ttk-skill-row:last-child{border-bottom:none;}
+.ttk-skill-name{font-family:var(--ui-font);font-size:10px;color:var(--ink-dim);}
+.ttk-skill-row input{font-size:12px;padding:3px 7px;width:100%;border-radius:4px;}
+.ttk-skill-row select{font-size:10px;padding:3px 6px;border-radius:4px;}
+
+/* ── buff selector ── */
+.ttk-buff-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px;}
+.ttk-buff-opt{
+  display:flex;align-items:center;gap:8px;padding:7px 10px;
+  border:1px solid var(--border);border-radius:6px;cursor:pointer;
+  transition:border-color .15s;background:var(--parch-lt);
+}
+.ttk-buff-opt:hover{border-color:var(--gold);}
+.ttk-buff-opt.active{border-color:var(--gold);background:rgba(184,134,11,.06);}
+.ttk-buff-opt input[type="radio"]{accent-color:var(--gold);flex-shrink:0;}
+.ttk-buff-label{font-family:var(--ui-font);font-size:10px;font-weight:600;color:var(--ink);}
+.ttk-buff-sub{font-family:var(--ui-font);font-size:8px;color:var(--ink-dim);}
+
+/* ── AL presets ── */
+.ttk-al-presets{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;}
+.ttk-al-btn{
+  font-family:var(--ui-font);font-size:9px;font-weight:600;
+  padding:4px 10px;border:1px solid var(--border);border-radius:4px;
+  cursor:pointer;color:var(--ink-dim);background:var(--parch-lt);
+  transition:all .15s;
+}
+.ttk-al-btn:hover,.ttk-al-btn.active{
+  border-color:var(--gold);color:var(--gold);background:rgba(184,134,11,.06);
+}
+
+/* ── results ── */
+.ttk-result-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  gap:1px;background:var(--border);margin-bottom:12px;
+  border:1px solid var(--border);border-radius:6px;overflow:hidden;
+}
+.ttk-result-cell{
+  background:var(--parch-lt);padding:10px 14px;text-align:center;
+}
+.ttk-result-val{
+  font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;
+  color:var(--gold);letter-spacing:-.02em;
+}
+.ttk-result-lbl{
+  font-family:var(--ui-font);font-size:8px;letter-spacing:.12em;
+  color:var(--ink-dim);text-transform:uppercase;margin-top:2px;
+}
+.ttk-result-sub{
+  font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);margin-top:1px;
+}
+.ttk-breakdown{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.ttk-bd-block{
+  background:var(--parch-lt);border:1px solid var(--border);
+  border-radius:6px;padding:10px 14px;
+}
+.ttk-bd-title{
+  font-family:var(--ui-font);font-size:9px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);
+  margin-bottom:8px;
+}
+.ttk-bd-row{
+  display:flex;justify-content:space-between;align-items:baseline;
+  padding:2px 0;border-bottom:1px solid var(--border-lt);
+  font-family:var(--ui-font);font-size:10px;
+}
+.ttk-bd-row:last-child{border-bottom:none;}
+.ttk-bd-key{color:var(--ink-dim);}
+.ttk-bd-val{color:var(--ink);font-weight:700;}
+.ttk-bd-val.hi{color:var(--green);}
+.ttk-bd-val.lo{color:var(--danger);}
+
+/* ── calc button ── */
+.ttk-calc-btn{
+  font-family:var(--ui-font);font-size:11px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;
+  padding:9px 24px;background:var(--crimson);color:#fff;
+  border:none;border-radius:6px;cursor:pointer;
+  transition:background .15s;
+}
+.ttk-calc-btn:hover{background:var(--crimson-dk);}
+.ttk-empty{
+  font-family:var(--ui-font);font-size:10px;
+  color:var(--ink-faint);letter-spacing:.06em;
+  text-align:center;padding:20px;
+}
+.ttk-note{
+  font-family:var(--ui-font);font-size:9px;color:var(--ink-faint);
+  font-style:italic;flex:1;max-width:600px;
+}
+.ttk-foot{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;}
+</style>
+
+<div id="ttkOverlay" onclick="if(event.target===this)closeTTKCalc()">
+  <div id="ttkBox">
+
+    <!-- header -->
+    <div id="ttkHdr">
+      <div id="ttkHdr-title">⚔ TTK Calculator</div>
+      <div id="ttkHdr-sub">Time-to-Kill Estimator · Player vs Creature</div>
+      <button class="ttk-close-btn" onclick="closeTTKCalc()">&#x2715;</button>
+    </div>
+
+    <!-- two-col body -->
+    <div id="ttkBody">
+
+      <!-- ══ LEFT: PLAYER ══ -->
+      <div class="ttk-pane">
+
+        <div class="ttk-sh">
+          <span class="ttk-st">Player</span><div class="ttk-sl"></div>
+          <button class="top-btn" style="font-size:9px;padding:4px 10px" onclick="ttkClearPlayer()">Clear</button>
+        </div>
+
+        <!-- Treestats import -->
+        <div style="margin-bottom:10px">
+          <div class="ttk-import" style="gap:6px;margin-bottom:4px">
+            <input type="text" id="ttsServer" placeholder="Server (e.g. Levistras)" style="max-width:140px">
+            <input type="text" id="ttsName" placeholder="Character name" style="flex:1">
+            <button class="btn-import-sql" style="padding:7px 14px;font-size:9px;border-radius:4px;white-space:nowrap" onclick="ttkImport()">&#x2B06; Import from Treestats</button>
+          </div>
+          <div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);font-style:italic">
+            Import your character from <span style="color:var(--gold)">treestats.net</span> to auto-fill all stats — or fill in manually below.
+          </div>
+          <div class="ttk-status" id="ttkImportStatus" style="margin-top:2px"></div>
+        </div>
+
+        <div class="ttk-g2">
+          <div class="ttk-field"><label>Character Name</label><input type="text" id="tpName" placeholder="e.g. Moose Mage"></div>
+          <div class="ttk-field"><label>Race</label>
+            <select id="tpRace">
+              <option value="aluvian">Aluvian</option>
+              <option value="gharundim">Gharu'ndim</option>
+              <option value="sho">Sho</option>
+              <option value="viamontian">Viamontian</option>
+              <option value="empyrean">Empyrean</option>
+              <option value="umbraen">Umbraen</option>
+              <option value="lugian">Lugian</option>
+              <option value="tumerok">Tumerok</option>
+              <option value="gearknight">Gear Knight</option>
+              <option value="undead">Undead</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="ttk-sh"><span class="ttk-st">Attributes</span><div class="ttk-sl"></div></div>
+        <div class="ttk-g3">
+          <div class="ttk-field"><label>Strength</label><input type="number" id="taStr" value="100" min="1" max="330" oninput="ttkOnAttrChange()"></div>
+          <div class="ttk-field"><label>Endurance</label><input type="number" id="taEnd" value="100" min="1" max="330"></div>
+          <div class="ttk-field"><label>Coordination</label><input type="number" id="taCrd" value="100" min="1" max="330" oninput="ttkOnAttrChange()"></div>
+          <div class="ttk-field"><label>Quickness</label><input type="number" id="taQck" value="100" min="1" max="330"></div>
+          <div class="ttk-field"><label>Focus</label><input type="number" id="taFcs" value="100" min="1" max="330"></div>
+          <div class="ttk-field"><label>Self</label><input type="number" id="taSelf" value="100" min="1" max="330"></div>
+        </div>
+
+        <div class="ttk-sh"><span class="ttk-st">Vitals (base)</span><div class="ttk-sl"></div></div>
+        <div class="ttk-g3">
+          <div class="ttk-field"><label>Health</label><input type="number" id="tvHP" value="100" min="1"></div>
+          <div class="ttk-field"><label>Stamina</label><input type="number" id="tvStam" value="100" min="1"></div>
+          <div class="ttk-field"><label>Mana</label><input type="number" id="tvMana" value="100" min="1"></div>
+        </div>
+
+        <div class="ttk-sh"><span class="ttk-st">Combat Skills</span><div class="ttk-sl"></div></div>
+        <div id="ttkSkillsBlock"></div>
+
+        <div class="ttk-sh">
+          <span class="ttk-st">Weapon</span><div class="ttk-sl"></div>
+          <button class="top-btn" style="font-size:9px;padding:4px 10px" onclick="ttkImportWeapon()">&#x2B06; Import SQL</button>
+        </div>
+        <input type="file" id="ttkWeaponSQLInput" accept=".sql" style="display:none" onchange="ttkHandleWeaponSQL(this)">
+        <div class="ttk-g2">
+          <div class="ttk-field"><label>Weapon Type</label>
+            <select id="twType" onchange="ttkOnWeaponChange()">
+              <option value="heavy">Heavy Weapons</option>
+              <option value="light">Light Weapons</option>
+              <option value="finesse">Finesse Weapons</option>
+              <option value="two_handed">Two Handed Combat</option>
+              <option value="missile">Missile Weapons</option>
+              <option value="war">War Magic</option>
+              <option value="void">Void Magic</option>
+            </select>
+          </div>
+          <div class="ttk-field"><label>Attack Skill (base)</label><input type="number" id="twSkill" value="300" min="1"></div>
+          <div class="ttk-field"><label>Damage Type</label>
+            <select id="twDmgType">
+              <option value="slash">Slash</option>
+              <option value="pierce">Pierce</option>
+              <option value="bludgeon">Bludgeon</option>
+              <option value="fire">Fire</option>
+              <option value="cold">Cold</option>
+              <option value="acid">Acid</option>
+              <option value="electric">Electric</option>
+            </select>
+          </div>
+          <div class="ttk-field"><label>Dmg Min</label><input type="number" id="twDmgMin" value="40" min="1"></div>
+          <div class="ttk-field"><label>Dmg Max</label><input type="number" id="twDmgMax" value="80" min="1"></div>
+          <div class="ttk-field"><label>Weapon Speed</label><input type="number" id="twSpeed" value="40" min="1" max="200"></div>
+          <div class="ttk-field"><label>Attack Bonus % (mod)</label><input type="number" id="twAtkBonus" value="0" step="0.01" placeholder="e.g. 0.18"></div>
+        </div>
+
+        <div class="ttk-sh"><span class="ttk-st">Buff Profile</span><div class="ttk-sl"></div></div>
+        <!-- Base buff tier -->
+        <div class="ttk-buff-grid">
+          <label class="ttk-buff-opt active" onclick="ttkSelectBuff('none')">
+            <input type="radio" name="ttkBuff" value="none" checked>
+            <div><div class="ttk-buff-label">No Buffs</div><div class="ttk-buff-sub">Base stats only</div></div>
+          </label>
+          <label class="ttk-buff-opt" onclick="ttkSelectBuff('self6')">
+            <input type="radio" name="ttkBuff" value="self6">
+            <div><div class="ttk-buff-label">Self-Buffed L6</div><div class="ttk-buff-sub">+28 attr &amp; skill</div></div>
+          </label>
+          <label class="ttk-buff-opt" onclick="ttkSelectBuff('self7')">
+            <input type="radio" name="ttkBuff" value="self7">
+            <div><div class="ttk-buff-label">Self-Buffed L7</div><div class="ttk-buff-sub">+35 attr &amp; skill</div></div>
+          </label>
+          <label class="ttk-buff-opt" onclick="ttkSelectBuff('self8')">
+            <input type="radio" name="ttkBuff" value="self8">
+            <div><div class="ttk-buff-label">Self-Buffed L8</div><div class="ttk-buff-sub">+45 attr &amp; skill (Incantations)</div></div>
+          </label>
+          <label class="ttk-buff-opt" onclick="ttkSelectBuff('full6')">
+            <input type="radio" name="ttkBuff" value="full6">
+            <div><div class="ttk-buff-label">Full Buffs L6</div><div class="ttk-buff-sub">Group buffs +28</div></div>
+          </label>
+          <label class="ttk-buff-opt" onclick="ttkSelectBuff('full7')">
+            <input type="radio" name="ttkBuff" value="full7">
+            <div><div class="ttk-buff-label">Full Buffs L7</div><div class="ttk-buff-sub">Endgame +35</div></div>
+          </label>
+          <label class="ttk-buff-opt" onclick="ttkSelectBuff('full8')">
+            <input type="radio" name="ttkBuff" value="full8">
+            <div><div class="ttk-buff-label">Full Buffs L8</div><div class="ttk-buff-sub">Max group +45</div></div>
+          </label>
+        </div>
+
+        <!-- Addons: stack on top of base buff -->
+        <div style="margin-top:10px">
+          <div style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:6px">
+            Stacking Addons <span style="font-weight:400;color:var(--ink-faint)">(these stack on top of base buff)</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+            <label class="ttk-buff-opt" onclick="ttkToggleAddon('prodigal',this)">
+              <input type="checkbox" id="ttkAddon_prodigal">
+              <div><div class="ttk-buff-label">Prodigal Gems</div><div class="ttk-buff-sub">Rare gems: +250 attr/skill (15 min)</div></div>
+            </label>
+            <label class="ttk-buff-opt" onclick="ttkToggleAddon('minor',this)">
+              <input type="checkbox" id="ttkAddon_minor">
+              <div><div class="ttk-buff-label">Minor Cantrips</div><div class="ttk-buff-sub">Gear cantrips: +5</div></div>
+            </label>
+            <label class="ttk-buff-opt" onclick="ttkToggleAddon('moderate',this)">
+              <input type="checkbox" id="ttkAddon_moderate">
+              <div><div class="ttk-buff-label">Moderate Cantrips</div><div class="ttk-buff-sub">Gear cantrips: +10</div></div>
+            </label>
+            <label class="ttk-buff-opt" onclick="ttkToggleAddon('major',this)">
+              <input type="checkbox" id="ttkAddon_major">
+              <div><div class="ttk-buff-label">Major Cantrips</div><div class="ttk-buff-sub">Gear cantrips: +15</div></div>
+            </label>
+            <label class="ttk-buff-opt" onclick="ttkToggleAddon('epic',this)">
+              <input type="checkbox" id="ttkAddon_epic">
+              <div><div class="ttk-buff-label">Epic Cantrips</div><div class="ttk-buff-sub">Gear cantrips: +20</div></div>
+            </label>
+            <label class="ttk-buff-opt" onclick="ttkToggleAddon('legendary',this)">
+              <input type="checkbox" id="ttkAddon_legendary">
+              <div><div class="ttk-buff-label">Legendary Cantrips</div><div class="ttk-buff-sub">Gear cantrips: +25</div></div>
+            </label>
+          </div>
+          <div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);margin-top:5px;font-style:italic">
+            Note: Only one cantrip tier stacks per stat. Prodigal gems don't stack with Spectral Mastery Crystals.
+          </div>
+        </div>
+
+        <div class="ttk-sh"><span class="ttk-st">Armor Level</span><div class="ttk-sl"></div></div>
+        <div class="ttk-al-presets">
+          <button class="ttk-al-btn" onclick="ttkSetAL(0,this)">Naked (0)</button>
+          <button class="ttk-al-btn" onclick="ttkSetAL(100,this)">Light (~100)</button>
+          <button class="ttk-al-btn" onclick="ttkSetAL(200,this)">Medium (~200)</button>
+          <button class="ttk-al-btn" onclick="ttkSetAL(300,this)">Heavy (~300)</button>
+          <button class="ttk-al-btn active" onclick="ttkSetAL(400,this)">Endgame (~400)</button>
+          <button class="ttk-al-btn" onclick="ttkSetAL(500,this)">Max Tinked (~500)</button>
+        </div>
+        <div class="ttk-field" style="max-width:120px;margin-top:8px">
+          <label>Custom AL</label><input type="number" id="tPlayerAL" value="400" min="0" max="700">
+        </div>
+
+        <!-- Shield -->
+        <div class="ttk-sh" style="margin-top:14px"><span class="ttk-st">Shield</span><div class="ttk-sl"></div></div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--ui-font);font-size:11px;font-weight:600;color:var(--ink)">
+            <input type="checkbox" id="tHasShield" onchange="ttkToggleShield()">
+            Has Shield
+          </label>
+          <div class="ttk-field" id="tShieldALWrap" style="display:none;max-width:110px">
+            <label>Shield AL</label>
+            <input type="number" id="tShieldAL" value="150" min="0" max="600">
+          </div>
+          <div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);font-style:italic" id="tShieldNote" style="display:none">
+            Shield AL adds to mitigation vs melee only.
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ RIGHT: CREATURE ══ -->
+      <div class="ttk-pane">
+
+        <div class="ttk-sh">
+          <span class="ttk-st">Creature</span><div class="ttk-sl"></div>
+          <button class="top-btn" style="font-size:9px;padding:4px 10px" onclick="ttkClearCreature()">Clear</button>
+          <button class="top-btn" style="font-size:9px;padding:4px 10px" onclick="ttkImportCreature()">&#x2B06; Import SQL</button>
+        </div>
+
+        <!-- Creature search -->
+        <input type="file" id="ttkCreatureSQLInput" accept=".sql" style="display:none" onchange="ttkHandleCreatureSQL(this)">
+        <div style="margin-bottom:10px">
+          <div style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:5px">Search Library</div>
+          <div style="position:relative">
+            <input type="text" id="tCreatureSearch" placeholder="Type creature name (e.g. Olthoi, Tumerok...)"
+              oninput="ttkCreatureSearch(this.value)"
+              style="font-size:12px;padding:6px 9px;border-radius:4px;width:100%">
+            <div id="tCreatureDrop" style="display:none;position:absolute;top:100%;left:0;right:0;
+              background:var(--parch-lt);border:1px solid var(--border);
+              box-shadow:var(--shadow-md);z-index:400;max-height:200px;overflow-y:auto;border-radius:0 0 4px 4px">
+            </div>
+          </div>
+          <div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);margin-top:4px;font-style:italic">
+            Selecting a creature auto-fills all stats below. You can then edit any value manually.
+          </div>
+        </div>
+
+        <div class="ttk-g2">
+          <div class="ttk-field"><label>Creature Name</label><input type="text" id="tcName" placeholder="e.g. Drudge Prowler"></div>
+          <div class="ttk-field"><label>Level</label><input type="number" id="tcLevel" value="50" min="1" max="300"></div>
+        </div>
+
+        <div class="ttk-sh"><span class="ttk-st">Vitals</span><div class="ttk-sl"></div></div>
+        <div class="ttk-g3">
+          <div class="ttk-field"><label>Max Health</label><input type="number" id="tcHP" value="500" min="1"></div>
+          <div class="ttk-field"><label>Max Stamina</label><input type="number" id="tcStam" value="500" min="1"></div>
+          <div class="ttk-field"><label>Max Mana</label><input type="number" id="tcMana" value="500" min="1"></div>
+        </div>
+
+        <div class="ttk-sh"><span class="ttk-st">Defense Skills</span><div class="ttk-sl"></div></div>
+        <div class="ttk-skill-row"><span class="ttk-skill-name">Melee Defense</span><input type="number" id="tcMeleeDef" value="200" min="0"></div>
+        <div class="ttk-skill-row"><span class="ttk-skill-name">Missile Defense</span><input type="number" id="tcMissileDef" value="200" min="0"></div>
+        <div class="ttk-skill-row"><span class="ttk-skill-name">Magic Defense</span><input type="number" id="tcMagicDef" value="200" min="0"></div>
+
+        <div class="ttk-sh"><span class="ttk-st">Attack</span><div class="ttk-sl"></div></div>
+        <div class="ttk-g2">
+          <div class="ttk-field"><label>Attack Skill</label><input type="number" id="tcAtkSkill" value="200" min="0"></div>
+          <div class="ttk-field"><label>Damage Type</label>
+            <select id="tcDmgType">
+              <option value="slash">Slash</option>
+              <option value="pierce">Pierce</option>
+              <option value="bludgeon" selected>Bludgeon</option>
+              <option value="fire">Fire</option>
+              <option value="cold">Cold</option>
+              <option value="acid">Acid</option>
+              <option value="electric">Electric</option>
+            </select>
+          </div>
+          <div class="ttk-field"><label>Dmg Min</label><input type="number" id="tcDmgMin" value="20" min="0"></div>
+          <div class="ttk-field"><label>Dmg Max</label><input type="number" id="tcDmgMax" value="60" min="0"></div>
+          <div class="ttk-field"><label>Swings/min</label><input type="number" id="tcSwings" value="20" min="1" max="120"></div>
+        </div>
+
+        <div class="ttk-sh"><span class="ttk-st">Creature Resistances</span><div class="ttk-sl"></div></div>
+        <div class="ttk-g2">
+          <div class="ttk-field"><label>Slash Resist</label><input type="number" id="trSlash" value="1" step="0.01" min="0" max="2"></div>
+          <div class="ttk-field"><label>Pierce Resist</label><input type="number" id="trPierce" value="1" step="0.01" min="0" max="2"></div>
+          <div class="ttk-field"><label>Bludgeon Resist</label><input type="number" id="trBludgeon" value="1" step="0.01" min="0" max="2"></div>
+          <div class="ttk-field"><label>Fire Resist</label><input type="number" id="trFire" value="1" step="0.01" min="0" max="2"></div>
+          <div class="ttk-field"><label>Cold Resist</label><input type="number" id="trCold" value="1" step="0.01" min="0" max="2"></div>
+          <div class="ttk-field"><label>Acid Resist</label><input type="number" id="trAcid" value="1" step="0.01" min="0" max="2"></div>
+          <div class="ttk-field"><label>Electric Resist</label><input type="number" id="trElectric" value="1" step="0.01" min="0" max="2"></div>
+        </div>
+        <div class="ttk-field" style="max-width:120px;margin-top:4px">
+          <label>Creature AL</label><input type="number" id="tcAL" value="0" min="0" max="700">
+        </div>
+
+        <div class="ttk-sh"><span class="ttk-st">Player Protections vs Creature</span><div class="ttk-sl"></div></div>
+        <div class="ttk-g2">
+          <div class="ttk-field"><label>Slash Prot</label><input type="number" id="tpResSlash" value="1" step="0.01" min="0" max="2"></div>
+          <div class="ttk-field"><label>Pierce Prot</label><input type="number" id="tpResPierce" value="1" step="0.01" min="0" max="2"></div>
+          <div class="ttk-field"><label>Bludgeon Prot</label><input type="number" id="tpResBludgeon" value="1" step="0.01" min="0" max="2"></div>
+          <div class="ttk-field"><label>Fire Prot</label><input type="number" id="tpResFire" value="1" step="0.01" min="0" max="2"></div>
+          <div class="ttk-field"><label>Cold Prot</label><input type="number" id="tpResCold" value="1" step="0.01" min="0" max="2"></div>
+          <div class="ttk-field"><label>Acid Prot</label><input type="number" id="tpResAcid" value="1" step="0.01" min="0" max="2"></div>
+          <div class="ttk-field"><label>Electric Prot</label><input type="number" id="tpResElectric" value="1" step="0.01" min="0" max="2"></div>
+        </div>
+      </div>
+
+      <!-- ══ RESULTS ══ -->
+      <div class="ttk-results">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <span style="font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-mid)">Results</span>
+          <div style="flex:1;height:1px;background:var(--border-lt)"></div>
+          <button class="ttk-calc-btn" onclick="ttkCalculate()">▶ Calculate</button>
+          <button onclick="ttkDismissResults()" title="Hide results" id="ttkResultsClose" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--ink-dim);line-height:1;padding:0 4px;font-weight:700">&#x2715;</button>
+        </div>
+        <div id="ttkResultsContent">
+          <div class="ttk-empty">Fill in player and creature stats, then click Calculate.</div>
+        </div>
+      </div>
+
+    </div><!-- /ttkBody -->
+  </div><!-- /ttkBox -->
+</div><!-- /ttkOverlay -->
+
+<script>
+// ════════════════════════════════════════════════════════════════
+// TTK CALCULATOR — isolated, no interaction with ACEForge state
+// ════════════════════════════════════════════════════════════════
+
+(function(){
+
+const TTK_CREATURES = [{"name":"Drudge Prowler","type":"Drudge","level":1,"health":19,"stamina":20,"mana":0,"melee_def":50,"missile_def":50,"magic_def":30,"atk_skill":50,"dmg_min":1,"dmg_max":3,"dmg_type":"bludgeon","al":0,"resist":{"slash":1.0,"pierce":1.0,"bludgeon":1.0,"fire":1.0,"cold":1.0,"acid":1.0,"electric":1.0}},{"name":"Drudge Skulker","type":"Drudge","level":7,"health":50,"stamina":50,"mana":0,"melee_def":100,"missile_def":80,"magic_def":60,"atk_skill":80,"dmg_min":3,"dmg_max":8,"dmg_type":"bludgeon","al":0,"resist":{"slash":1.0,"pierce":1.0,"bludgeon":1.0,"fire":1.0,"cold":1.0,"acid":1.0,"electric":1.0}},{"name":"Drudge Ravener","type":"Drudge","level":15,"health":90,"stamina":80,"mana":0,"melee_def":130,"missile_def":100,"magic_def":80,"atk_skill":120,"dmg_min":5,"dmg_max":14,"dmg_type":"bludgeon","al":0,"resist":{"slash":1.0,"pierce":1.0,"bludgeon":1.0,"fire":1.0,"cold":1.0,"acid":1.0,"electric":1.0}},{"name":"Drudge Marauder","type":"Drudge","level":30,"health":200,"stamina":180,"mana":0,"melee_def":180,"missile_def":150,"magic_def":120,"atk_skill":180,"dmg_min":10,"dmg_max":26,"dmg_type":"bludgeon","al":20,"resist":{"slash":1.0,"pierce":1.0,"bludgeon":1.0,"fire":1.0,"cold":1.0,"acid":1.0,"electric":1.0}},{"name":"Tusker Male","type":"Tusker","level":20,"health":120,"stamina":130,"mana":0,"melee_def":140,"missile_def":120,"magic_def":90,"atk_skill":140,"dmg_min":8,"dmg_max":20,"dmg_type":"bludgeon","al":10,"resist":{"slash":0.9,"pierce":0.8,"bludgeon":1.2,"fire":1.0,"cold":1.0,"acid":1.0,"electric":1.0}},{"name":"Tuskering","type":"Tusker","level":50,"health":400,"stamina":350,"mana":0,"melee_def":220,"missile_def":190,"magic_def":150,"atk_skill":220,"dmg_min":15,"dmg_max":35,"dmg_type":"bludgeon","al":30,"resist":{"slash":0.9,"pierce":0.8,"bludgeon":1.2,"fire":1.0,"cold":1.0,"acid":1.0,"electric":1.0}},{"name":"Tuskering Lord","type":"Tusker","level":80,"health":700,"stamina":600,"mana":0,"melee_def":280,"missile_def":240,"magic_def":200,"atk_skill":290,"dmg_min":25,"dmg_max":60,"dmg_type":"bludgeon","al":50,"resist":{"slash":0.9,"pierce":0.8,"bludgeon":1.2,"fire":1.0,"cold":1.0,"acid":1.0,"electric":1.0}},{"name":"Zombie","type":"Undead","level":8,"health":55,"stamina":55,"mana":0,"melee_def":90,"missile_def":70,"magic_def":60,"atk_skill":90,"dmg_min":4,"dmg_max":10,"dmg_type":"slash","al":0,"resist":{"slash":1.5,"pierce":1.0,"bludgeon":0.75,"fire":1.5,"cold":0.5,"acid":1.5,"electric":1.0}},{"name":"Skeleton","type":"Undead","level":15,"health":85,"stamina":80,"mana":0,"melee_def":110,"missile_def":90,"magic_def":80,"atk_skill":120,"dmg_min":6,"dmg_max":16,"dmg_type":"slash","al":0,"resist":{"slash":1.5,"pierce":1.0,"bludgeon":0.5,"fire":1.5,"cold":0.5,"acid":1.5,"electric":1.0}},{"name":"Skeleton Lord","type":"Undead","level":40,"health":300,"stamina":280,"mana":150,"melee_def":200,"missile_def":170,"magic_def":160,"atk_skill":200,"dmg_min":15,"dmg_max":38,"dmg_type":"slash","al":15,"resist":{"slash":1.5,"pierce":1.0,"bludgeon":0.5,"fire":1.5,"cold":0.5,"acid":1.5,"electric":1.0}},{"name":"Ancient Skeleton","type":"Undead","level":80,"health":600,"stamina":550,"mana":300,"melee_def":280,"missile_def":250,"magic_def":230,"atk_skill":290,"dmg_min":25,"dmg_max":65,"dmg_type":"slash","al":30,"resist":{"slash":1.5,"pierce":1.0,"bludgeon":0.5,"fire":1.5,"cold":0.5,"acid":1.5,"electric":1.0}},{"name":"Olthoi Worker","type":"Olthoi","level":30,"health":220,"stamina":200,"mana":0,"melee_def":175,"missile_def":150,"magic_def":120,"atk_skill":190,"dmg_min":12,"dmg_max":30,"dmg_type":"slash","al":40,"resist":{"slash":0.7,"pierce":0.6,"bludgeon":0.8,"fire":0.8,"cold":0.9,"acid":0.4,"electric":0.9}},{"name":"Olthoi Soldier","type":"Olthoi","level":60,"health":500,"stamina":480,"mana":0,"melee_def":250,"missile_def":220,"magic_def":180,"atk_skill":270,"dmg_min":20,"dmg_max":55,"dmg_type":"slash","al":60,"resist":{"slash":0.7,"pierce":0.6,"bludgeon":0.8,"fire":0.8,"cold":0.9,"acid":0.4,"electric":0.9}},{"name":"Olthoi Noble","type":"Olthoi","level":100,"health":900,"stamina":850,"mana":200,"melee_def":330,"missile_def":290,"magic_def":260,"atk_skill":360,"dmg_min":35,"dmg_max":90,"dmg_type":"slash","al":80,"resist":{"slash":0.7,"pierce":0.6,"bludgeon":0.8,"fire":0.8,"cold":0.9,"acid":0.4,"electric":0.9}},{"name":"Olthoi Queen","type":"Olthoi","level":150,"health":2000,"stamina":1800,"mana":500,"melee_def":400,"missile_def":360,"magic_def":330,"atk_skill":430,"dmg_min":60,"dmg_max":150,"dmg_type":"slash","al":100,"resist":{"slash":0.7,"pierce":0.6,"bludgeon":0.8,"fire":0.8,"cold":0.9,"acid":0.4,"electric":0.9}},{"name":"Tumerok Captain","type":"Tumerok","level":50,"health":480,"stamina":430,"mana":200,"melee_def":230,"missile_def":200,"magic_def":180,"atk_skill":240,"dmg_min":18,"dmg_max":45,"dmg_type":"slash","al":40,"resist":{"slash":0.9,"pierce":1.0,"bludgeon":0.9,"fire":0.9,"cold":0.8,"acid":0.9,"electric":0.8}},{"name":"Tumerok Hieromancer","type":"Tumerok","level":80,"health":700,"stamina":600,"mana":500,"melee_def":260,"missile_def":230,"magic_def":280,"atk_skill":200,"dmg_min":40,"dmg_max":100,"dmg_type":"fire","al":20,"resist":{"slash":0.9,"pierce":1.0,"bludgeon":0.9,"fire":0.5,"cold":1.2,"acid":0.9,"electric":0.8}},{"name":"Virindi Servant","type":"Virindi","level":50,"health":350,"stamina":300,"mana":600,"melee_def":220,"missile_def":200,"magic_def":280,"atk_skill":180,"dmg_min":25,"dmg_max":70,"dmg_type":"fire","al":0,"resist":{"slash":0.5,"pierce":0.5,"bludgeon":0.5,"fire":0.5,"cold":0.5,"acid":0.5,"electric":0.5}},{"name":"Virindi Inquisitor","type":"Virindi","level":100,"health":800,"stamina":700,"mana":1200,"melee_def":310,"missile_def":280,"magic_def":380,"atk_skill":260,"dmg_min":60,"dmg_max":160,"dmg_type":"fire","al":0,"resist":{"slash":0.5,"pierce":0.5,"bludgeon":0.5,"fire":0.5,"cold":0.5,"acid":0.5,"electric":0.5}},{"name":"Virindi Consul","type":"Virindi","level":150,"health":1500,"stamina":1300,"mana":2000,"melee_def":400,"missile_def":360,"magic_def":450,"atk_skill":350,"dmg_min":100,"dmg_max":250,"dmg_type":"fire","al":0,"resist":{"slash":0.5,"pierce":0.5,"bludgeon":0.5,"fire":0.5,"cold":0.5,"acid":0.5,"electric":0.5}},{"name":"Shadow Child","type":"Shadow","level":40,"health":280,"stamina":260,"mana":200,"melee_def":200,"missile_def":180,"magic_def":220,"atk_skill":210,"dmg_min":14,"dmg_max":38,"dmg_type":"cold","al":0,"resist":{"slash":0.5,"pierce":0.5,"bludgeon":0.5,"fire":2.0,"cold":0.5,"acid":0.5,"electric":0.5}},{"name":"Shadow Stalker","type":"Shadow","level":80,"health":650,"stamina":600,"mana":400,"melee_def":290,"missile_def":260,"magic_def":300,"atk_skill":310,"dmg_min":30,"dmg_max":80,"dmg_type":"cold","al":0,"resist":{"slash":0.5,"pierce":0.5,"bludgeon":0.5,"fire":2.0,"cold":0.5,"acid":0.5,"electric":0.5}},{"name":"Hollow Minion","type":"Shadow","level":120,"health":1200,"stamina":1100,"mana":600,"melee_def":360,"missile_def":330,"magic_def":370,"atk_skill":390,"dmg_min":55,"dmg_max":140,"dmg_type":"cold","al":0,"resist":{"slash":0.5,"pierce":0.5,"bludgeon":0.5,"fire":2.0,"cold":0.5,"acid":0.5,"electric":0.5}},{"name":"Iron Golem","type":"Golem","level":35,"health":320,"stamina":300,"mana":0,"melee_def":160,"missile_def":130,"magic_def":100,"atk_skill":200,"dmg_min":18,"dmg_max":45,"dmg_type":"bludgeon","al":100,"resist":{"slash":1.0,"pierce":1.0,"bludgeon":0.6,"fire":1.0,"cold":1.0,"acid":1.0,"electric":0.4}},{"name":"Stone Golem","type":"Golem","level":60,"health":600,"stamina":550,"mana":0,"melee_def":220,"missile_def":190,"magic_def":150,"atk_skill":280,"dmg_min":28,"dmg_max":70,"dmg_type":"bludgeon","al":150,"resist":{"slash":1.0,"pierce":1.0,"bludgeon":0.5,"fire":1.0,"cold":1.0,"acid":1.0,"electric":0.4}},{"name":"Lugian Grunt","type":"Lugian","level":40,"health":350,"stamina":320,"mana":0,"melee_def":195,"missile_def":165,"magic_def":130,"atk_skill":210,"dmg_min":15,"dmg_max":40,"dmg_type":"bludgeon","al":30,"resist":{"slash":1.0,"pierce":1.0,"bludgeon":0.85,"fire":1.0,"cold":1.0,"acid":1.0,"electric":1.0}},{"name":"Lugian Warrior","type":"Lugian","level":80,"health":800,"stamina":750,"mana":0,"melee_def":285,"missile_def":250,"magic_def":200,"atk_skill":310,"dmg_min":30,"dmg_max":80,"dmg_type":"bludgeon","al":60,"resist":{"slash":1.0,"pierce":1.0,"bludgeon":0.85,"fire":1.0,"cold":1.0,"acid":1.0,"electric":1.0}},{"name":"Burun Karak","type":"Burun","level":50,"health":420,"stamina":380,"mana":0,"melee_def":225,"missile_def":195,"magic_def":160,"atk_skill":240,"dmg_min":17,"dmg_max":43,"dmg_type":"slash","al":35,"resist":{"slash":0.9,"pierce":0.9,"bludgeon":1.0,"fire":1.0,"cold":1.0,"acid":1.0,"electric":1.0}},{"name":"Burun Kukuur","type":"Burun","level":100,"health":900,"stamina":850,"mana":200,"melee_def":330,"missile_def":295,"magic_def":260,"atk_skill":350,"dmg_min":35,"dmg_max":90,"dmg_type":"slash","al":60,"resist":{"slash":0.9,"pierce":0.9,"bludgeon":1.0,"fire":1.0,"cold":1.0,"acid":1.0,"electric":1.0}},{"name":"Moarsman","type":"Moarsman","level":60,"health":500,"stamina":460,"mana":0,"melee_def":245,"missile_def":215,"magic_def":175,"atk_skill":260,"dmg_min":20,"dmg_max":52,"dmg_type":"pierce","al":45,"resist":{"slash":1.0,"pierce":0.75,"bludgeon":1.0,"fire":1.2,"cold":0.8,"acid":0.8,"electric":1.0}},{"name":"Blighted Moarsman","type":"Moarsman","level":120,"health":1300,"stamina":1200,"mana":300,"melee_def":370,"missile_def":330,"magic_def":300,"atk_skill":390,"dmg_min":55,"dmg_max":140,"dmg_type":"pierce","al":80,"resist":{"slash":1.0,"pierce":0.75,"bludgeon":1.0,"fire":1.2,"cold":0.8,"acid":0.8,"electric":1.0}},{"name":"Fire Elemental","type":"Elemental","level":30,"health":180,"stamina":150,"mana":200,"melee_def":165,"missile_def":145,"magic_def":175,"atk_skill":170,"dmg_min":12,"dmg_max":32,"dmg_type":"fire","al":0,"resist":{"slash":1.0,"pierce":1.0,"bludgeon":1.0,"fire":0.25,"cold":2.0,"acid":1.0,"electric":1.0}},{"name":"Maelstrom of Storms","type":"Elemental","level":100,"health":900,"stamina":800,"mana":800,"melee_def":320,"missile_def":290,"magic_def":340,"atk_skill":300,"dmg_min":60,"dmg_max":160,"dmg_type":"electric","al":0,"resist":{"slash":1.0,"pierce":1.0,"bludgeon":1.0,"fire":1.0,"cold":1.0,"acid":1.0,"electric":0.25}},{"name":"Sclavus","type":"Sclavus","level":45,"health":350,"stamina":320,"mana":150,"melee_def":215,"missile_def":185,"magic_def":190,"atk_skill":225,"dmg_min":15,"dmg_max":40,"dmg_type":"pierce","al":25,"resist":{"slash":1.0,"pierce":0.8,"bludgeon":1.0,"fire":0.8,"cold":1.2,"acid":0.8,"electric":1.0}},{"name":"Iron Blade Lieutenant","type":"Gear Knight","level":90,"health":850,"stamina":800,"mana":400,"melee_def":310,"missile_def":275,"magic_def":280,"atk_skill":330,"dmg_min":35,"dmg_max":90,"dmg_type":"slash","al":120,"resist":{"slash":0.75,"pierce":0.75,"bludgeon":1.0,"fire":1.0,"cold":1.0,"acid":1.5,"electric":0.5}},{"name":"Grievver","type":"Creature","level":100,"health":1000,"stamina":900,"mana":0,"melee_def":340,"missile_def":300,"magic_def":270,"atk_skill":360,"dmg_min":45,"dmg_max":115,"dmg_type":"pierce","al":50,"resist":{"slash":0.8,"pierce":0.7,"bludgeon":0.8,"fire":1.0,"cold":1.0,"acid":0.6,"electric":1.0}},{"name":"Gurog","type":"Creature","level":130,"health":1600,"stamina":1500,"mana":500,"melee_def":400,"missile_def":360,"magic_def":340,"atk_skill":430,"dmg_min":70,"dmg_max":175,"dmg_type":"bludgeon","al":80,"resist":{"slash":0.9,"pierce":0.9,"bludgeon":0.7,"fire":1.0,"cold":1.0,"acid":1.0,"electric":1.0}},{"name":"Mukkir","type":"Creature","level":150,"health":2200,"stamina":2000,"mana":800,"melee_def":440,"missile_def":390,"magic_def":370,"atk_skill":470,"dmg_min":90,"dmg_max":220,"dmg_type":"slash","al":80,"resist":{"slash":0.7,"pierce":0.8,"bludgeon":1.0,"fire":1.0,"cold":1.0,"acid":0.8,"electric":0.8}},{"name":"Aerbax","type":"Boss","level":275,"health":10000,"stamina":9000,"mana":5000,"melee_def":600,"missile_def":550,"magic_def":600,"atk_skill":600,"dmg_min":200,"dmg_max":500,"dmg_type":"fire","al":200,"resist":{"slash":0.5,"pierce":0.5,"bludgeon":0.5,"fire":0.25,"cold":1.0,"acid":0.5,"electric":0.5}}];
+
+const TTK_BUFF = {
+  none:  { attr:0,  skill:0,  label:'No Buffs' },
+  self6: { attr:28, skill:28, label:'Self-Buffed L6' },
+  self7: { attr:35, skill:35, label:'Self-Buffed L7' },
+  self8: { attr:45, skill:45, label:'Self-Buffed L8 (Incantations)' },
+  full6: { attr:28, skill:28, label:'Full Group Buffs L6' },
+  full7: { attr:35, skill:35, label:'Full Group Buffs L7' },
+  full8: { attr:45, skill:45, label:'Full Group Buffs L8' },
+};
+
+// Cantrip addon values — stack on top of base buff (one tier at a time)
+const TTK_CANTRIPS = {
+  none:      { attr:0,   skill:0,   label:'' },
+  prodigal:  { attr:250, skill:250, label:'+Prodigal Gems (+250)' },
+  minor:     { attr:5,   skill:5,   label:'+Minor Cantrips (+5)' },
+  moderate:  { attr:10,  skill:10,  label:'+Moderate Cantrips (+10)' },
+  major:     { attr:15,  skill:15,  label:'+Major Cantrips (+15)' },
+  epic:      { attr:20,  skill:20,  label:'+Epic Cantrips (+20)' },
+  legendary: { attr:25,  skill:25,  label:'+Legendary Cantrips (+25)' },
+};
+let _ttkActiveAddon = 'none';
+
+const TTK_SKILLS = [
+  { id:'heavy_weapons',     label:'Heavy Weapons',     category:'offense' },
+  { id:'light_weapons',     label:'Light Weapons',     category:'offense' },
+  { id:'finesse_weapons',   label:'Finesse Weapons',   category:'offense' },
+  { id:'two_handed_combat', label:'Two Handed Combat', category:'offense' },
+  { id:'missile_weapons',   label:'Missile Weapons',   category:'offense' },
+  { id:'war_magic',         label:'War Magic',         category:'offense' },
+  { id:'void_magic',        label:'Void Magic',        category:'offense' },
+  { id:'melee_defense',     label:'Melee Defense',     category:'defense' },
+  { id:'missile_defense',   label:'Missile Defense',   category:'defense' },
+  { id:'magic_defense',     label:'Magic Defense',     category:'defense' },
+];
+
+const TTK_WEAPON_TO_SKILL = {
+  heavy:'heavy_weapons', light:'light_weapons', finesse:'finesse_weapons',
+  two_handed:'two_handed_combat', missile:'missile_weapons',
+  war:'war_magic', void:'void_magic',
+};
+const TTK_WEAPON_DEF = {
+  heavy:'melee_defense', light:'melee_defense', finesse:'melee_defense',
+  two_handed:'melee_defense', missile:'missile_defense',
+  war:'magic_defense', void:'magic_defense',
+};
+const TTK_CREATURE_DEF = {
+  heavy:'tcMeleeDef', light:'tcMeleeDef', finesse:'tcMeleeDef',
+  two_handed:'tcMeleeDef', missile:'tcMissileDef',
+  war:'tcMagicDef', void:'tcMagicDef',
+};
+
+let _ttkBuff = 'none';
+
+// ── open / close ─────────────────────────────────────────────────
+window.openTTKCalc = function(){
+  var ov = document.getElementById('ttkOverlay');
+  if(ov){ ov.classList.add('open'); ttkBuildSkillBlock(); }
+};
+window.closeTTKCalc = function(){
+  var ov = document.getElementById('ttkOverlay');
+  if(ov) ov.classList.remove('open');
+};
+
+function ttkBuildSkillBlock(){
+  var el = document.getElementById('ttkSkillsBlock');
+  if(!el || el.children.length) return; // only build once
+  el.innerHTML = TTK_SKILLS.map(function(sk){
+    return '<div class="ttk-skill-row">'
+      +'<span class="ttk-skill-name">'+sk.label+'</span>'
+      +'<input type="number" id="tsk_'+sk.id+'" value="0" min="0" max="600">'
+      +'<select id="ttr_'+sk.id+'">'
+      +'<option>Untrained</option><option>Trained</option>'
+      +'<option>Specialized</option><option>Unusable</option>'
+      +'</select></div>';
+  }).join('');
+}
+
+// ── helpers ──────────────────────────────────────────────────────
+function tsv(id,val){ var el=document.getElementById(id); if(el) el.value=val; }
+function tgn(id){ return parseFloat(document.getElementById(id)&&document.getElementById(id).value)||0; }
+function tgs(id){ return (document.getElementById(id)&&document.getElementById(id).value)||''; }
+
+window.ttkSelectBuff = function(val){
+  _ttkBuff = val;
+  document.querySelectorAll('.ttk-buff-opt input[type="radio"]').forEach(function(inp){
+    inp.closest('.ttk-buff-opt').classList.toggle('active', inp.value === val);
+  });
+};
+
+window.ttkToggleShield = function(){
+  var cb   = document.getElementById('tHasShield');
+  var wrap = document.getElementById('tShieldALWrap');
+  var note = document.getElementById('tShieldNote');
+  if(wrap) wrap.style.display = cb && cb.checked ? '' : 'none';
+  if(note) note.style.display = cb && cb.checked ? '' : 'none';
+};
+
+// ── Weapon SQL Import ────────────────────────────────────────────────────────
+window.ttkImportWeapon = function(){
+  var inp = document.getElementById('ttkWeaponSQLInput');
+  if(inp){ inp.value = ''; inp.click(); }
+};
+
+window.ttkHandleWeaponSQL = function(fileInput){
+  var file = fileInput.files[0];
+  if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e){ ttkParseWeaponSQL(e.target.result, file.name); };
+  reader.readAsText(file);
+};
+
+window.ttkParseWeaponSQL = function(sql, filename){
+  // Generic int/float/string property extractors using ACE comment format
+  // e.g. (wcid, 44, 11) /* Damage */ or (wcid,  44,  11) /* Damage */
+  function gInt(typeId){
+    // Match: (any_wcid, typeId, value) with flexible whitespace
+    var re = new RegExp('\\(\\s*\\d+\\s*,\\s*'+typeId+'\\s*,\\s*(-?\\d+)');
+    var m = sql.match(re);
+    return m ? parseInt(m[1]) : null;
+  }
+  function gFloat(typeId){
+    var re = new RegExp('\\(\\s*\\d+\\s*,\\s*'+typeId+'\\s*,\\s*(-?[\\d.]+)');
+    var m = sql.match(re);
+    return m ? parseFloat(m[1]) : null;
+  }
+  function gStr(typeId){
+    var re = new RegExp('\\(\\s*\\d+\\s*,\\s*'+typeId+"\\s*,\\s*'([^']+)'");
+    var m = sql.match(re);
+    return m ? m[1] : null;
+  }
+
+  // ── Name: string type 1 ───────────────────────────────────────────────────
+  var name = gStr(1) || filename.replace(/\.sql$/i,'');
+
+  // ── Weenie type from INSERT INTO weenie VALUES ────────────────────────────
+  // VALUES (wcid, 'class_name', type, 'last_modified')
+  var weenieTypeM = sql.match(/INSERT INTO `weenie`[^V]*VALUES\s*\(\s*\d+\s*,\s*'[^']+'\s*,\s*(\d+)/);
+  var weenieType  = weenieTypeM ? parseInt(weenieTypeM[1]) : 6;
+  // 3=MissileLauncher  6=MeleeWeapon  35=Caster/Wand
+
+  // ── Damage (int type 44) and DamageVariance (float type 22) ──────────────
+  var wDmgMax = gInt(44);   // Damage = max damage value in ACE
+  var wDmgVar = gFloat(22); // DamageVariance 0.0–1.0
+  if(wDmgMax === null) wDmgMax = 40;
+  if(wDmgVar === null) wDmgVar = 0.25;
+  var wDmgMin = Math.max(1, Math.round(wDmgMax * (1 - wDmgVar)));
+
+  // Missile launchers: use DamageMod (float type 6) as a multiplier indicator
+  // Base ammo damage varies; show DamageMod as a note rather than dmg range
+  var damageMod = gFloat(6) || 1.0;  // applies to ammo damage
+
+  // ── Weapon speed: WeaponTime int type 49 ─────────────────────────────────
+  var wSpeed = gInt(49);
+  if(wSpeed === null) wSpeed = 40;
+
+  // ── Attack bonus: WeaponOffense float type 62 ────────────────────────────
+  // ACE stores this as 1.0 = no bonus, 1.18 = +18% attack skill bonus
+  // We display it as the multiplier offset (e.g. 0.18 for +18%)
+  var wOffense  = gFloat(62) || 1.0;
+  var wAtkBonus = Math.max(0, parseFloat((wOffense - 1.0).toFixed(4)));
+
+  // ── Damage type: DamageType int type 45 ──────────────────────────────────
+  // AC bitmask: 1=Slash 2=Pierce 4=Bludgeon 8=Fire 16=Cold 32=Acid 64=Electric
+  var dmgTypeInt = gInt(45) || 1;
+  var dmgTypeMap = {1:'slash',2:'pierce',4:'bludgeon',8:'fire',16:'cold',32:'acid',64:'electric'};
+  var dmgType    = dmgTypeMap[dmgTypeInt] || 'slash';
+
+  // ── Weapon skill: WeaponSkill int type 48 ────────────────────────────────
+  // 44=TwoHandedCombat 45=LightWeapons 46=HeavyWeapons 47=MissileWeapons
+  // Finesse weapons use LightWeapons (45) in ACE but show as Finesse in skill list
+  var weaponSkill = gInt(48);
+  var skToWType = {44:'two_handed', 45:'light', 46:'heavy', 47:'missile'};
+  var wType = weenieType === 3  ? 'missile'
+            : weenieType === 35 ? 'war'
+            : (skToWType[weaponSkill] || 'heavy');
+
+  // ── Apply to form ─────────────────────────────────────────────────────────
+  var wtSel = document.getElementById('twType');
+  if(wtSel) wtSel.value = wType;
+
+  tsv('twDmgMin',   wDmgMin);
+  tsv('twDmgMax',   wDmgMax);
+  tsv('twSpeed',    wSpeed);
+  tsv('twAtkBonus', wAtkBonus > 0 ? wAtkBonus : 0);
+
+  var dtSel = document.getElementById('twDmgType');
+  if(dtSel) dtSel.value = dmgType;
+
+  ttkOnWeaponChange();
+
+  // ── Status confirmation ───────────────────────────────────────────────────
+  var dmgLabel = weenieType === 3
+    ? '×'+damageMod.toFixed(2)+' ammo mod'
+    : wDmgMin+'–'+wDmgMax+' dmg';
+  var status = document.getElementById('ttkImportStatus');
+  if(status){
+    status.textContent = '✓ Weapon: '+name+' ('+dmgType+', '+dmgLabel+', speed '+wSpeed
+      +(wAtkBonus > 0 ? ', +'+Math.round(wAtkBonus*100)+'% atk' : '')+')';
+    status.className = 'ttk-status ok';
+    setTimeout(function(){ status.textContent=''; status.className='ttk-status'; }, 6000);
+  }
+};
+
+window.ttkToggleAddon = function(addon, labelEl){
+  var cb = document.getElementById('ttkAddon_'+addon);
+  if(!cb) return;
+  // Uncheck all others (only one cantrip tier at a time)
+  ['prodigal','minor','moderate','major','epic','legendary'].forEach(function(a){
+    if(a !== addon){
+      var el = document.getElementById('ttkAddon_'+a);
+      if(el){ el.checked = false; el.closest('.ttk-buff-opt').classList.remove('active'); }
+    }
+  });
+  cb.checked = !cb.checked;
+  labelEl.classList.toggle('active', cb.checked);
+  _ttkActiveAddon = cb.checked ? addon : 'none';
+};
+
+// ── Creature search ─────────────────────────────────────────────────────────
+window.ttkCreatureSearch = function(q){
+  var drop = document.getElementById('tCreatureDrop');
+  if(!q || q.length < 1){ drop.style.display='none'; return; }
+  var ql = q.toLowerCase();
+  var matches = TTK_CREATURES.filter(function(c){
+    return c.name.toLowerCase().indexOf(ql) >= 0
+        || c.type.toLowerCase().indexOf(ql) >= 0;
+  }).slice(0, 15);
+  if(!matches.length){ drop.style.display='none'; return; }
+  drop.innerHTML = matches.map(function(c){
+    return '<div style="padding:7px 10px;cursor:pointer;font-family:var(--ui-font);font-size:11px;'
+      +'font-weight:600;color:var(--ink);border-bottom:1px solid var(--border-lt);" '
+      +'onmousedown="ttkLoadCreature('+TTK_CREATURES.indexOf(c)+')" '
+      +'<span>'+c.name+'</span>'
+      +'<span style="color:var(--ink-dim);font-size:9px;margin-left:8px">L'+c.level+' · '+c.type+'</span>'
+      +'</div>';
+  }).join('');
+  drop.style.display='block';
+};
+
+window.ttkLoadCreature = function(idx){
+  var c = TTK_CREATURES[idx];
+  if(!c) return;
+  document.getElementById('tCreatureDrop').style.display='none';
+  document.getElementById('tCreatureSearch').value = '';
+  tsv('tcName', c.name);
+  tsv('tcLevel', c.level);
+  tsv('tcHP', c.health);
+  tsv('tcStam', c.stamina);
+  tsv('tcMana', c.mana);
+  tsv('tcMeleeDef', c.melee_def);
+  tsv('tcMissileDef', c.missile_def);
+  tsv('tcMagicDef', c.magic_def);
+  tsv('tcAtkSkill', c.atk_skill);
+  tsv('tcDmgMin', c.dmg_min);
+  tsv('tcDmgMax', c.dmg_max);
+  tsv('tcAL', c.al);
+  tsv('tcSwings', 20);
+  var dmgSel = document.getElementById('tcDmgType');
+  if(dmgSel) dmgSel.value = c.dmg_type;
+  var r = c.resist;
+  tsv('trSlash', r.slash);    tsv('trPierce', r.pierce);
+  tsv('trBludgeon', r.bludgeon); tsv('trFire', r.fire);
+  tsv('trCold', r.cold);     tsv('trAcid', r.acid);
+  tsv('trElectric', r.electric);
+};
+
+window.ttkDismissResults = function(){
+  var rc = document.getElementById('ttkResultsContent');
+  var cl = document.getElementById('ttkResultsClose');
+  if(!rc) return;
+  var hidden = rc.style.display === 'none';
+  rc.style.display = hidden ? '' : 'none';
+  if(cl) cl.title = hidden ? 'Hide results' : 'Show results';
+};
+
+window.ttkImportCreature = function(){
+  var inp = document.getElementById('ttkCreatureSQLInput');
+  if(inp){ inp.value = ''; inp.click(); }
+};
+
+window.ttkHandleCreatureSQL = function(fileInput){
+  var file = fileInput.files[0];
+  if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e){ ttkParseCreatureSQL(e.target.result, file.name); };
+  reader.readAsText(file);
+};
+
+window.ttkParseCreatureSQL = function(sql, filename){
+  // Helper: find integer property value by type ID
+  function gInt(t){ var m=sql.match(new RegExp('[,(]\\s*'+t+'\\s*,\\s*(-?\\d+)')); return m?parseInt(m[1]):null; }
+  function gFloat(t){ var m=sql.match(new RegExp('[,(]\\s*'+t+'\\s*,\\s*([\\d.\\-]+)')); return m?parseFloat(m[1]):null; }
+  function gStr(t){ var m=sql.match(new RegExp('[,(]\\s*'+t+"\\s*,\\s*'([^']+)'")); return m?m[1]:null; }
+
+  // Parse attribute 2nd (vitals) current_Level — last column in each row
+  // INSERT INTO weenie_properties_attribute_2nd ... VALUES (wcid, type, init, lfcp, cpspent, current)
+  function gVital(typeId){
+    var re = new RegExp('\\(\\s*\\d+\\s*,\\s*'+typeId+'\\s*,\\s*\\d+\\s*,\\s*\\d+\\s*,\\s*\\d+\\s*,\\s*(\\d+)');
+    var m = sql.match(re); return m ? parseInt(m[1]) : null;
+  }
+  // Parse skill init_Level: VALUES (wcid, type, lfpp, sac, pp, init_level, ...)
+  function gSkillInit(typeId){
+    var re = new RegExp('\\(\\s*\\d+\\s*,\\s*'+typeId+'\\s*,\\s*0\\s*,\\s*\\d\\s*,\\s*0\\s*,\\s*(\\d+)');
+    var m = sql.match(re); return m ? parseInt(m[1]) : null;
+  }
+
+  var name     = gStr(1) || filename.replace(/\.sql$/i,'');
+  var level    = gInt(25) || 50;
+  var hp       = gVital(1) || gInt(1) || 500;
+  var stam     = gVital(3) || 500;
+  var mana     = gVital(5) || 500;
+  var meleeDef   = gSkillInit(6)  || Math.round(level*2.5+50);
+  var missileDef = gSkillInit(7)  || Math.round(level*2.2+50);
+  var magicDef   = gSkillInit(15) || Math.round(level*2.0+50);
+  var atkSkill   = gSkillInit(45) || gSkillInit(46) || gSkillInit(6) || Math.round(level*2.8+50);
+
+  function getR(t){ var v=gFloat(t); return v!==null?Math.round(v*100)/100:1.0; }
+  var resist = {slash:getR(64),pierce:getR(65),bludgeon:getR(66),
+                fire:getR(67),cold:getR(68),acid:getR(69),electric:getR(70)};
+
+  // Armor: first base_Armor column in body_part table
+  var alm = sql.match(/weenie_properties_body_part[\s\S]{0,800}VALUES\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*(\d+)/);
+  var al = alm ? parseInt(alm[1]) : 0;
+
+  var dmgMin = Math.max(1, Math.round(level*0.3+5));
+  var dmgMax = Math.round(dmgMin*2.6);
+  var combatMode = gInt(40) || 2;
+  var dmgType = combatMode===3 ? 'fire' : 'bludgeon';
+
+  tsv('tcName',name); tsv('tcLevel',level);
+  tsv('tcHP',hp); tsv('tcStam',stam); tsv('tcMana',mana);
+  tsv('tcMeleeDef',meleeDef); tsv('tcMissileDef',missileDef); tsv('tcMagicDef',magicDef);
+  tsv('tcAtkSkill',atkSkill);
+  tsv('tcDmgMin',dmgMin); tsv('tcDmgMax',dmgMax); tsv('tcAL',al);
+  var sel=document.getElementById('tcDmgType'); if(sel) sel.value=dmgType;
+  tsv('trSlash',resist.slash); tsv('trPierce',resist.pierce);
+  tsv('trBludgeon',resist.bludgeon); tsv('trFire',resist.fire);
+  tsv('trCold',resist.cold); tsv('trAcid',resist.acid); tsv('trElectric',resist.electric);
+
+  var status=document.getElementById('ttkImportStatus');
+  if(status){
+    status.textContent = '✓ Imported: '+name+' (L'+level+', HP:'+hp+')';
+    status.className='ttk-status ok';
+    setTimeout(function(){ status.textContent=''; status.className='ttk-status'; }, 4000);
+  }
+};
+
+// Close drop on outside click
+document.addEventListener('click', function(e){
+  if(!e.target.closest('#tCreatureSearch') && !e.target.closest('#tCreatureDrop')){
+    var d = document.getElementById('tCreatureDrop');
+    if(d) d.style.display='none';
+  }
+});
+
+window.ttkSetAL = function(val, btn){
+  tsv('tPlayerAL', val);
+  document.querySelectorAll('.ttk-al-btn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+};
+
+window.ttkOnAttrChange = function(){};
+window.ttkOnWeaponChange = function(){
+  var wt = tgs('twType');
+  var sid = TTK_WEAPON_TO_SKILL[wt];
+  if(sid){ var v = tgn('tsk_'+sid); if(v>0) tsv('twSkill', v); }
+};
+
+// ── Treestats import ─────────────────────────────────────────────
+window.ttkImport = async function(){
+  var server = (document.getElementById('ttsServer').value||'').trim();
+  var name   = (document.getElementById('ttsName').value||'').trim();
+  var status = document.getElementById('ttkImportStatus');
+  if(!server||!name){
+    status.textContent='⚠ Enter both server and character name.';
+    status.className='ttk-status err'; return;
+  }
+  status.textContent='⏳ Fetching from Treestats…';
+  status.className='ttk-status';
+  var url='https://treestats.net/'+encodeURIComponent(server)+'/'+encodeURIComponent(name)+'.json';
+  try{
+    var res = await fetch(url);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    var d = await res.json();
+    if(!d.attribs) throw new Error('Unexpected format');
+    ttkApplyData(d);
+    status.textContent='✓ Loaded '+d.name+' (Lvl '+d.level+') from '+d.server;
+    status.className='ttk-status ok';
+  } catch(e){
+    status.textContent='✗ '+e.message+'. Check name/server or enter manually.';
+    status.className='ttk-status err';
+  }
+};
+
+function ttkApplyData(d){
+  tsv('tpName', d.name||'');
+  var a = d.attribs||{};
+  tsv('taStr',  a.strength?.base||100);
+  tsv('taEnd',  a.endurance?.base||100);
+  tsv('taCrd',  a.coordination?.base||100);
+  tsv('taQck',  a.quickness?.base||100);
+  tsv('taFcs',  a.focus?.base||100);
+  tsv('taSelf', a.self?.base||100);
+  var v = d.vitals||{};
+  tsv('tvHP',   v.health?.base||100);
+  tsv('tvStam', v.stamina?.base||100);
+  tsv('tvMana', v.mana?.base||100);
+  var s = d.skills||{};
+  var skMap = {
+    heavy_weapons:s.heavy_weapons, light_weapons:s.light_weapons,
+    finesse_weapons:s.finesse_weapons, two_handed_combat:s.two_handed_combat,
+    missile_weapons:s.missile_weapons, war_magic:s.war_magic, void_magic:s.void_magic,
+    melee_defense:s.melee_defense, missile_defense:s.missile_defense, magic_defense:s.magic_defense,
+  };
+  Object.keys(skMap).forEach(function(id){
+    var sd = skMap[id]; if(!sd) return;
+    tsv('tsk_'+id, sd.base||0);
+    var tr = document.getElementById('ttr_'+id);
+    if(tr) tr.value = sd.training||'Untrained';
+  });
+  // Auto-select best weapon skill
+  var best=null, bestV=-1;
+  [['heavy_weapons','heavy'],['light_weapons','light'],['finesse_weapons','finesse'],
+   ['two_handed_combat','two_handed'],['missile_weapons','missile'],
+   ['war_magic','war'],['void_magic','void']].forEach(function(pair){
+    var v2=(s[pair[0]]&&s[pair[0]].base)||0;
+    if(v2>bestV){bestV=v2;best=pair;}
+  });
+  if(best){
+    tsv('twType', best[1]);
+    tsv('twSkill', bestV);
+  }
+}
+
+window.ttkClearPlayer = function(){
+  ['tpName','taStr','taEnd','taCrd','taQck','taFcs','taSelf',
+   'tvHP','tvStam','tvMana','twSkill','twDmgMin','twDmgMax','twSpeed','twAtkBonus','tPlayerAL']
+   .forEach(function(id){ var el=document.getElementById(id); if(el) el.value=el.type==='number'?0:''; });
+  TTK_SKILLS.forEach(function(sk){
+    tsv('tsk_'+sk.id, 0);
+    var tr=document.getElementById('ttr_'+sk.id); if(tr) tr.value='Untrained';
+  });
+  document.getElementById('ttkImportStatus').textContent='';
+};
+
+window.ttkClearCreature = function(){
+  ['tcName','tcLevel','tcHP','tcStam','tcMana','tcMeleeDef','tcMissileDef','tcMagicDef',
+   'tcAtkSkill','tcDmgMin','tcDmgMax','tcAL','tcSwings',
+   'trSlash','trPierce','trBludgeon','trFire','trCold','trAcid','trElectric',
+   'tpResSlash','tpResPierce','tpResBludgeon','tpResFire','tpResCold','tpResAcid','tpResElectric']
+   .forEach(function(id){ var el=document.getElementById(id); if(el) el.value=el.type==='number'?0:''; });
+};
+
+// ── Combat formulas ───────────────────────────────────────────────
+function ttkHitChance(atk, def){
+  var raw = 1 - 1/(1+Math.exp(0.03*(atk-def)));
+  return Math.max(0.02, Math.min(0.98, raw));
+}
+function ttkStrBonus(str){ return Math.max(0, Math.floor((str-100)/10)); }
+function ttkArmorMit(dmg, al){
+  if(al<=0) return dmg;
+  return dmg * (1 - Math.min(0.98, al*0.003));
+}
+function ttkResistMit(dmg, resist){ return resist>0 ? dmg/resist : dmg; }
+function ttkAttackInterval(wSpeed, qck){
+  var qBonus = Math.max(0,(qck-100)/10)*0.05;
+  return Math.max(0.5, (wSpeed/60)*(1-qBonus));
+}
+function ttkBuffedSkill(base, training, buffKey){
+  var b=TTK_BUFF[buffKey]||TTK_BUFF.none;
+  var addon=TTK_CANTRIPS[_ttkActiveAddon]||TTK_CANTRIPS.none;
+  if(training==='Untrained'||training==='Unusable') return base;
+  return base + b.skill + addon.skill;
+}
+function ttkBuffedAttr(base, buffKey){
+  var addon=TTK_CANTRIPS[_ttkActiveAddon]||TTK_CANTRIPS.none;
+  return base+(TTK_BUFF[buffKey]||TTK_BUFF.none).attr+addon.attr;
+}
+function ttkBuffedHP(base, buffKey){
+  var hpBuff={none:0,self:40,full6:55,full7:75}[buffKey]||0;
+  return base+hpBuff;
+}
+
+// ── Calculate ────────────────────────────────────────────────────
+window.ttkCalculate = function(){
+  var wType    = tgs('twType');
+  var atkSkId  = TTK_WEAPON_TO_SKILL[wType];
+  var defSkId  = TTK_WEAPON_DEF[wType];
+  var cDefId   = TTK_CREATURE_DEF[wType];
+
+  // Player attack
+  var pAtkBase   = tgn('twSkill');
+  var pAtkTr     = tgs('ttr_'+atkSkId)||'Trained';
+  var pAtkBuffed = ttkBuffedSkill(pAtkBase, pAtkTr, _ttkBuff);
+  var wAtkBonus  = tgn('twAtkBonus');
+  var pAtkFinal  = pAtkBuffed + pAtkBuffed*wAtkBonus;
+
+  // Player defense
+  var pDefBase   = tgn('tsk_'+defSkId);
+  var pDefTr     = tgs('ttr_'+defSkId)||'Untrained';
+  var pDefBuffed = ttkBuffedSkill(pDefBase, pDefTr, _ttkBuff);
+
+  // Buffed attributes
+  var str = ttkBuffedAttr(tgn('taStr'),  _ttkBuff);
+  var qck = ttkBuffedAttr(tgn('taQck'),  _ttkBuff);
+
+  // Creature defense
+  var cDef    = tgn(cDefId);
+  var cHP     = tgn('tcHP');
+  var cAL     = tgn('tcAL');
+
+  // Hit chance: player → creature
+  var pHit = ttkHitChance(pAtkFinal, cDef);
+
+  // Damage: player → creature
+  var dmgMin  = tgn('twDmgMin');
+  var strB    = ttkStrBonus(str);
+  var dmgMax  = tgn('twDmgMax') + strB;
+  var avgRaw  = (dmgMin+dmgMax)/2 * 0.85;  // 85% power bar
+  // Player weapon damage type → creature resistance lookup
+  var pDmgType   = tgs('twDmgType') || 'slash';
+  var cResMap2   = {slash:'trSlash',pierce:'trPierce',bludgeon:'trBludgeon',
+                    fire:'trFire',cold:'trCold',acid:'trAcid',electric:'trElectric'};
+  var cResistVal = tgn(cResMap2[pDmgType]||'trSlash') || 1.0;
+  var avgAfterRes = ttkResistMit(avgRaw, cResistVal);
+  var avgMit  = ttkArmorMit(avgAfterRes, cAL);
+  var avgEff  = avgMit * pHit;
+  var wSpeed  = tgn('twSpeed')||40;
+  var atkInt  = ttkAttackInterval(wSpeed, qck);
+  var dps     = avgEff / atkInt;
+  var pTTK    = cHP / dps;
+
+  // Creature → player
+  var cAtkSkill = tgn('tcAtkSkill');
+  var cHit      = ttkHitChance(cAtkSkill, pDefBuffed);
+  var pHP       = ttkBuffedHP(tgn('tvHP'), _ttkBuff);
+  var pAL_base  = tgn('tPlayerAL');
+  // Shield: adds AL vs melee damage types only
+  var shieldCb  = document.getElementById('tHasShield');
+  var shieldAL  = (shieldCb && shieldCb.checked) ? tgn('tShieldAL') : 0;
+  var cDmgType  = tgs('tcDmgType');
+  var isMeleeDmg = ['slash','pierce','bludgeon'].indexOf(cDmgType) >= 0;
+  var pAL        = pAL_base + (isMeleeDmg ? shieldAL : 0);
+  var pResMap   = {slash:'tpResSlash',pierce:'tpResPierce',bludgeon:'tpResBludgeon',
+                   fire:'tpResFire',cold:'tpResCold',acid:'tpResAcid',electric:'tpResElectric'};
+  var pResVal   = tgn(pResMap[cDmgType]||'tpResBludgeon')||1;
+  var cAvgRaw   = (tgn('tcDmgMin')+tgn('tcDmgMax'))/2;
+  var cAfterRes = ttkResistMit(cAvgRaw, pResVal);
+  var cAfterAL  = ttkArmorMit(cAfterRes, pAL);
+  var cEff      = cAfterAL * cHit;
+  var cSPM      = tgn('tcSwings')||20;
+  var cDPS      = cEff * cSPM / 60;
+  var cTTK      = pHP / cDPS;
+
+  ttkRenderResults({
+    pHit, cHit, pAtkFinal, pDefBuffed, cDef,
+    dmgMin, dmgMax, strB, avgRaw, avgAfterRes, avgMit, avgEff,
+    atkInt, dps, pTTK,
+    cHP, pHP, pAL, pAL_base, shieldAL, isMeleeDmg,
+    cAL, cAvgRaw, cAfterAL, cEff, cDPS, cTTK,
+    pDmgType, cResistVal,
+    swingsPerMin: 60/atkInt, cSPM,
+    buffLabel: TTK_BUFF[_ttkBuff].label + (_ttkActiveAddon!=='none' ? ' '+TTK_CANTRIPS[_ttkActiveAddon].label : ''),
+  });
+};
+
+// ── Render ───────────────────────────────────────────────────────
+function fmtT(s){
+  if(!isFinite(s)||s>99999) return '∞';
+  if(s<60) return s.toFixed(1)+'s';
+  return Math.floor(s/60)+'m '+Math.round(s%60)+'s';
+}
+function fmtP(v){ return (v*100).toFixed(1)+'%'; }
+function fmtD(v){ return isFinite(v)?v.toFixed(1):'0.0'; }
+
+function ttkRenderResults(r){
+  var pWin = r.pTTK < r.cTTK;
+  document.getElementById('ttkResultsContent').innerHTML =
+    '<div class="ttk-result-grid">'
+    +'<div class="ttk-result-cell"><div class="ttk-result-val" style="color:'+(pWin?'var(--green)':'var(--danger)')+'">'+fmtT(r.pTTK)+'</div>'
+    +'<div class="ttk-result-lbl">Player TTK</div><div class="ttk-result-sub">time to kill creature</div></div>'
+    +'<div class="ttk-result-cell"><div class="ttk-result-val" style="color:'+(!pWin?'var(--green)':'var(--danger)')+'">'+fmtT(r.cTTK)+'</div>'
+    +'<div class="ttk-result-lbl">Creature TTK</div><div class="ttk-result-sub">time to kill player</div></div>'
+    +'<div class="ttk-result-cell"><div class="ttk-result-val">'+fmtP(r.pHit)+'</div>'
+    +'<div class="ttk-result-lbl">Player Hit Chance</div><div class="ttk-result-sub">'+r.pAtkFinal.toFixed(0)+' atk vs '+r.cDef+' def</div></div>'
+    +'<div class="ttk-result-cell"><div class="ttk-result-val">'+fmtP(r.cHit)+'</div>'
+    +'<div class="ttk-result-lbl">Creature Hit Chance</div><div class="ttk-result-sub">vs '+r.pDefBuffed.toFixed(0)+' defense</div></div>'
+    +'</div>'
+    +'<div class="ttk-breakdown">'
+    +'<div class="ttk-bd-block"><div class="ttk-bd-title">Player → Creature</div>'
+    +bd('Buff profile',r.buffLabel)
+    +bd('Attack skill (buffed)',r.pAtkFinal.toFixed(0))
+    +bd('Str damage bonus','+'+r.strB)
+    +bd('Dmg range',r.dmgMin+'–'+r.dmgMax)
+    +bd('Dmg type × creature resist ('+r.pDmgType+')',r.cResistVal.toFixed(2)+'× → '+r.avgAfterRes.toFixed(1))
+    +bd('Avg × 85% power bar',r.avgRaw.toFixed(1))
+    +bd('After creature AL ('+r.cAL+')',r.avgMit.toFixed(1))
+    +bd('× hit chance ('+fmtP(r.pHit)+')',r.avgEff.toFixed(1)+' eff avg/swing')
+    +bd('Swings/min',r.swingsPerMin.toFixed(1))
+    +bd('DPS','<span class="ttk-bd-val '+(pWin?'hi':'lo')+'">'+fmtD(r.dps)+'</span>')
+    +bd('Creature HP',r.cHP)
+    +bd('Time to kill','<span class="ttk-bd-val '+(pWin?'hi':'lo')+'">'+fmtT(r.pTTK)+'</span>')
+    +'</div>'
+    +'<div class="ttk-bd-block"><div class="ttk-bd-title">Creature → Player</div>'
+    +bd('Player HP (buffed)',r.pHP)
+    +bd('Player defense (buffed)',r.pDefBuffed.toFixed(0))
+    +bd('Player AL',r.pAL_base+(r.shieldAL>0&&r.isMeleeDmg?' + '+r.shieldAL+' shield → '+r.pAL:''))
+    +bd('Creature avg dmg (raw)',r.cAvgRaw.toFixed(1))
+    +bd('After player AL',r.cAfterAL.toFixed(1))
+    +bd('× hit chance ('+fmtP(r.cHit)+')',r.cEff.toFixed(1)+' eff avg/swing')
+    +bd('Swings/min',r.cSPM)
+    +bd('DPS vs player','<span class="ttk-bd-val '+(!pWin?'hi':'lo')+'">'+fmtD(r.cDPS)+'</span>')
+    +bd('Time to kill player','<span class="ttk-bd-val '+(!pWin?'hi':'lo')+'">'+fmtT(r.cTTK)+'</span>')
+    +'</div></div>'
+    +'<div class="ttk-foot"><div class="ttk-note">⚠ Estimates assume 85% power bar, no critical imbues, '
+    +'and the selected buff profile. Resistances default to 1.0 (neutral). '
+    +'Results are directional — verify against in-game testing.</div>'
+    +'<button class="ttk-calc-btn" onclick="ttkCalculate()">▶ Recalculate</button></div>';
+}
+
+function bd(key, val){
+  return '<div class="ttk-bd-row"><span class="ttk-bd-key">'+key+'</span>'
+        +'<span class="ttk-bd-val">'+val+'</span></div>';
+}
+
+})(); // end IIFE
+</script>
 
 </body>
 </html>
