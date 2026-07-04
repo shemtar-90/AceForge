@@ -1,20 +1,24 @@
-# ACEForge — Weenie Workbench
-### Content Creation Tool for ACEmulator (Asheron's Call Private Servers)
+# ACEForge
+### Asheron's Call Content Development Tool for ACEmulator
 
-**Version 1.8.0** | Windows Desktop Application
+**Version 0.3.23 Beta** | Windows Desktop Application
 
 ---
 
 ## What Is ACEForge?
 
-ACEForge is a desktop application for Asheron's Call private server administrators running [ACEmulator](https://github.com/ACEmulator/ACE). It generates production-ready SQL files for the ACE-World database — the format the server imports directly.
+ACEForge is a desktop application for Asheron's Call private server administrators running [ACEmulator](https://github.com/ACEmulator/ACE). It generates production-ready SQL for the ACE-World database (ACE-World-16PY schema, MySQL) — the exact format the server imports directly, with no hand-cleanup required.
 
-Instead of writing SQL by hand or navigating complex database schemas, ACEForge gives you two ways to create content:
+The app is organized into four workspaces ("Forges"), selectable from the tab bar at the top:
 
-- **Manual Mode** — Fill out a structured form, see the SQL update in real time, save when ready.
-- **AI Mode** — Describe what you want in plain English. The AI writes the complete SQL file set, including generators, emote chains, quest flags, and all related tables.
+| Forge | Purpose |
+|-------|---------|
+| **🔨 WeenieForge** | Build or edit any weenie — creatures, NPCs, items, weapons, armor, recipes, quest flags, events — through a structured property editor with a live SQL preview. |
+| **✨ QuestForge** | Generate complete, correctly-linked quest SQL (kill tasks, collection turn-ins, NPC chains, quest flags) from guided templates, then hand off to WeenieForge for fine-tuning. |
+| **📖 LoreForge** | An AI worldbuilding assistant for developing your server's lore, factions, NPCs, and story — kept in per-conversation history. |
+| **⚔️ GearForge** | Batch-create custom armor/clothing/weapon sets by cloning base-game gear, or import existing gear SQL to edit and bulk-edit many items at once. |
 
-Every file ACEForge produces is import-ready. No cleanup needed.
+Content can be created either by hand (structured forms with real-time SQL) or with AI assistance (local via Ollama, or a cloud provider).
 
 ---
 
@@ -23,63 +27,142 @@ Every file ACEForge produces is import-ready. No cleanup needed.
 | Component | Requirement |
 |-----------|-------------|
 | Operating System | Windows 10 / 11 (64-bit) |
+| Runtime | Microsoft Edge WebView2 Runtime (preinstalled on current Windows; auto-updates) |
 | RAM | 4 GB minimum (8 GB recommended if using local AI) |
 | Disk Space | ~50 MB for the app; 2–5 GB additional for AI models (optional) |
-| Internet | Required for cloud AI providers and initial Ollama model download |
+| Internet | Required only for cloud AI, Ollama model downloads, and app updates |
 | GPU | Not required, but dramatically speeds up local AI generation |
 
 ---
 
 ## Installation
 
-1. Download `ACEForge_v1.x.x.zip` from the releases page.
+1. Download `ACEForge_v0.x.x.zip` from the releases page.
 2. Extract the zip to any folder on your PC (e.g. `C:\ACEForge\`).
 3. Run `ACEForge.exe` to launch.
 
-No installer required. ACEForge is fully portable.
+No installer required — ACEForge is fully portable.
 
-> **First launch**: ACEForge will create a config file at `%APPDATA%\ACEForge\config.json`. This stores your API keys, server settings, and WCID counters. It is never included in any zip or git repository.
+> **First launch** creates a config file at `%APPDATA%\ACEForge\config.json` holding your settings, API keys, and WCID counters. It is never included in any zip or git repository.
+
+---
+
+## WeenieForge
+
+WeenieForge is the core editor. It has two entry points:
+
+- **⬆ Import Weenie SQL** — load any existing weenie `.sql` file to view and edit every property.
+- **⬜ Import From Template** — start from a built-in template (Creature/Mob, NPC, Generator, Door, Chest, Event Controller, Stopgap) with stats auto-scaled to a level you choose.
+
+Along the top of the editor are four content sub-tabs — **Weenie**, **Recipe**, **Quest**, **Event** — each producing SQL against the matching ACE table.
+
+### Property Editor
+
+Once content is loaded, properties are grouped into sub-tabs that map directly to the ACE `weenie_properties_*` tables:
+
+| Sub-Tab | Contents |
+|---------|----------|
+| **Integer 32 / Integer 64** | All int properties. Enum-style ints (ItemType, TargetingTactic, PhysicsState, ShowableOnRadar, RadarBlipColor, ClothingPriority, Locations, UIEffects, and more) render as labeled dropdowns instead of raw numbers. |
+| **Boolean** | True/False dropdowns. |
+| **Float** | Float properties. `ArmorModVs*` and `Resist*` for every damage type (including Nether) render as intuitive sliders — weaker/stronger for armor mods, and the inverse for resists. |
+| **String / Data ID** | String and DID properties. Icon/Setup DIDs get a picker and a live composite icon preview. |
+| **Attribs / Skills** | Strength/Endurance/Quickness/Coordination/Focus/Self, Health/Stamina/Mana (base + current), and skills — all with sliders whose ranges you can set per section. |
+| **Body Parts** | Per-hit-location armor levels and damage types. |
+| **Create Items** | Contained/wielded/sold items (CreateList), with an armor-set helper. |
+| **Generator** | `weenie_properties_generator` spawn rows. |
+| **Position** | Placement coordinates (cell, origin, angles). |
+
+The **PaletteTemplate** integer has a **Picker** that opens a searchable color palette — with a Grid view (color swatches) and a List view.
+
+### Palette, Icons & 3D Preview
+
+- **Palette Picker** — pick any `PALETTE_ENTRY_INT` value by color swatch or name.
+- **Icon Picker** — browse the full game icon set (requires the Icon Library asset package).
+- **3D Model Preview** — point Settings at your `client_portal.dat` to preview Setup DIDs in 3D.
+
+---
+
+## QuestForge
+
+QuestForge generates guaranteed-valid quest SQL from templates rather than free-form AI, so quest flags, timers, and kill-task counters are always wired up correctly. Pick a quest type, fill in the guided form, and generate the full file set. Any generated file can be opened directly in WeenieForge for further editing via **✏ Edit in WeenieForge** — quest files open in the Quest sub-tab, weenies in the appropriate editor.
+
+---
+
+## LoreForge
+
+LoreForge is a chat-based AI assistant for server worldbuilding — factions, regions, NPC backstories, quest hooks, and overall narrative. Conversations are saved individually and can be revisited, renamed, or deleted. A **Server Identity** panel lets you set your server's name, intent, and lore so every conversation stays on-theme.
+
+---
+
+## GearForge
+
+GearForge specializes in armor, clothing, and weapons.
+
+- **Set generation** — browse Armor Sets or Weapon Sets, pick the pieces you want (checkboxes), assign a starting WCID and optional name prefix, and generate a batch of editable items.
+- **Import** — click **⬆ Import** to load one or more existing `.sql` files. GearForge only accepts armor/clothing/weapon weenies; creatures, jewelry, food, and other non-gear files are rejected automatically. When importing several files at once, the allowable gear is imported and the rest are skipped with a summary.
+- **Per-item editor** — edit any Int/Bool/Float/String/DID property or spellbook entry on each item.
+- **Bulk Edit** — apply a property change across every generated/imported item at once.
+- **Save** — writes each item as its own weenie `.sql` file.
+
+---
+
+## AI Setup (Optional)
+
+WeenieForge and QuestForge work fully offline. AI is only needed for LoreForge and AI-assisted generation.
+
+### Option A — Local AI via Ollama (Recommended)
+
+Runs entirely on your machine: no API key, no token limits, no per-generation cost.
+
+1. Open the Local AI setup from the AI panel.
+2. **Download & Install Ollama** — ACEForge fetches the installer (~60 MB) and launches it, then detects it on **↺ Check Again**.
+3. **Pull a model** — download runs in the background with a live progress bar and auto-configures on completion.
+
+| Model | Size | Best For |
+|-------|------|----------|
+| **Qwen 2.5 Coder 7B** ⭐ | ~4.5 GB | SQL/structured output — most accurate for ACE content. |
+| CodeLlama 7B | ~3.8 GB | Reliable SQL formatting. |
+| Llama 3.2 3B | ~2.0 GB | Fastest, lowest RAM; less reliable on complex chains. |
+
+Ollama starts automatically in the background whenever ACEForge opens.
+
+### Option B — Cloud API Key
+
+Enter a key in **Settings → AI Provider**. OpenAI-compatible endpoints (LM Studio, Groq, Mistral, etc.) are supported via a custom Base URL.
+
+> ⚠ Cloud plans impose token limits that can truncate long, multi-file output. For big quest chains, local Ollama is strongly recommended.
 
 ---
 
 ## Optional Asset Packages
 
-Two large asset packages are distributed separately and are not required to run ACEForge, but significantly improve AI Mode accuracy.
+Distributed separately; not required to run ACEForge but they improve AI accuracy and unlock the icon picker.
 
-### Icon Library (`ACEForge_Icons.zip` — ~21 MB)
-Contains all 12,371 game icon PNGs and the icon index file. Enables the icon picker in the form and allows the AI to reference correct icon DIDs.
+| Package | Size | Enables |
+|---------|------|---------|
+| **Icon Library** (`ACEForge_Icons.zip`) | ~21 MB | The full game icon set for the icon picker and correct icon DIDs. |
+| **Weenie Database** (`ACEForge_WeenieDB.zip`) | ~38 MB | Indexed base-game weenies so AI Mode injects exact property values, resists, DIDs, and body-part tables from real game data. |
 
-### Weenie Database (`ACEForge_WeenieDB.zip` — ~38 MB)
-Contains all 29,569 base-game weenie SQL files indexed for lookup. When installed, AI Mode automatically finds and injects matching base-game weenies into every generation request — giving the AI exact property values, resist floats, DID setups, and body part tables from the actual game.
-
-#### Installing Asset Packages
-
-1. Open ACEForge and click **Settings** (top-right).
-2. Scroll to **Content Libraries**.
-3. Click **📦 Install Library Package…**
-4. Browse to and select the zip file (`ACEForge_Icons.zip` or `ACEForge_WeenieDB.zip`).
-5. A progress bar tracks extraction. Both packages install automatically — no manual file placement needed.
-
-The status panel shows ✅ with entry counts when each library is active. Libraries can be unloaded individually from the same panel.
+Install via **Settings → Content Libraries → 📦 Install Library Package…** and select the zip. A progress bar tracks extraction; libraries can be unloaded individually.
 
 ---
 
-## First-Time Setup
+## Settings
 
-### Step 1 — Configure Your Server
+| Setting | Description |
+|---------|-------------|
+| **Server Name** | Injected into AI prompts as context. |
+| **Author / Admin** | Credited in generated file headers. |
+| **Default Output Directory** | Where `.sql` files are saved (default: `Documents\ACEForge\output`). |
+| **Per-Type Output Directories** | Optional separate folders for **Weenie**, **Recipe**, **Quest**, and **Event** files. Leave any blank to fall back to the default. QuestForge and WeenieForge route each file to the folder matching its detected type. |
+| **AI Provider** | Ollama or an OpenAI-compatible cloud endpoint; API key stored only in your local config. |
+| **client_portal.dat** | Optional — enables 3D Setup DID previews. |
+| **Content Libraries** | Install/unload the Icon and Weenie asset packages. |
+| **WCID Ranges** | Per-category next-available WCID counters (see below). |
 
-Open **Settings** and fill in:
+### WCID Ranges
 
-| Field | Description |
-|-------|-------------|
-| **Server Name** | Your server's name. Used in AI prompts as context. |
-| **Author / Admin** | Your name or handle. Credited in generated file headers. |
-| **Output Folder** | Where `.sql` files are saved. Defaults to `Documents\ACEForge\output`. |
-| **Auto-Open Folder** | If enabled, opens the output folder after each save. |
-
-### Step 2 — WCID Ranges
-
-ACEForge tracks the next available WCID for each content category so generated files never collide. Default ranges:
+ACEForge tracks the next free WCID per content category so generated files never collide:
 
 | Category | Default Start |
 |----------|--------------|
@@ -92,287 +175,57 @@ ACEForge tracks the next available WCID for each content category so generated f
 | Kill Contracts | 860,000 |
 | Custom Gear | 870,000 |
 | Kill Tasks (KT Flags) | 1,000,000 |
-| Generators | Target WCID + 1,000,000 |
 
-Update the **Next Available** counter for each category to match your server's current state before generating new content.
-
-### Step 3 — Set Up AI
-
-Choose one of two AI approaches:
+Set each **Next Available** counter to match your live server before generating, to avoid import collisions.
 
 ---
 
-#### Option A — Local AI via Ollama (Recommended)
+## Output & Importing
 
-Local AI runs entirely on your machine. No API key, no token limits, no internet required after setup, and no cost per generation.
+Every generated file follows the ACE-World MySQL import format, enforced by ACEForge regardless of source:
 
-**To set up:**
+- Blank line between statements; `/* block comments */` only (no `--` line comments — the importer rejects them).
+- `weenie_properties_body_part` and `weenie_properties_emote_action` column lists kept on a single line.
+- Generators written as their own file (`WCID + 1,000,000`).
+- Each file starts with `DELETE FROM weenie WHERE class_Id = WCID`, so re-importing replaces the existing WCID.
 
-1. In AI Mode, click the **⟳ LOCAL AI** button at the top of the panel.
-2. The Local AI Setup window opens with a guided two-step process.
-
-**Step 1 — Install Ollama**
-
-Click **⬇ Download & Install Ollama**. ACEForge downloads the installer (~60 MB) from ollama.com and launches it automatically. After installation finishes, click **↺ Check Again** — ACEForge will detect it.
-
-**Step 2 — Download a Model**
-
-Three models are available. Click **⬇ Pull** next to your preferred model. ACEForge downloads it in the background with a live progress bar (e.g. *"Downloading qwen2.5-coder:7b… 2.1 GB / 4.5 GB"*). When the download completes, ACEForge automatically configures itself to use that model. No settings to touch.
-
-**Recommended Models:**
-
-| Model | Size | Best For |
-|-------|------|----------|
-| **Qwen 2.5 Coder 7B** ⭐ | 4.5 GB | SQL generation — trained on structured/schema data. Most accurate for ACE content. |
-| CodeLlama 7B | 3.8 GB | Good SQL output, reliable formatting. Meta's code model. |
-| Llama 3.2 3B | 2.0 GB | Fastest, lowest RAM use. Less reliable for complex quest chains. |
-
-Once set up, Ollama starts automatically in the background every time ACEForge opens.
-
----
-
-#### Option B — Cloud API Key
-
-If you already have an API key from a supported provider, enter it in Settings under **AI Provider**.
-
-| Provider | Notes |
-|----------|-------|
-| **Anthropic** (Claude) | High quality. Token limits apply per plan. |
-| **Google AI Studio** | Fast. Free tier available. |
-| **OpenAI** | Works with GPT-4o and compatible endpoints. |
-| **OpenAI-Compatible** | For LM Studio, Groq, Mistral, or any OpenAI-format endpoint. Enter a custom Base URL. |
-
-> ⚠ **Cloud API Notice:** SQL output length may be limited by your plan's token quota. For long quest chains or multi-file generation, local Ollama is strongly recommended.
-
----
-
-## Manual Mode
-
-Manual Mode gives you a structured form for each content type. The SQL preview on the right updates in real time as you type.
-
-### Content Types
-
-| Tab | Icon | What It Creates |
-|-----|------|----------------|
-| **Creature** | ✠ | Combat-ready hostile mobs with full stat, resist, and body part tables |
-| **NPC** | ◆ | Quest givers, merchants, and interactive characters |
-| **Item** | ◈ | Quest tokens, gems, stackables, consumables, containers |
-| **Weapon** | ⚔ | Melee weapons, missile launchers, and casters |
-| **Armor/Clothing** | ⛨ | Armor and clothing for all body locations |
-| **Jewelry** | ◎ | Rings, necklaces, bracelets, wristlets |
-| **Recipe** | ⚗ | Crafting recipes combining source and target items |
-| **Quest** | ◇ | Quest flags, kill task counters, and timer flags |
-| **Generator** | ⟳ | Spawn generators for creatures, NPCs, and objects |
-
-### Presets
-
-Every content type has a **Presets** dropdown populated with common starting points. Selecting a preset fills in sensible defaults that you can adjust before saving.
-
-### Sub-Tabs
-
-Each content type has multiple sub-tabs within the form:
-
-| Sub-Tab | Available On | Contents |
-|---------|-------------|----------|
-| **⚙ Properties** | All types | Name, WCID, level, scale, resistances, radar color, etc. |
-| **◈ Attributes** | Creature, NPC | Strength, Endurance, Quickness, Coordination, Focus, Self, plus Health/Stamina/Mana |
-| **+ Skills** | Creature, NPC | Skill training level and init value |
-| **+ Spellbook** | Creature, NPC, Jewelry | Spell IDs and cast probabilities |
-| **✠ Body Parts** | Creature, NPC | Hit location armor levels and damage types |
-| **◇ Emotes** | NPC, Item | Quest dialogue and emote action chains |
-
-### Generator Tab
-
-The Generator tab creates `weenie_properties_generator` entries — the records that tell the server where and when to spawn a creature or NPC.
-
-**Available presets:**
-
-| Preset | Respawn | Spawn Condition |
-|--------|---------|----------------|
-| Creature Respawn | 300s (5 min) | Always |
-| Boss (Rare) | 3600s (1 hour) | Always |
-| Event Spawn | 60s | Event only |
-| NPC (Stationary) | 0s | Always |
-| Chest / Container | 1800s (30 min) | Always |
-
-Enter the **Target WCID** — the creature or NPC this generator spawns. The **Generator WCID** auto-calculates as `Target WCID + 1,000,000`.
-
-The **Placement Coordinates** section (obj_Cell_Id, Origin X/Y/Z, Angles W/X/Y/Z) can be left as NULL and filled in later using a spawn tool or by editing the file directly.
-
-### Saving
-
-Click **+ Save** in the SQL preview panel to write the file to your output folder. The WCID counter for that content category increments automatically. If **Auto-Open Folder** is enabled, the output folder opens immediately.
-
----
-
-## AI Mode
-
-AI Mode takes a plain-English description and produces complete, multi-file SQL output ready for server import.
-
-### How to Use
-
-1. Select the content type from the tabs (Creature, NPC, Item, etc.).
-2. Type a description in the **Prompt** box.
-3. Click **Generate** or press **Ctrl+Enter**.
-4. The AI streams its response into the output panel in real time.
-5. When generation is complete, click **💾 Save Files** to write all files to your output folder.
-
-### Writing Effective Prompts
-
-The more specific you are, the better the output.
-
-**Basic:**
-> `A fire elemental creature at level 150`
-
-**Detailed:**
-> `A level 150 fire elemental boss named Ignareth the Undying. High fire resistance, weak to cold. Drops a custom fire essence item. Casts Flame Arc VII and Inferno VII. Requires level 200+ to wield any drops.`
-
-**Quest chain:**
-> `An NPC named Aldric Stonewatch who gives a collection quest. Players must bring him 5 Ancient Stone Tablets found in Olthoi-infested ruins. Reward: 15% level-proportional XP and 10,000 luminance. Include start, in-progress, and completion dialogue.`
-
-### What AI Mode Produces
-
-For a creature or NPC request, AI Mode typically outputs:
-
-| File | Contents |
-|------|----------|
-| `WCID Name.sql` | The weenie (all property tables) |
-| `WCID Name gen.sql` | The generator (always a separate file, WCID + 1,000,000) |
-| `WCID Item Name.sql` | Any custom drop items defined in the prompt |
-| `QuestName.sql` | Quest flag entries, if a quest was described |
-
-Each file is saved individually using `/* ===== FILE: filename.sql ===== */` markers that ACEForge's parser uses to split the output.
-
-### Quest Naming Conventions (AI Mode)
-
-ACEForge follows the standard ACE quest flag naming pattern:
-
-**Standard collection/turn-in quest:**
-- `QuestName` — Main completion counter
-- `QuestNameStart` — Set when player accepts; checked for in-progress state
-- `QuestNameTimer` — Cooldown after completion
-
-**Kill task:**
-- `KillTaskName` — Kill counter (incremented by kill task system)
-- `KillTaskNameProgress` — In-progress flag
-- `KillTaskNameComplete` — Set when kill count is met
-- `KillTaskNameTimer` — Cooldown after reward
-
-### Incomplete Output Warning
-
-If the AI stops before finishing all files, an amber ⚠ warning banner appears in the output panel. This is a token limit issue, most common with cloud API plans on complex requests.
-
-**Solutions:**
-- Switch to local Ollama (no token limits)
-- Split the request into smaller pieces (generate the NPC separately from the quest)
-- Retry — results vary between runs
-
----
-
-## Output Files
-
-All files save to your configured output folder (`Documents\ACEForge\output` by default).
-
-### SQL Format
-
-Every generated file follows the ACE-World MySQL import format with these rules always enforced by ACEForge — regardless of what the AI produced:
-
-- Blank line between every SQL statement (after each `;`)
-- No `--` line comments (ACE importer rejects them) — only `/* block comments */`
-- `weenie_properties_body_part` column list always on a single line
-- `weenie_properties_emote_action` column list always on a single line
-- File names use spaces, never underscores (`850010 Shadow Fiend.sql`)
-- Generator files are always separate from the creature/NPC file
-
-### File Naming
-
-```
-850010 Shadow Fiend.sql          creature / NPC / item / weapon / armor / jewelry
-1850010 shadow fiend gen.sql     generator (auto-created for creature/NPC)
-AncientTabletQuest.sql           quest flag entries
-```
-
----
-
-## Importing Into Your Server
-
-1. Copy generated `.sql` files to your ACE database tools folder.
-2. Import using your MySQL client or the ACE world database importer.
-3. Recommended import order for a new creature:
-   - `WCID Name.sql` first (the weenie must exist before the generator references it)
-   - `WCID Name gen.sql` second
-   - Any item or quest files
-
-> Generators with NULL coordinates will not spawn anything until `obj_Cell_Id` and origin values are populated. Use a spawn tool or edit the file with coordinates from your world editor.
-
----
-
-## Settings Reference
-
-### AI Provider
-
-| Setting | Description |
-|---------|-------------|
-| Provider | anthropic, google, openai, compatible, or ollama |
-| API Key | Your key for cloud providers (stored only in `%APPDATA%\ACEForge\config.json`) |
-| Model | Model string (e.g. `claude-sonnet-4-20250514`, `qwen2.5-coder:7b`) |
-| Base URL | Required for compatible/Ollama providers |
-
-### Server
-
-| Setting | Description |
-|---------|-------------|
-| Server Name | Injected into every AI prompt as context |
-| Author | Your name/handle; included in file headers |
-| Output Folder | Where `.sql` files are saved |
-| Auto-Open Folder | Opens the output folder after each save |
-
-### WCID Ranges
-
-Each category has a **Start** (fixed) and **Next Available** (increments after each save). Set Next Available to match your live server to avoid WCID collisions on import.
-
-### Content Libraries
-
-| Library | Source File | Size |
-|---------|-------------|------|
-| Icon Library | `ACEForge_Icons.zip` | ~21 MB |
-| Weenie Database | `ACEForge_WeenieDB.zip` | ~38 MB |
-
-Click **📦 Install Library Package…** to install either. A progress bar tracks extraction. Use Unload to remove without reinstalling the app.
+**Recommended import order** for new content: the weenie file first (it must exist before any generator references it), then the generator, then item/quest files. Generators with NULL coordinates won't spawn until `obj_Cell_Id` and origin values are populated.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| Blank form on launch | JavaScript crash on load | Reopen app; verify Edge WebView2 runtime is installed |
-| `--` comments in output | Pre-v1.6.6 cached output | Update to latest; parser strips them automatically on every save |
-| Underscores in file names | Pre-v1.6.6 bug | Update to latest |
-| Generator appended to creature file | Pre-v1.7.0 bug | Update to latest; generator is always its own file |
-| "Output may be incomplete" warning | Token limit hit | Switch to Ollama or split the prompt into smaller requests |
-| Ollama not detected after install | PATH not updated | Open Local AI Setup → Click ↺ Check Again after restarting ACEForge |
-| Import fails on server | Formatting error | Verify no `--` comments remain; check body_part column list is one line |
-| Library install shows no progress | Very fast extraction | Normal — small packages finish before progress renders |
+| Symptom | Fix |
+|---------|-----|
+| Dropdowns don't open in the desktop app | Fixed — ACEForge now serves its UI over a local HTTP origin so WebView2 renders native `<select>` popups. Update to the latest build. |
+| Blank window on launch | Ensure the Edge WebView2 Runtime is installed; reopen the app. |
+| "Output may be incomplete" (AI) | Cloud token limit — switch to Ollama or split the request. |
+| Ollama not detected after install | Restart ACEForge, then **↺ Check Again** in Local AI Setup. |
+| Import rejected in GearForge | GearForge only accepts armor/clothing/weapon weenies; use WeenieForge for other types. |
+| Import fails on the server | Confirm no `--` comments remain and column lists are single-line (ACEForge enforces this on save). |
 
 ---
 
-## Frequently Asked Questions
+## FAQ
 
-**Can I use ACEForge without any AI at all?**
-Yes. Manual Mode works completely offline with no API key or Ollama required.
+**Can I use ACEForge without any AI?**
+Yes. WeenieForge, QuestForge, and GearForge all work fully offline.
 
-**Will ACEForge overwrite existing content on my server?**
-Every file starts with `DELETE FROM weenie WHERE class_Id = WCID`. If that WCID exists, the import replaces it. Always verify WCIDs against your live database before importing.
+**Will it overwrite existing server content?**
+Each file leads with `DELETE FROM weenie WHERE class_Id = WCID`; importing replaces that WCID. Verify WCIDs against your live database first.
 
-**Can I add my own reference files for the AI?**
-Yes. Drop `.md` files into `aceforge/references/`. They are loaded automatically per content type. Creature prompts load `example_creatures.md`, NPC prompts load `example_npcs.md`, and so on.
+**Where is my config?**
+`%APPDATA%\ACEForge\config.json` — settings, API key, and WCID counters. Never bundled in any zip or commit.
 
-**Where is my config saved?**
-`%APPDATA%\ACEForge\config.json` — your API key, output folder, and WCID counters. Never included in any zip, git commit, or distributed package.
+**Can I add my own AI reference files?**
+Yes. Drop `.md` files into `aceforge/references/`; they load automatically per content type.
 
-**The AI generated incorrect table names.**
-Install the Weenie Database library package. It gives the AI exact property formats from real game data. If errors persist, regenerate — AI output is non-deterministic and results vary between runs.
+---
+
+## Community
+
+Join the ACEForge Discord for help, updates, and to share content: **https://discord.gg/tfb6XUHVKz**
+(There's a **Join Discord** button in the bottom-right of the app.)
 
 ---
 
@@ -382,8 +235,8 @@ Install the Weenie Database library package. It gives the AI exact property form
 
 Built on:
 - [ACEmulator](https://github.com/ACEmulator/ACE) — the open-source Asheron's Call server emulator
-- [pywebview](https://pywebview.flowrl.com/) — Python desktop shell using Edge WebView2
-- [Ollama](https://ollama.com/) — local LLM runtime (MIT license)
+- [pywebview](https://pywebview.flowrl.com/) — Python desktop shell over Edge WebView2
+- [Ollama](https://ollama.com/) — local LLM runtime
 
 Weenie database sourced from the ACE-World core dataset.
 

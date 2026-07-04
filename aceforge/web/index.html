@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Served over http:// via pywebview's http_server; without this WebView2 (Edge)
+     can cache the page and show a stale UI after edits until its cache clears.
+     Force a fresh fetch every launch. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>ACEForge</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -193,6 +199,8 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 .sf-label{font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:4px;display:block}
 .sf{margin-bottom:14px;user-select:text}
 .sf input,.sf select{border:1px solid var(--border);background:var(--parch);padding:7px 10px;font-size:14px;font-weight:600;user-select:text}
+.settings-browse-btn{flex-shrink:0;white-space:nowrap;font-family:var(--ui-font);font-size:11px;font-weight:700;letter-spacing:.04em;padding:8px 12px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);border-radius:4px;cursor:pointer}
+.settings-browse-btn:hover{background:var(--parch-dk);color:var(--ink)}
 .settings-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0}
 .btn-save{font-family:var(--ui-font);font-size:13px;font-weight:600;letter-spacing:0;padding:9px 20px;background:var(--crimson);color:#ffffff;border:none;border-radius:6px;cursor:pointer}
 .btn-cancel{font-family:var(--ui-font);font-size:13px;font-weight:600;letter-spacing:0;padding:9px 20px;background:transparent;border:1px solid var(--border);color:var(--ink-mid);border-radius:6px;cursor:pointer}
@@ -550,6 +558,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
     <div class="sql-hdr">
       <div class="sql-title">Generated Items</div>
       <div class="sql-btns">
+        <button class="sql-btn" onclick="gearImportItems()" title="Import one or more armor/clothing/weapon SQL files to edit">&#x2B06; Import</button>
         <button class="sql-btn" onclick="gearOpenBulkEdit()" title="Edit a property across all generated items at once">&#x2261; Bulk Edit</button>
         <button class="sql-btn" onclick="gearClearAllItems()">&#x2715; Clear All</button>
         <button class="sql-btn" onclick="gearSaveSQL()">+ Save</button>
@@ -778,8 +787,36 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
         <input type="text" id="sAuthor" placeholder="Your name" style="width:100%">
       </div>
       <div class="sf">
-        <label class="sf-label">Output Directory</label>
-        <input type="text" id="sOutputDir" placeholder="C:\Documents\ACEForge\output" style="width:100%">
+        <label class="sf-label">Default Output Directory</label>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="text" id="sOutputDir" placeholder="C:\Documents\ACEForge\output" style="flex:1">
+          <button type="button" class="settings-browse-btn" onclick="browseOutputDir('sOutputDir')">Browse…</button>
+        </div>
+      </div>
+      <div class="sf">
+        <label class="sf-label">Per-Type Output Directories <span style="font-weight:400;color:var(--ink-faint);font-size:11px">— leave blank to use the default above</span></label>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:66px;flex-shrink:0;font-family:var(--ui-font);font-size:11px;font-weight:700;color:var(--ink-dim)">Weenie</span>
+            <input type="text" id="sWeenieOutputDir" placeholder="(default)" style="flex:1">
+            <button type="button" class="settings-browse-btn" onclick="browseOutputDir('sWeenieOutputDir')">Browse…</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:66px;flex-shrink:0;font-family:var(--ui-font);font-size:11px;font-weight:700;color:var(--ink-dim)">Recipe</span>
+            <input type="text" id="sRecipeOutputDir" placeholder="(default)" style="flex:1">
+            <button type="button" class="settings-browse-btn" onclick="browseOutputDir('sRecipeOutputDir')">Browse…</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:66px;flex-shrink:0;font-family:var(--ui-font);font-size:11px;font-weight:700;color:var(--ink-dim)">Quest</span>
+            <input type="text" id="sQuestOutputDir" placeholder="(default)" style="flex:1">
+            <button type="button" class="settings-browse-btn" onclick="browseOutputDir('sQuestOutputDir')">Browse…</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:66px;flex-shrink:0;font-family:var(--ui-font);font-size:11px;font-weight:700;color:var(--ink-dim)">Event</span>
+            <input type="text" id="sEventOutputDir" placeholder="(default)" style="flex:1">
+            <button type="button" class="settings-browse-btn" onclick="browseOutputDir('sEventOutputDir')">Browse…</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="settings-foot">
@@ -803,6 +840,18 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
     </div>
   </div>
 </div>
+
+<!-- JOIN DISCORD (floating, bottom-right) -->
+<button id="joinDiscordBtn" onclick="openDiscord()" title="Join the ACEForge Discord"
+  style="position:fixed;bottom:14px;right:16px;z-index:9000;display:flex;align-items:center;gap:7px;
+  padding:8px 14px;border:none;border-radius:20px;background:#5865F2;color:#fff;cursor:pointer;
+  font-family:var(--ui-font);font-size:11px;font-weight:700;letter-spacing:.04em;
+  box-shadow:0 3px 10px rgba(0,0,0,.28);transition:background .15s,transform .15s"
+  onmouseover="this.style.background='#4752c4';this.style.transform='translateY(-1px)'"
+  onmouseout="this.style.background='#5865F2';this.style.transform='none'">
+  <svg width="18" height="18" viewBox="0 0 127.14 96.36" fill="#fff" aria-hidden="true"><path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/></svg>
+  Join Discord
+</button>
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
@@ -6208,21 +6257,27 @@ function _rangeCtrl(section){
 
 // Vitals: CURRENT can never fall below BASE. Sliding BASE snaps CURRENT to match it; sliding
 // CURRENT above BASE is free, but sliding CURRENT below BASE pulls BASE down to meet it.
+// Update the linked control's DOM in place (never rebuild the panel) — a mid-drag rebuild
+// replaces the node under the cursor and aborts the OS drag, so the slider "sticks".
+function _syncVitalPair(prefix,v){
+  var r=document.getElementById(prefix+'_r'), n=document.getElementById(prefix+'_n');
+  if(r){ var mn=parseFloat(r.min),mx=parseFloat(r.max); r.value=Math.min(Math.max(v,mn),mx); }
+  if(n) n.value=v;
+}
 function _vitalBaseChanged(type,val){
   var v=parseInt(val)||0;
   var a=importedAttribs2nd.find(function(x){return x.type===type;});
   if(!a) return;
   a.initLevel=v;
   a.currentLevel=v;
-  rebuildPanel('properties');
+  _syncVitalPair('vcur_'+type, v);
 }
 function _vitalCurrentChanged(type,val){
   var v=parseInt(val)||0;
   var a=importedAttribs2nd.find(function(x){return x.type===type;});
   if(!a) return;
   a.currentLevel=v;
-  if(v<a.initLevel) a.initLevel=v;
-  rebuildPanel('properties');
+  if(v<a.initLevel){ a.initLevel=v; _syncVitalPair('vbase_'+type, v); }
 }
 
 function buildAttrsSkillsTab(){
@@ -6269,8 +6324,8 @@ function buildAttrsSkillsTab(){
           var _exCur='_vitalCurrentChanged('+a.type+',this.value);';
           attrsOut += '<tr style="border-bottom:1px solid var(--border-lt)">'
             +'<td style="font-family:var(--ui-font);font-size:10px;font-weight:700;color:var(--ink-mid);padding:5px 0">'+AN2[a.type]+'</td>'
-            +'<td style="text-align:right;padding:3px 0">'+_sliderNumPair(a.initLevel,_sliderRanges.vital.min,_sliderRanges.vital.max,10,_exBase)+'</td>'
-            +'<td style="text-align:right;padding:3px 0">'+_sliderNumPair(a.currentLevel,_sliderRanges.vital.min,_sliderRanges.vital.max,10,_exCur)+'</td>'
+            +'<td style="text-align:right;padding:3px 0">'+_sliderNumPair(a.initLevel,_sliderRanges.vital.min,_sliderRanges.vital.max,10,_exBase,'vbase_'+a.type)+'</td>'
+            +'<td style="text-align:right;padding:3px 0">'+_sliderNumPair(a.currentLevel,_sliderRanges.vital.min,_sliderRanges.vital.max,10,_exCur,'vcur_'+a.type)+'</td>'
             +'</tr>';
         });
         attrsOut += '</tbody></table>';
@@ -11379,6 +11434,10 @@ function openSettings(){
       setV('sServerName',cfg.server_name||'Server Name');
       setV('sAuthor',cfg.author||'');
       setV('sOutputDir',cfg.output_dir||'');
+      setV('sWeenieOutputDir',cfg.weenie_output_dir||'');
+      setV('sRecipeOutputDir',cfg.recipe_output_dir||'');
+      setV('sQuestOutputDir',cfg.quest_output_dir||'');
+      setV('sEventOutputDir',cfg.event_output_dir||'');
       const preset=$('sBaseUrlPreset');
       preset.innerHTML='<option value="">— choose a known endpoint —</option>';
       Object.entries(cfg.known_endpoints||{}).forEach(([name,url])=>{
@@ -11464,7 +11523,8 @@ function closeSettings(){$('settingsOverlay').classList.remove('open');}
   });
 })();
 function saveSettings(){
-  const data={provider:$('sProvider').value,model:$('sModel').value.trim(),base_url:($('sBaseUrl').value||'').trim(),server_name:$('sServerName').value.trim()||'Server Name',author:$('sAuthor').value.trim(),output_dir:$('sOutputDir').value.trim()};
+  const data={provider:$('sProvider').value,model:$('sModel').value.trim(),base_url:($('sBaseUrl').value||'').trim(),server_name:$('sServerName').value.trim()||'Server Name',author:$('sAuthor').value.trim(),output_dir:$('sOutputDir').value.trim(),
+    weenie_output_dir:$('sWeenieOutputDir').value.trim(),recipe_output_dir:$('sRecipeOutputDir').value.trim(),quest_output_dir:$('sQuestOutputDir').value.trim(),event_output_dir:$('sEventOutputDir').value.trim()};
   const apiKey=$('sApiKey').value.trim();if(apiKey)data.api_key=apiKey;
   closeSettings();
   if(window.pywebview){
@@ -11502,7 +11562,7 @@ async function init(){
     console.error('buildForm:',e);
   }
   try{ renderSQLHighlight(); }catch(e){ console.warn('renderSQLHighlight:',e); }
-  if(window.pywebview){
+  if(window.pywebview && typeof window.pywebview.api.get_config==='function'){
     window.pywebview.api.get_config().then(cfg=>{
       appConfig=cfg;
       if(cfg.custom_presets)customPresets=cfg.custom_presets;
@@ -13249,7 +13309,7 @@ function gearArmorCoverageOption(groupKey, pieces, label, defaultChecked){
     const checkboxId = `gear_pc_${groupKey}_${primaryWcid}`;
     const hasAlts = p.wcids.length > 1;
     const checkedAttr = defaultChecked ? 'checked' : '';
-    const mainRow = `<label for="${checkboxId}" style="display:flex;align-items:center;gap:8px;padding:5px 8px;
+    const mainRow = `<label for="${checkboxId}" style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer">
       <input type="checkbox" id="${checkboxId}" data-piece-group="${groupKey}_${primaryWcid}" data-wcid="${primaryWcid}"
         ${checkedAttr} onchange="gearTogglePiece(this)">
       ${gearIconThumb(primaryWcid)}
@@ -13373,6 +13433,82 @@ function gearGenerateNow(){
     gearRenderMainPanel(); // back out of any open editor to the set-picker form
     toast('Generated ' + r.items.length + ' item' + (r.items.length!==1?'s':''), 2500);
   });
+}
+
+// ── GearForge: import external SQL items ───────────────────────────────────
+// Only armor/clothing/weapon weenie types are accepted; anything else
+// (creatures, jewelry, food, generic misc, etc.) is rejected so GearForge's
+// per-item editor and bulk-edit only ever operate on gear.
+// 2=Clothing/Armor, 3=MissileLauncher, 4=Missile(ammo), 6=MeleeWeapon, 35=Caster.
+const GEAR_ALLOWED_TYPES = new Set([2,3,4,6,35]);
+const _WEENIE_TYPE_NAME = (function(){
+  var m={}; (typeof WEENIE_TYPES!=='undefined'?WEENIE_TYPES:[]).forEach(function(w){ m[w[0]]=w[1]; }); return m;
+})();
+
+// Parse a single weenie's SQL into the structured gear item shape that
+// generate_gear_items / render_gear_items_sql use. Returns null if unparseable.
+function _gearParseSQLToItem(sql){
+  if(!sql || !/INSERT\s+INTO\s+`?weenie`?/i.test(sql)) return null;
+  var info = _parseWeenieSQL(sql);
+  if(!info || !info.wcid) return null;
+  function toProps(tableName, lookup, isStr){
+    var raw = extractInsertValues(sql, tableName), out = {};
+    Object.values(raw).forEach(function(r){
+      if(r==null || r.type==null) return;
+      var t = parseInt(r.type);
+      var name = lookup[t] || ('Type'+t);
+      var v = r.value;
+      if(isStr && typeof v==='string' && v.startsWith("'") && v.endsWith("'")){
+        v = v.slice(1,-1).replace(/''/g,"'");   // render_gear_items_sql re-quotes strings
+      }
+      out[name] = {type: t, value: v};
+    });
+    return out;
+  }
+  var stringProps = toProps('weenie_properties_string', PROP_STRING, true);
+  var name = info.name || (stringProps.Name && stringProps.Name.value) || ('item'+info.wcid);
+  if(!stringProps.Name) stringProps.Name = {type:1, value:name};
+  return {
+    wcid: parseInt(info.wcid),
+    class_name: (name.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,30)) || ('item'+info.wcid),
+    weenie_type: info.typeNum,
+    int:    toProps('weenie_properties_int',   PROP_INT),
+    bool:   toProps('weenie_properties_bool',  PROP_BOOL),
+    float:  toProps('weenie_properties_float', PROP_FLOAT),
+    string: stringProps,
+    did:    toProps('weenie_properties_d_i_d', PROP_DID),
+    spells: [],
+  };
+}
+
+function gearImportItems(){
+  if(!window.pywebview || typeof window.pywebview.api.import_sql_multi!=='function'){
+    toast('Importing items requires the desktop app.'); return;
+  }
+  window.pywebview.api.import_sql_multi().then(function(r){
+    if(!r || r.cancelled) return;
+    if(r.error){ toast('✗ '+r.error, 4000); return; }
+    var files = r.files||[];
+    var accepted=0, rejected=[];
+    files.forEach(function(f){
+      var item;
+      try{ item = _gearParseSQLToItem(f.content); }catch(e){ item=null; }
+      if(!item){ rejected.push(f.filename+' — unreadable'); return; }
+      if(!GEAR_ALLOWED_TYPES.has(item.weenie_type)){
+        var tn = _WEENIE_TYPE_NAME[item.weenie_type] || ('type '+item.weenie_type);
+        rejected.push(f.filename+' — '+tn+' (not gear)');
+        return;
+      }
+      _gearGeneratedItems.push(item);
+      accepted++;
+    });
+    _gearEditingItemIdx = null;
+    gearRenderItemsList();
+    gearRenderMainPanel();
+    var msg = accepted+' item'+(accepted!==1?'s':'')+' imported';
+    if(rejected.length) msg += ' · '+rejected.length+' rejected';
+    toast(msg + (rejected.length?': '+rejected.join('; '):''), rejected.length?6000:2800);
+  }).catch(function(e){ toast('✗ Import failed: '+e, 4000); });
 }
 
 function gearRenderItemsList(){
@@ -14027,8 +14163,21 @@ function loreError(msg){
   document.getElementById('loreStatus').textContent='Error: '+msg;
 }
 
-window.addEventListener('pywebviewready',init);
-if(!window.pywebview)init();
+// pywebview injects window.pywebview asynchronously and fires 'pywebviewready'
+// only once window.pywebview.api is fully attached. init() must not run before
+// then, otherwise api methods (get_config etc.) throw "not a function". The old
+// `if(!window.pywebview)init()` could fire init early in dev/bridge-arriving mode
+// and race the bridge mid-init (across its `await loadData()`), which is exactly
+// what produced the get_config startup error. This gate boots exactly once.
+(function(){
+  var _bootDone=false;
+  function _boot(){ if(_bootDone) return; _bootDone=true; init(); }
+  window.addEventListener('pywebviewready', _boot);
+  // Already fully ready at parse time (e.g. fast reload) — go now.
+  if(window.pywebview && window.pywebview.api && typeof window.pywebview.api.get_config==='function') _boot();
+  // Browser/dev mode: no bridge will ever appear — fall back after a grace period.
+  setTimeout(function(){ if(!window.pywebview) _boot(); }, 1200);
+})();
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -14037,6 +14186,18 @@ if(!window.pywebview)init();
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── Settings: DAT browser ─────────────────────────────────────────────────
+function browseOutputDir(inputId){
+  if(!window.pywebview || typeof window.pywebview.api.browse_folder!=='function'){
+    toast('Folder browsing requires the desktop app.'); return;
+  }
+  window.pywebview.api.browse_folder().then(function(r){
+    if(!r || r.cancelled) return;
+    if(r.error){ toast('✗ '+r.error, 4000); return; }
+    var el = document.getElementById(inputId);
+    if(el && r.path){ el.value = r.path; }
+  }).catch(function(e){ toast('✗ Browse failed: '+e, 4000); });
+}
+
 function browseDat(){
   if(!window.pywebview) return;
   window.pywebview.api.browse_portal_dat().then(r=>{
