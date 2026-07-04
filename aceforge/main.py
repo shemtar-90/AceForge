@@ -111,7 +111,7 @@ def main():
 
     window = webview.create_window(
         title="ACEForge — Weenie Workbench",
-        url=html_path.as_uri(),
+        url=str(html_path),
         js_api=api,
         width=1340,
         height=880,
@@ -121,7 +121,10 @@ def main():
     )
 
     api.set_window(window)
-    webview.start(debug=False, private_mode=False, icon=icon_path if icon_path else None)
+    # http_server=True serves local files over http://127.0.0.1 instead of file://.
+    # WebView2 (the Edge engine pywebview uses on Windows) has a known bug where native
+    # <select> dropdown popups silently fail to render when the page origin is file://.
+    webview.start(debug=False, private_mode=False, http_server=True, icon=icon_path if icon_path else None)
 
 
 def _show_error_window(message: str):
