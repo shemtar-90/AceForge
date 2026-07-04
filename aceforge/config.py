@@ -32,6 +32,11 @@ DEFAULT_CONFIG = {
     "server_name": "Server Name",
     "author":      "",
     "output_dir":  str(Path.home() / "Documents" / "ACEForge" / "output"),
+    # Per-type output overrides. Empty string => fall back to output_dir.
+    "weenie_output_dir": "",
+    "recipe_output_dir": "",
+    "quest_output_dir":  "",
+    "event_output_dir":  "",
     "wcid_ranges": DEFAULT_WCID_RANGES,
 }
 
@@ -136,6 +141,22 @@ class Config:
     @output_dir.setter
     def output_dir(self, value: str):
         self._data["output_dir"] = value
+
+    def output_dir_for(self, file_type: str) -> str:
+        """Resolve the output directory for a given file type
+        ('weenie'|'recipe'|'quest'|'event'). Falls back to the default
+        output_dir when the type-specific override is unset/blank."""
+        key = {
+            "weenie": "weenie_output_dir",
+            "recipe": "recipe_output_dir",
+            "quest":  "quest_output_dir",
+            "event":  "event_output_dir",
+        }.get(file_type)
+        if key:
+            override = str(self._data.get(key, "") or "").strip()
+            if override:
+                return override
+        return self.output_dir
 
     def get_wcid_ranges(self) -> dict:
         return self._data.get("wcid_ranges", DEFAULT_WCID_RANGES)

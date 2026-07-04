@@ -53,6 +53,10 @@ class AppAPI(LoreMixin):
             "server_name":  self.config.server_name,
             "author":       self.config.get("author", ""),
             "output_dir":   self.config.output_dir,
+            "weenie_output_dir": self.config.get("weenie_output_dir", ""),
+            "recipe_output_dir": self.config.get("recipe_output_dir", ""),
+            "quest_output_dir":  self.config.get("quest_output_dir", ""),
+            "event_output_dir":  self.config.get("event_output_dir", ""),
             "wcid_ranges":  self.config.get_wcid_ranges(),
             "auto_open_folder": self.config.get("auto_open_folder", True),
             "ollama_mode":     self.config.get("ollama_mode", False),
@@ -69,6 +73,10 @@ class AppAPI(LoreMixin):
             if "server_name" in data: self.config.server_name = data["server_name"]
             if "author"      in data: self.config.set("author", data["author"])
             if "output_dir"  in data: self.config.output_dir  = data["output_dir"]
+            for _k in ("weenie_output_dir", "recipe_output_dir",
+                       "quest_output_dir", "event_output_dir"):
+                if _k in data:
+                    self.config.set(_k, str(data[_k] or "").strip())
             if "api_key" in data and data["api_key"]:
                 self.config.api_key = data["api_key"]
             if "wcid_ranges" in data:
@@ -460,11 +468,35 @@ class AppAPI(LoreMixin):
 
         return "\n".join(l for l in lines if l)
 
+    @staticmethod
+    def _detect_sql_type(sql: str) -> str:
+        """Classify an SQL file by its primary target table so it can be routed
+        to the matching per-type output directory. Mirrors the JS
+        _detectSQLFileType — DELETE FROM is the reliable first-line indicator."""
+        s = sql or ""
+        if re.search(r"DELETE FROM `?quest`?", s, re.I):
+            return "quest"
+        if re.search(r"DELETE FROM `?event`?", s, re.I):
+            return "event"
+        if re.search(r"DELETE FROM `?recipe`?", s, re.I) or \
+           re.search(r"INSERT INTO `?recipe`?\b", s, re.I) or \
+           re.search(r"INSERT INTO `?cook_book`?", s, re.I):
+            return "recipe"
+        return "weenie"  # default: creatures, NPCs, items, gear, quest-flag weenies
+
+    def _resolve_output_dir(self, sql: str) -> str:
+        """Pick the output directory for a piece of SQL based on its type,
+        creating it if needed. Falls back to the default output dir."""
+        ftype = self._detect_sql_type(sql)
+        output_dir = str(self.config.output_dir_for(ftype) or "").strip()
+        if not output_dir:
+            output_dir = str(Path.home() / "Documents" / "ACEForge" / "output")
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        return output_dir
+
     def save_sql(self, sql_text: str, wcid: int, name: str) -> dict:
         try:
-            output_dir = self.config.output_dir or str(
-                Path.home() / "Documents" / "ACEForge" / "output"
-            )
+            output_dir = self._resolve_output_dir(sql_text)
             out_path = Path(output_dir)
             out_path.mkdir(parents=True, exist_ok=True)
 
@@ -831,12 +863,12 @@ Start with: /* ===== FILE: {fname} ===== */
         return {"success": True}
 
     def _save_single_file(self, content: str, suggested_name: str) -> dict:
-        """Save one AI-generated SQL file immediately."""
+        """Save one SQL file immediately, routed to the per-type output dir.
+        Used by QuestForge's per-file save so quest-flag files land in the
+        Quest directory while the creature/item weenies they spawn land in the
+        Weenie directory (each file classified by its own content)."""
         try:
-            output_dir = str(self.config.output_dir or "").strip()
-            if not output_dir:
-                output_dir = str(Path.home() / "Documents" / "ACEForge" / "output")
-            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            output_dir = self._resolve_output_dir(content)
             written = parse_and_save_files(content, output_dir, subfolder="")
             if not written:
                 # Fallback: save with suggested name
@@ -987,6 +1019,81 @@ Start with: /* ===== FILE: {fname} ===== */
             }
         except Exception as e:
             return {"error": str(e)}
+
+    def import_sql_multi(self) -> dict:
+        """Open a multi-select file dialog and return the content of every chosen
+        SQL file. Used by GearForge to bulk-import items for editing.
+        Returns {"files": [{"filename", "path", "content"}], "cancelled"?}."""
+        from pathlib import Path
+        paths = []
+        try:
+            if self._window is None:
+                return {"error": "Window not ready — call set_window() first."}
+            result = self._window.create_file_dialog(
+                dialog_type=10,          # OPEN_DIALOG
+                allow_multiple=True,
+                file_types=("SQL Files (*.sql)", "All Files (*.*)")
+            )
+            if not result:
+                return {"cancelled": True}
+            paths = list(result) if isinstance(result, (list, tuple)) else [result]
+        except Exception:
+            # Fallback: tkinter (dev mode without a pywebview window)
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                root = tk.Tk(); root.withdraw()
+                chosen = filedialog.askopenfilenames(
+                    title="Import SQL Files",
+                    filetypes=[("SQL files", "*.sql"), ("All files", "*.*")]
+                )
+                root.destroy()
+                paths = list(chosen)
+                if not paths:
+                    return {"cancelled": True}
+            except Exception as e2:
+                return {"error": f"File dialog unavailable: {e2}"}
+        if not paths:
+            return {"cancelled": True}
+        files = []
+        for p in paths:
+            try:
+                files.append({
+                    "path": str(p),
+                    "filename": Path(p).name,
+                    "content": Path(p).read_text(encoding="utf-8", errors="ignore"),
+                })
+            except Exception as e:
+                files.append({"path": str(p), "filename": Path(p).name,
+                              "content": "", "error": str(e)})
+        return {"files": files}
+
+    def browse_folder(self) -> dict:
+        """Open a native folder-selection dialog and return the chosen path.
+        Used by the Settings output-directory 'Browse' buttons.
+        Returns {"path": str} | {"cancelled": True} | {"error": str}."""
+        from pathlib import Path
+        try:
+            if self._window is None:
+                return {"error": "Window not ready — call set_window() first."}
+            result = self._window.create_file_dialog(dialog_type=20)  # FOLDER_DIALOG
+            if not result:
+                return {"cancelled": True}
+            path = result[0] if isinstance(result, (list, tuple)) else result
+            return {"path": str(path)}
+        except Exception:
+            # Fallback: tkinter (dev mode without a pywebview window)
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                root = tk.Tk(); root.withdraw()
+                path = filedialog.askdirectory(title="Select Output Folder")
+                root.destroy()
+                if not path:
+                    return {"cancelled": True}
+                return {"path": str(path)}
+            except Exception as e2:
+                return {"error": f"Folder dialog unavailable: {e2}"}
 
     # ── Quest Templates ──────────────────────────────────────────────────
 
