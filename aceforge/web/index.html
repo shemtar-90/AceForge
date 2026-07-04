@@ -14317,11 +14317,16 @@ function _mp2dRender(canvas, msg, b64){
     var span=Math.max(mx[0]-mn[0], mx[1]-mn[1], mx[2]-mn[2], 0.001);
     var rotX=0.35, rotY=0.5;
     var W=canvas.width, H=canvas.height;
-    // Create separate canvas - can't mix WebGL and 2D contexts
-    var c2=document.createElement('canvas');
+    // Separate 2D canvas overlay (can't mix WebGL and 2D contexts on one canvas).
+    // Reuse a single overlay so repeated opens don't stack/leak canvases.
+    var c2=document.getElementById('modelPreview2D');
+    if(!c2){
+      c2=document.createElement('canvas');
+      c2.id='modelPreview2D';
+      c2.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:block;';
+      canvas.parentNode.insertBefore(c2,canvas.nextSibling);
+    }
     c2.width=W; c2.height=H;
-    c2.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:block;';
-    canvas.parentNode.insertBefore(c2,canvas.nextSibling);
     var ctx=c2.getContext('2d');
 
     function project(v,sc){
@@ -14408,7 +14413,7 @@ var _MP_FRAG = [
   'uniform vec3 uLightDir;',
   'void main(){',
   '  vec3 n=normalize(vNorm);',
-  '  float diff=max(dot(n,normalize(uLightDir)),0.0)*0.7+0.3;',
+  '  float diff=abs(dot(n,normalize(uLightDir)))*0.7+0.3;',
   '  vec4 col=uHasTex==1 ? texture2D(uTex,vUV) : vec4(0.7,0.7,0.75,1.0);',
   '  gl_FragColor=vec4(col.rgb*diff,col.a);',
   '}',
@@ -14433,6 +14438,8 @@ function _mpRotX(a){ var c=Math.cos(a),s=Math.sin(a);
   return new Float32Array([1,0,0,0, 0,c,-s,0, 0,s,c,0, 0,0,0,1]); }
 function _mpTranslate(x,y,z){ var m=new Float32Array(16);
   m[0]=m[5]=m[10]=m[15]=1; m[12]=x;m[13]=y;m[14]=z; return m; }
+function _mpScale(s){ var m=new Float32Array(16);
+  m[0]=m[5]=m[10]=s; m[15]=1; return m; }
 
 function _mpInitGL(canvas){
   var gl=canvas.getContext('webgl')||canvas.getContext('experimental-webgl');
@@ -14452,8 +14459,9 @@ function _mpInitGL(canvas){
   gl.useProgram(p);
   _mp.prog=p;
   gl.enable(gl.DEPTH_TEST);
-  gl.enable(gl.CULL_FACE);
-  gl.cullFace(gl.BACK);
+  // No back-face culling: AC polygon winding isn't guaranteed to match WebGL's
+  // front-face convention, and culling the wrong side would leave holes.
+  gl.disable(gl.CULL_FACE);
   return gl;
 }
 
@@ -14523,12 +14531,17 @@ function _mpLoadGLB(glb_data_b64){
   }
 
   _mp.meshes=[];
+  var _bbMin=[1e9,1e9,1e9], _bbMax=[-1e9,-1e9,-1e9];
   (gltf.meshes||[]).forEach(function(mesh){
     (mesh.primitives||[]).forEach(function(prim){
       var posData=acc_data(prim.attributes['POSITION']);
       var nrmData=prim.attributes['NORMAL']!=null?acc_data(prim.attributes['NORMAL']):null;
       var uvData =prim.attributes['TEXCOORD_0']!=null?acc_data(prim.attributes['TEXCOORD_0']):null;
       var idxData=acc_data(prim.indices);
+      for(var _vi=0;_vi+2<posData.length;_vi+=3){
+        for(var _k=0;_k<3;_k++){ var _val=posData[_vi+_k];
+          if(_val<_bbMin[_k])_bbMin[_k]=_val; if(_val>_bbMax[_k])_bbMax[_k]=_val; }
+      }
 
       function mkbuf(data,target){
         var b=gl.createBuffer(); gl.bindBuffer(target,b);
@@ -14553,7 +14566,11 @@ function _mpLoadGLB(glb_data_b64){
                        count:idxData.length,tex:tex,idxType:idxType});
     });
   });
-  console.log('[GLB] done: '+_mp.meshes.length+' meshes');
+  if(_bbMax[0]>=_bbMin[0]){
+    _mp.center=[(_bbMin[0]+_bbMax[0])/2,(_bbMin[1]+_bbMax[1])/2,(_bbMin[2]+_bbMax[2])/2];
+    _mp.span=Math.max(_bbMax[0]-_bbMin[0],_bbMax[1]-_bbMin[1],_bbMax[2]-_bbMin[2],0.001);
+  } else { _mp.center=[0,0,0]; _mp.span=1; }
+  console.log('[GLB] done: '+_mp.meshes.length+' meshes, span='+_mp.span.toFixed(3));
   return _mp.meshes.length > 0;
 }
 
@@ -14568,7 +14585,11 @@ function _mpDraw(){
   var view=_mpTranslate(0,0,_mp.zoom);
   var rx=_mpRotX(_mp.rotation[1]);
   var ry=_mpRotY(_mp.rotation[0]);
-  var model=_mpMat4Mul(rx,ry);
+  var rot=_mpMat4Mul(rx,ry);
+  // Frame the model: translate to origin then scale to ~unit size so any setup
+  // (tiny ring or large armor) fills the view consistently.
+  var c=_mp.center||[0,0,0], span=_mp.span||1;
+  var model=_mpMat4Mul(rot,_mpMat4Mul(_mpScale(1.8/span),_mpTranslate(-c[0],-c[1],-c[2])));
   var mv=_mpMat4Mul(view,model);
   var mvp=_mpMat4Mul(proj,mv);
   var uMVP=gl.getUniformLocation(p,'uMVP');
@@ -14577,7 +14598,7 @@ function _mpDraw(){
   var uHasTex=gl.getUniformLocation(p,'uHasTex');
   var uLight=gl.getUniformLocation(p,'uLightDir');
   gl.uniformMatrix4fv(uMVP,false,mvp);
-  gl.uniformMatrix4fv(uModel,false,model);
+  gl.uniformMatrix4fv(uModel,false,rot);   // normals only need rotation
   gl.uniform3fv(uLight,[0.6,1.0,0.8]);
   gl.uniform1i(uTex,0);
   var aPos=gl.getAttribLocation(p,'aPos');
@@ -14702,21 +14723,30 @@ function openModelPreview(setup_id_hex, label){
       return;
     }
 
-    // Step 3: try 2D canvas render (always works, no WebGL needed)
-    setTimeout(function(){
-      _mp2dRender(document.getElementById('modelPreviewCanvas'),
-                  document.getElementById('modelPreviewMsg'),
-                  r.data_b64);
-    }, 100);
-
-    // Step 4: also try WebGL if available
+    // Step 3: prefer WebGL — true 3D with depth, smooth normal-based shading,
+    // and textures. Only fall back to the flat 2D canvas painter if it fails.
+    var usedWebGL=false;
     try{
       var glOk=_mpLoadGLB(r.data_b64);
       if(glOk && _mp.meshes && _mp.meshes.length){
+        var _ov=document.getElementById('modelPreview2D');
+        if(_ov) _ov.style.display='none';       // hide any stale 2D overlay
         msg.style.display='none';
+        _mp.rotation=[0.7,0.35]; _mp.zoom=-3.0;  // frame the freshly-loaded model
         _mpDraw();
+        usedWebGL=true;
       }
-    }catch(e){ console.warn('[3D] WebGL render failed (2D still showing):',e); }
+    }catch(e){ console.warn('[3D] WebGL failed, falling back to 2D:',e); }
+
+    if(!usedWebGL){
+      var _ov2=document.getElementById('modelPreview2D');
+      if(_ov2) _ov2.style.display='';
+      setTimeout(function(){
+        _mp2dRender(document.getElementById('modelPreviewCanvas'),
+                    document.getElementById('modelPreviewMsg'),
+                    r.data_b64);
+      }, 50);
+    }
 
   }).catch(function(e){
     msg.style.color='rgba(255,150,150,.9)';

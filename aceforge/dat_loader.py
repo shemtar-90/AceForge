@@ -239,20 +239,19 @@ def _smart_array_count(data: bytes, off: int) -> Tuple[int, int]:
 
 def _packed_dword(data: bytes, off: int) -> Tuple[int, int]:
     """
-    AC PackedDWORD: variable-length integer encoding.
-    If high bit of first byte is 0: value is just that byte (7-bit value, 0-127).
-    If bits 7-6 are 10: 2-byte value (14-bit, mask off top 2 bits).
-    If bits 7-6 are 11: 4-byte value (30-bit, mask off top 2 bits).
+    AC compressed UInt32 (ReadCompressedUInt32 in ACE BinaryReaderExtensions).
+      high bit of b0 clear         -> value = b0                       (1 byte)
+      bit7 set, bit6 clear         -> ((b0 & 0x7F) << 8) | b1          (2 bytes, big-endian)
+      bit7 & bit6 set              -> (((b0 & 0x3F) << 8 | b1) << 16) | u16le(b2,b3)  (4 bytes)
     """
     b0 = data[off]
     if (b0 & 0x80) == 0:
         return b0, off + 1
-    elif (b0 & 0xC0) == 0x80:
-        val = struct.unpack_from(">H", data, off)[0] & 0x3FFF
-        return val, off + 2
-    else:
-        val = struct.unpack_from(">I", data, off)[0] & 0x3FFFFFFF
-        return val, off + 4
+    b1 = data[off + 1]
+    if (b0 & 0x40) == 0:
+        return (((b0 & 0x7F) << 8) | b1), off + 2
+    s = struct.unpack_from("<H", data, off + 2)[0]   # trailing uint16 is little-endian
+    return (((((b0 & 0x3F) << 8) | b1) << 16) | s), off + 4
 
 
 # ── Texture parsing ───────────────────────────────────────────────────────────
@@ -557,33 +556,21 @@ def parse_gfxobj(data: bytes) -> Optional[GfxObj]:
         obj_id, off = _u32(data, off)
         flags,  off = _u32(data, off)
 
-        HAS_PHYSICS = 0x1
-        HAS_DRAWING = 0x2
-        HAS_DEGRADE = 0x4
+        HAS_PHYSICS = 0x1   # GfxObjFlags.HasPhysics
+        HAS_DRAWING = 0x2   # GfxObjFlags.HasDrawing
+        HAS_DEGRADE = 0x8   # GfxObjFlags.HasDIDDegrade (0x4 is Unknown)
 
         _checkpoints = [f"s:fl={flags:#x}b={len(data)}"]
 
-        # Surface count auto-detect: try u8, u16, u32 — pick first sane value
-        _candidates = [
-            ("u8",  data[off],                                  off + 1),
-            ("u16", struct.unpack_from("<H", data, off)[0],     off + 2),
-            ("u32", struct.unpack_from("<I", data, off)[0],     off + 4),
-        ]
-        nsurfaces, off, _sfmt = 0, off, "?"
-        for _fmt, _n, _nxt in _candidates:
-            if _n <= 64 and _nxt + _n * 4 <= len(data):
-                nsurfaces, off, _sfmt = _n, _nxt, _fmt
-                break
-        else:
-            u8v  = data[_candidates[0][2]-1]
-            u16v = _candidates[1][1]
-            u32v = _candidates[2][1]
-            raise RuntimeError(f"Bad surface count at {_candidates[0][2]-1}: u8={u8v} u16={u16v} u32={u32v}")
+        # Surfaces: List<uint>.UnpackSmartArray -> compressed-uint32 count, then u32 ids
+        nsurfaces, off = _packed_dword(data, off)
+        if nsurfaces > 256:
+            raise RuntimeError(f"Bad surface count {nsurfaces} at {off}")
         surfaces = []
         for _ in range(nsurfaces):
             sid, off = _u32(data, off)
             surfaces.append(sid)
-        _checkpoints.append(f"surfs({nsurfaces},{_sfmt})@{off}")
+        _checkpoints.append(f"surfs({nsurfaces})@{off}")
 
         # CVertexArray
         vtype, off = _i32(data, off)
@@ -603,7 +590,7 @@ def parse_gfxobj(data: bytes) -> Optional[GfxObj]:
 
         # Physics BSP (skip)
         if flags & HAS_PHYSICS:
-            nphy, off = _smart_array_count(data, off)
+            nphy, off = _packed_dword(data, off)   # SmartArray = compressed uint32
             for _ in range(nphy):
                 _pidx, off = _u16(data, off)
                 _pdata, off = _parse_polygon_flat(data, off)
@@ -614,31 +601,20 @@ def parse_gfxobj(data: bytes) -> Optional[GfxObj]:
         _sort_center, off = _vec3(data, off)
         _checkpoints.append(f"sc@{off}")
 
-        # Drawing polygons
+        # Drawing polygons — everything the renderer needs. The DrawingBSP tree
+        # and the optional DIDDegrade ref follow in the file, but they're only
+        # used for spatial queries / LOD, so we stop here instead of walking the
+        # BSP (unneeded, and its variable structure only risks misalignment).
         polygons: List[AcPolygon] = []
         if flags & HAS_DRAWING:
-            _sc_end = off
-            ndraw, off = _smart_array_count(data, off)
-            # Dump 40 bytes starting from 20 bytes before sort center end
-            _dump_start = max(0, _sc_end - 20)
-            _hex_ctx = data[_dump_start:_dump_start+48].hex()
-            _checkpoints.append(f"ndraw({ndraw})@{off}|bytes@{_dump_start}:{_hex_ctx}")
+            ndraw, off = _packed_dword(data, off)   # SmartArray = compressed uint32
+            if ndraw > 65535:
+                raise RuntimeError(f"Bad draw poly count {ndraw} at {off}")
             for _pi in range(ndraw):
-                _poly_start = off
                 _didx, off = _u16(data, off)   # dictionary key
-                _poly_hex = data[off:off+8].hex() if off+8 <= len(data) else "short"
                 poly, off  = _parse_polygon_flat(data, off)
                 polygons.append(poly)
-                if _pi == 0:
-                    _checkpoints.append(f"p0@{off}(k={_didx},npts={len(poly.vertex_ids)},h={_poly_hex})")
-            _checkpoints.append(f"drwpoly@{off}")
-            off = _skip_bsp_tree(data, off, 'Drawing')
-            _checkpoints.append(f"drwBSP@{off}")
-
-        # DID degrade ref
-        if flags & HAS_DEGRADE:
-            _checkpoints.append(f"deg@{off}")
-            _degrade, off = _u32(data, off)
+            _checkpoints.append(f"drwpoly({ndraw})@{off}")
 
         return GfxObj(obj_id, surfaces, vertices, polygons)
     except Exception as e:
@@ -716,34 +692,31 @@ def _parse_frame(data: bytes, off: int) -> Tuple["PartFrame", int]:
 
 def parse_setup(data: bytes) -> Optional[AcSetup]:
     """
-    Parse a Setup (0x02xxxxxx) binary blob, including placement frame transforms.
+    Parse a Setup (0x02xxxxxx) into its parts + per-part rest-pose placement
+    frames. Byte layout follows ACE DatLoader SetupModel.Unpack exactly:
 
-    Binary layout (from ACE DatLoader/FileTypes/Setup.cs):
-      uint32  setup_id
-      uint32  flags
-        0x1 = HasParent       -> uint32[nparts] parent indices
-        0x2 = HasDefaultScale -> Vector3[nparts] per-part scale
-      uint32  num_parts
-      uint32[num_parts]  gfxobj_ids
-      [if HasParent]        uint32[nparts]
-      [if HasDefaultScale]  float[nparts*3]
-      uint32  num_cylspheres  + CylSphere[n] (5 floats each = 20 bytes)
-      uint32  num_spheres     + Sphere[n]    (4 floats each = 16 bytes)
-      float   height, radius, step_down_height, step_up_height
-      Sphere  sorting_sphere  (16 bytes)
-      Sphere  selection_sphere (16 bytes)
-      uint32  num_lights      + Light[n] (skipped, variable size — use try/except)
-      uint32  default_anim    (DID)
-      uint32  default_script  (DID)
-      float   default_scale
-      uint32  num_placementtypes
-      for each placement type:
-        uint32  placement_id
-        uint32  num_animframes
-        for each animframe:
-          Frame[num_parts]   (28 bytes each: vec3 origin + quat)
+      u32  setup_id
+      u32  flags               (0x1 HasParent, 0x2 HasDefaultScale)
+      u32  num_parts
+      u32[num_parts]           GfxObj ids (Parts)
+      [HasParent]       u32[num_parts]
+      [HasDefaultScale] Vector3[num_parts]        (3 floats each = 12B)
+      HoldingLocations  Dictionary<int,LocationType>: i32 count,
+                        each = key(i32) + PartId(i32) + Frame(28B) = 36B
+      ConnectionPoints  same shape
+      i32  placements_count
+      for each placement:
+        i32  key
+        Frame[num_parts]       (28B each: vec3 origin + quat w,x,y,z)
+        u32  num_hooks (+ variable AnimationHooks — empty for setup frames)
+
+    Everything after the placements (cyl/spheres/height/lights/DIDs) is
+    irrelevant to rendering and is intentionally not parsed. The Resting (101)
+    placement's frames are used as the rest pose, falling back to the first
+    placement's frames, then to identity.
     """
-    import math
+    setup_id = 0
+    parts: List[SetupPart] = []
     try:
         off = 0
         setup_id, off = _u32(data, off)
@@ -763,105 +736,48 @@ def parse_setup(data: bytes) -> Optional[AcSetup]:
                 _, off = _u32(data, off)
 
         if flags & HAS_DEFAULT_SCALE:
-            off += 4   # DefaultScale is one float for whole setup, NOT per-part
+            off += nparts * 12   # DefaultScale = Vector3 (3 floats) per part
 
-        import logging as _log
-        _logger = _log.getLogger(__name__)
+        # ── HoldingLocations + ConnectionPoints ──────────────────────────────
+        # Both are Dictionary<int, LocationType>. Per ACE UnpackableExtensions,
+        # the int-keyed dictionary uses an Int32 length, and each LocationType is
+        # PartId(int32) + Frame(28 bytes). So each entry = key(4) + 4 + 28 = 36.
+        for _dict_i in range(2):
+            dcount, off = _i32(data, off)
+            if not (0 <= dcount <= 4096):
+                raise RuntimeError(f"Bad location-dict count {dcount} at off {off-4}")
+            off += dcount * 36
 
-        def _rd_u32(label):
-            nonlocal off
-            v = struct.unpack_from("<I", data, off)[0]
-            _logger.warning(f"  [{off:4d}] {label} = {v} (0x{v:08X})")
-            off += 4
-            return v
+        # ── PlacementFrames ──────────────────────────────────────────────────
+        # SetupModel.Unpack reads an Int32 count, then for each placement:
+        #   key(int32) + AnimationFrame{ Frame[nparts] (28B each) + numHooks(u32) + hooks }
+        # We only need the rest-pose part frames; use Placement.Resting (101) when
+        # present, else the first placement. Setup placement frames are hookless in
+        # practice — a non-zero hook count means variable-length data we can't skip,
+        # so we stop there having already captured a usable pose.
+        RESTING = 101
+        placements_count, off = _i32(data, off)
+        if not (0 <= placements_count <= 1024):
+            raise RuntimeError(f"Bad placements count {placements_count} at off {off-4}")
 
-        def _rd_f32(label):
-            nonlocal off
-            v = struct.unpack_from("<f", data, off)[0]
-            _logger.warning(f"  [{off:4d}] {label} = {v:.6f}")
-            off += 4
-            return v
-
-        def _skip(n, label):
-            nonlocal off
-            _logger.warning(f"  [{off:4d}] skip {n} bytes ({label})")
-            off += n
-
-        _logger.warning(f"parse_setup trace: id=0x{setup_id:08X} flags=0x{flags:08X} nparts={nparts} off={off} buflen={len(data)}")
-
-        # Array counts use PackedDWORD (variable length), not u32
-        def _rd_packed(label):
-            nonlocal off
-            v, off = _packed_dword(data, off)
-            _logger.warning(f"  [{off:4d}] {label} = {v} (PackedDWORD)")
-            return v
-
-        ncyl = _rd_packed("num_cylspheres")
-        if ncyl > 64: raise RuntimeError(f"Bad CylSphere count: {ncyl}")
-        _skip(ncyl * 20, f"{ncyl} CylSpheres")
-
-        nsph = _rd_packed("num_spheres")
-        if nsph > 64: raise RuntimeError(f"Bad Sphere count: {nsph}")
-        _skip(nsph * 16, f"{nsph} Spheres")
-
-        _rd_f32("height")
-        _rd_f32("radius")
-        _rd_f32("step_down_height")
-        _rd_f32("step_up_height")
-
-        _skip(16, "sorting_sphere")
-        _skip(16, "selection_sphere")
-
-        nlights = _rd_packed("num_lights")
-        if nlights > 64: raise RuntimeError(f"Bad Light count: {nlights}")
-        _skip(nlights * 44, f"{nlights} Lights")
-
-        # Dump next 32 bytes raw to see what's actually here
-        _logger.warning(f"  [{off:4d}] next 32 raw bytes: {data[off:off+32].hex()}")
-
-        # Scan for valid placement type count by trying different byte offsets
-        # Valid: n_ptypes in 1-10, placement_id in 0-7, n_aframes in 1-10
-        frames: List[PartFrame] = [PartFrame(0,0,0, 1,0,0,0)] * nparts
-        n_ptypes = None
-        scan_start = off
-        for skip in [0, 4, 8, 12, 16, 20]:
-            toff = scan_start + skip
-            if toff + 20 > len(data): break
-            try:
-                tc, t1 = _packed_dword(data, toff)
-                if not (1 <= tc <= 10): continue
-                pid, t2 = _packed_dword(data, t1)
-                if not (0 <= pid <= 7): continue
-                naf, t3 = _packed_dword(data, t2)
-                if not (1 <= naf <= 10): continue
-                # Check that enough bytes remain for the frame data
-                needed = naf * nparts * 28
-                if t3 + needed > len(data) + 28: continue  # allow slight overrun
-                _logger.warning(f"  SCAN: skip={skip} → n_ptypes={tc} pid={pid} naf={naf} (start={toff})")
-                off = toff
-                n_ptypes = tc
+        first_frames = None
+        resting_frames = None
+        for _ in range(placements_count):
+            key, off = _i32(data, off)
+            part_frames = []
+            for _ in range(nparts):
+                pf, off = _parse_frame(data, off)
+                part_frames.append(pf)
+            num_hooks, off = _u32(data, off)
+            if first_frames is None:
+                first_frames = part_frames
+            if key == RESTING:
+                resting_frames = part_frames
+            if num_hooks != 0:
                 break
-            except Exception as se:
-                _logger.warning(f"  SCAN skip={skip} failed: {se}")
 
-        if n_ptypes is None:
-            raise RuntimeError(f"Cannot find valid placement frames near offset {scan_start}")
-
-        default_scale = 1.0
-        for pt_i in range(n_ptypes):
-            placement_id, off = _packed_dword(data, off)
-            n_aframes, off    = _packed_dword(data, off)
-            _logger.warning(f"  [{off:4d}] placement_id={placement_id} n_aframes={n_aframes}")
-            for af_i in range(n_aframes):
-                part_frames = []
-                for _ in range(nparts):
-                    pf, off = _parse_frame(data, off)
-                    part_frames.append(pf)
-                # Use the first placement type, first animframe as default rest pose
-                if pt_i == 0 and af_i == 0:
-                    frames = part_frames
-
-        return AcSetup(setup_id, parts, default_scale, frames)
+        frames = resting_frames or first_frames or ([PartFrame(0,0,0, 1,0,0,0)] * nparts)
+        return AcSetup(setup_id, parts, 1.0, frames)
     except Exception as e:
         # Fall back to no-transform if parse fails
         import logging
