@@ -8652,6 +8652,19 @@ function buildAdvanced(){
       } else if(arrRef==='extraInt' && PROP_DROPDOWNS[String(r.type)]){
         var ddOpts=PROP_DROPDOWNS[String(r.type)].map(function(opt){return '<option value="'+opt[0]+'"'+(parseInt(r.value)===opt[0]?' selected':'')+'>'+opt[0]+' · '+opt[1]+'</option>';}).join('');
         valCtrl='<select onchange="updateExtraProp(\''+arrRef+'\','+i+',this.value)" style="flex-shrink:0;max-width:200px;font-family:JetBrains Mono,monospace;font-size:11px;border-bottom:1px solid var(--border);background:transparent;color:var(--ink)">'+ddOpts+'</select>';
+      } else if(arrRef==='extraFloat' && ELEMENT_SLIDER_KIND[parseInt(r.type)]){
+        var _kind=ELEMENT_SLIDER_KIND[parseInt(r.type)];
+        var _sVal=parseFloat(r.value); if(isNaN(_sVal)) _sVal=1;
+        if(_sVal<0)_sVal=0; if(_sVal>2)_sVal=2;
+        var _leftLbl=_kind==='armor'?'Weaker':'Stronger';
+        var _rightLbl=_kind==='armor'?'Stronger':'Weaker';
+        var _sid='fslide_'+arrRef+'_'+i;
+        valCtrl='<div style="display:flex;align-items:center;gap:6px;flex:1;max-width:320px">'
+          +'<span style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);white-space:nowrap;width:48px">'+_leftLbl+'</span>'
+          +'<input type="range" min="0" max="2" step="0.1" value="'+_sVal+'" oninput="document.getElementById(\''+_sid+'\').textContent=parseFloat(this.value).toFixed(1);updateExtraProp(\''+arrRef+'\','+i+',this.value)" style="flex:1;accent-color:var(--gold)">'
+          +'<span style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);white-space:nowrap;width:48px;text-align:right">'+_rightLbl+'</span>'
+          +'<span id="'+_sid+'" style="width:30px;text-align:right;font-family:JetBrains Mono,monospace;font-size:12px;font-weight:600;color:var(--ink)">'+_sVal.toFixed(1)+'</span>'
+          +'</div>';
       } else {
         valCtrl='<input type="text" value="'+String(r.value||'').replace(/"/g,'&quot;')+'" oninput="updateExtraProp(\''+arrRef+'\','+i+',this.value)" style="width:120px;text-align:right;font-family:JetBrains Mono,monospace;font-size:14px;font-weight:600;border-bottom:1px solid var(--border);flex-shrink:0">';
       }
@@ -8676,6 +8689,13 @@ function buildAdvanced(){
         +'</div>';
     }).join('');
   }
+
+  // ArmorModVsX / ResistX float rows get a 0.0–2.0 slider (1.0 default) instead of a plain text
+  // input — sliding down/up reads as weaker/stronger for armor mods, and the inverse for resists.
+  var ELEMENT_SLIDER_KIND={
+    13:'armor',14:'armor',15:'armor',16:'armor',17:'armor',18:'armor',19:'armor',165:'armor',
+    64:'resist',65:'resist',66:'resist',67:'resist',68:'resist',69:'resist',70:'resist',166:'resist'
+  };
 
   // Add-row UI: searchable select + value + Add button
   function addRowUI(arrRef, propNames, defaultVal, sectionId){
@@ -10032,7 +10052,7 @@ const MOD_OP = [
   [6,'AttemptedTinker'],[7,'AddSpell'],[8,'RemoveSpell'],
 ];
 const RECIPE_SOURCE_TYPE = [
-  [0,'None'],[1,'Source'],[2,'Target'],[3,'Both'],[4,'Creation'],[5,'Player'],
+  [0,'Player'],[1,'Source'],[60,'Dye'],
 ];
 
 
@@ -12053,8 +12073,8 @@ function _editInWeenieForge(idx){
   else if(out) f.sql=out.textContent;
   var sql=f.sql;
 
-  // ── Quest flag files open in the Quest sub-tab ───────────────────────────
-  if(f.type==='quest_flag'){
+  // ── Quest / quest flag files open in the Quest sub-tab ───────────────────
+  if(f.type==='quest_flag'||f.type==='quest'||_detectSQLFileType(sql)==='quest'){
     // Switch to WeenieForge > Quest tab and load the SQL into the quest editor
     var manBtn=document.querySelector('.mode-tab[onclick*="manual"]');
     switchMode('manual',manBtn);
