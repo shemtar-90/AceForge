@@ -1934,8 +1934,15 @@ Start with: /* ===== FILE: {fname} ===== */
         """
         import base64, traceback
         try:
-            setup_id = int(setup_id_hex.strip(), 16)
-        except ValueError:
+            # Setup DID may be written as hex ("0x02000001") or decimal
+            # ("33554433"). Auto-detect by the 0x prefix rather than assuming
+            # base-16, so plain-decimal weenies resolve to the correct file.
+            raw_id = str(setup_id_hex).strip()
+            if raw_id.lower().startswith("0x"):
+                setup_id = int(raw_id, 16)
+            else:
+                setup_id = int(raw_id, 10)
+        except (ValueError, TypeError):
             return {"success": False, "error": "Invalid setup ID"}
 
         from aceforge.dat_loader import (cached_glb_path, DatDatabase,

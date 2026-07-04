@@ -6127,22 +6127,35 @@ function buildGeneratorTab(){
 }
 
 function buildCreateListTab(){
+  if(typeof _loadWeenieNames==='function') _loadWeenieNames(); // prime the item index for Wield search
   var none = '<div style="padding:10px 0;font-family:var(--ui-font);font-style:italic;color:var(--ink-faint)">No create list entries — add below or import a weenie SQL file.</div>';
   var DEST_OPTS = Object.entries(DEST_TYPE_NAMES).map(function(kv){
     return '<option value="'+kv[0]+'">'+kv[0]+' · '+kv[1]+'</option>';
   }).join('');
+  var IST = 'font-family:var(--ui-font);font-size:10px;padding:3px 6px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink)';
   var rows = createList.length ? createList.map(function(r,i){
-    return '<div style="display:grid;grid-template-columns:140px 90px 70px 70px 28px;gap:5px;align-items:center;margin-bottom:3px;padding:4px 0;border-bottom:1px solid var(--border-lt)">'
-      +'<select oninput="createList['+i+'].dest=parseInt(this.value);regen()" style="font-family:var(--ui-font);font-size:10px;padding:3px 4px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink)">'+
+    var main = '<div style="display:grid;grid-template-columns:140px 90px 70px 70px 28px;gap:5px;align-items:center">'
+      +'<select onchange="createList['+i+'].dest=parseInt(this.value);rebuildPanel(\'properties\')" style="font-family:var(--ui-font);font-size:10px;padding:3px 4px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink)">'+
       DEST_OPTS.replace('value="'+r.dest+'"','value="'+r.dest+'" selected')+
       '</select>'
-      +'<input type="number" value="'+(r.wcid||0)+'" placeholder="WCID" oninput="createList['+i+'].wcid=parseInt(this.value)||0;regen()" style="font-family:var(--ui-font);font-size:10px;padding:3px 6px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink)">'
-      +'<input type="number" value="'+(r.stack||1)+'" placeholder="Stack" oninput="createList['+i+'].stack=parseInt(this.value)||1;regen()" style="font-family:var(--ui-font);font-size:10px;padding:3px 6px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink)">'
-      +'<input type="text" value="'+(r.prob!==undefined?r.prob:1)+'" placeholder="Prob" oninput="createList['+i+'].prob=parseFloat(this.value)||1;regen()" style="font-family:var(--ui-font);font-size:10px;padding:3px 6px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink)">'
+      +'<input type="number" id="cl_wcid_'+i+'" value="'+(r.wcid||0)+'" placeholder="WCID" oninput="createList['+i+'].wcid=parseInt(this.value)||0;regen()" style="'+IST+'">'
+      +'<input type="number" value="'+(r.stack||1)+'" placeholder="Stack" oninput="createList['+i+'].stack=parseInt(this.value)||1;regen()" style="'+IST+'">'
+      +'<input type="text" value="'+(r.prob!==undefined?r.prob:1)+'" placeholder="Prob" oninput="createList['+i+'].prob=parseFloat(this.value)||1;regen()" style="'+IST+'">'
       +'<button onclick="createList.splice('+i+',1);rebuildPanel(\'properties\')" style="font-family:var(--ui-font);font-size:10px;padding:2px 8px;border:1px solid var(--border);background:transparent;color:var(--crimson);cursor:pointer">✕</button>'
       +'</div>';
+    // Wield rows get a name search that fills the WCID (custom WCIDs still editable above)
+    var search = '';
+    if(r.dest===2){
+      search = '<div style="position:relative;margin:4px 0 2px 0;max-width:360px">'
+        +'<input type="text" placeholder="&#x1F50D; Search wieldable item by name…" autocomplete="off" oninput="_clWeenieSearch(this.value,'+i+')" onfocus="_clWeenieSearch(this.value,'+i+')" onblur="setTimeout(function(){var d=document.getElementById(\'cl_dd_'+i+'\');if(d)d.style.display=\'none\';},180)" '
+        +'style="width:100%;font-family:var(--ui-font);font-size:10px;padding:4px 8px;background:var(--parch-lt);border:1px solid var(--gold);color:var(--ink)">'
+        +'<div id="cl_dd_'+i+'" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--parch-lt);border:1px solid var(--border);border-top:none;max-height:220px;overflow-y:auto;box-shadow:0 6px 16px rgba(0,0,0,.28)"></div>'
+        +'</div>';
+    }
+    return '<div style="margin-bottom:3px;padding:4px 0;border-bottom:1px solid var(--border-lt)">'+main+search+'</div>';
   }).join('') : none;
 
+  var BTN = 'font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;padding:5px 14px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer';
   return '<div style="padding:12px 0">'
     +'<div style="display:grid;grid-template-columns:120px 100px 80px 80px auto;gap:6px;margin-bottom:6px;padding-bottom:4px;border-bottom:2px solid var(--border)">'
     +'<div style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink-dim)">DEST TYPE</div>'
@@ -6152,8 +6165,142 @@ function buildCreateListTab(){
     +'<div></div></div>'
     +rows
     +'<div style="margin-top:10px;display:flex;gap:8px">'
-    +'<button onclick="createList.push({dest:2,wcid:0,stack:1,prob:1});rebuildPanel(\'properties\')" style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;padding:5px 14px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer">+ Add Row</button>'
+    +'<button onclick="createList.push({dest:0,wcid:0,stack:1,prob:1});rebuildPanel(\'properties\')" style="'+BTN+'">+ Add Row</button>'
+    +'<button onclick="clOpenArmorSetModal()" style="'+BTN+';border-color:var(--gold);color:var(--gold)">+ Add Armor Set</button>'
     +'</div></div>';
+}
+
+// ── Create Items: Wield item search (adapts the _weenieNames index) ──────────
+var CL_WIELDABLE = {'Armor':1,'Clothing':1,'Jewelry':1,'Melee Weapon':1,'Missile Weapon':1,'Caster':1,'Ammunition':1};
+function _clWeenieSearch(term, i){
+  var dd = document.getElementById('cl_dd_'+i);
+  if(!dd) return;
+  if(!term || term.length < 2){ dd.style.display='none'; return; }
+  if(!_weenieNames || !_weenieNames.length){ if(typeof _loadWeenieNames==='function'){ _loadWeenieNames(function(){ _clWeenieSearch(term,i); }); } return; }
+  var q = term.toLowerCase(), hits = [];
+  for(var k=0; k<_weenieNames.length && hits.length<14; k++){
+    var e = _weenieNames[k];
+    if(!CL_WIELDABLE[e[2]]) continue;               // wieldable categories only
+    if(e[1].toLowerCase().indexOf(q) !== -1) hits.push(e);
+  }
+  if(!hits.length){
+    dd.innerHTML = '<div style="padding:5px 8px;font-family:var(--ui-font);font-size:10px;color:var(--ink-faint);font-style:italic">No wieldable items match.</div>';
+    dd.style.display='block'; return;
+  }
+  var html = '';
+  for(var j=0; j<hits.length; j++){
+    var wc=hits[j][0], nm=hits[j][1], ct=hits[j][2];
+    html += '<div onmousedown="_clWeenieSelect('+i+','+wc+')" style="padding:4px 8px;cursor:pointer;font-family:var(--ui-font);font-size:10px;display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--border-lt)" onmouseover="this.style.background=\'var(--accent-tint)\'" onmouseout="this.style.background=\'\'">'
+      +'<span style="color:var(--ink)">'+escHtml(nm)+'</span>'
+      +'<span style="color:var(--ink-faint);font-size:9px;white-space:nowrap">'+escHtml(ct)+' &middot; '+wc+'</span></div>';
+  }
+  dd.innerHTML = html; dd.style.display='block';
+}
+function _clWeenieSelect(i, wcid){
+  if(createList[i]){ createList[i].wcid = wcid; }
+  rebuildPanel('properties');
+}
+
+// ── Create Items: Add Armor Set modal (reuses GearForge suit data + icons) ────
+var _clSetSel = null;
+var _clSetGroupsOpen = {};   // group name -> expanded? (default closed)
+function _clEsc(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function _clSuitAt(sel){ try{ var a=_gearArmorSuits[sel.group][sel.cat][sel.sub]; return a && a[0]; }catch(e){ return null; } }
+
+function clOpenArmorSetModal(){
+  _clSetSel = null;
+  _clSetGroupsOpen = {};   // start with all groups collapsed
+  if(typeof gearInit==='function' && !_gearLoaded) gearInit(); // prime armor suit data if needed
+  clRenderArmorSetModal();
+}
+function clCloseArmorSetModal(){ var m=document.getElementById('clArmorSetModal'); if(m) m.remove(); }
+function clToggleSetGroup(g){ _clSetGroupsOpen[g] = !_clSetGroupsOpen[g]; clRerender(); }
+// Re-render without losing the set-list scroll position (selecting/expanding
+// used to snap it back to the top).
+function clRerender(){
+  var list = document.getElementById('clSetList');
+  var st = list ? list.scrollTop : 0;
+  clRenderArmorSetModal();
+  var nl = document.getElementById('clSetList');
+  if(nl) nl.scrollTop = st;
+}
+
+function clRenderArmorSetModal(){
+  var m = document.getElementById('clArmorSetModal');
+  if(!m){ m=document.createElement('div'); m.id='clArmorSetModal'; document.body.appendChild(m); }
+  m.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center';
+  m.onclick = function(e){ if(e.target===m) clCloseArmorSetModal(); };
+  var inner;
+  if(!_gearLoaded){
+    inner = '<div style="padding:40px;font-family:var(--ui-font);font-size:12px;color:var(--ink-dim)">Loading armor sets…<div style="font-size:10px;color:var(--ink-faint);margin-top:6px">First load reads the GearForge data; this can take a moment.</div></div>';
+    setTimeout(function(){ if(document.getElementById('clArmorSetModal') && _gearLoaded) clRenderArmorSetModal(); }, 400);
+  } else {
+    inner = clBuildArmorSetModalBody();
+  }
+  m.innerHTML = '<div onclick="event.stopPropagation()" style="width:780px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;background:var(--parch);border:1px solid var(--border);border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--parch-dk)">'
+    +'<span style="font-family:var(--ui-font);font-size:13px;font-weight:700;color:var(--crimson);letter-spacing:.05em">&#x2694;&#xFE0F; ADD ARMOR SET</span>'
+    +'<button onclick="clCloseArmorSetModal()" style="background:transparent;border:none;color:var(--ink-dim);font-size:20px;cursor:pointer;line-height:1">&times;</button>'
+    +'</div>'
+    +'<div style="flex:1;overflow:hidden;display:flex">'+inner+'</div>'
+    +'</div>';
+}
+
+function clBuildArmorSetModalBody(){
+  var listHtml = '';
+  ['Standard','Themed','Rare'].forEach(function(g){
+    var cats = _gearArmorSuits[g]; if(!cats) return;
+    var open = !!_clSetGroupsOpen[g];
+    var arrow = open ? '\u25bc' : '\u25b6';
+    listHtml += '<div onclick="clToggleSetGroup(\''+g+'\')" style="padding:7px 12px;cursor:pointer;display:flex;align-items:center;gap:7px;font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--crimson);background:var(--parch-dk);border-bottom:1px solid var(--border)">'
+      +'<span style="font-size:9px;color:var(--ink-faint)">'+arrow+'</span>'
+      +'<span style="flex:1">'+g+'</span>'
+      +'<span style="font-size:9px;color:var(--ink-faint);font-weight:400">'+Object.keys(cats).length+'</span></div>';
+    if(!open) return;
+    Object.keys(cats).sort().forEach(function(cat){
+      var subs = cats[cat];
+      Object.keys(subs).forEach(function(sub){
+        var label = cat + (sub && sub!=='null' ? ' \u2014 '+sub : '');
+        var on = _clSetSel && _clSetSel.group===g && _clSetSel.cat===cat && _clSetSel.sub===sub;
+        listHtml += '<div onclick="clSelectSet(\''+_clEsc(g)+'\',\''+_clEsc(cat)+'\',\''+_clEsc(sub)+'\')" style="padding:6px 12px 6px 26px;cursor:pointer;font-family:var(--ui-font);font-size:11px;border-bottom:1px solid var(--border-lt);'+(on?'background:var(--accent-tint);color:var(--crimson);font-weight:600':'color:var(--ink)')+'">'+escHtml(label)+'</div>';
+      });
+    });
+  });
+
+  var preview, suit = _clSetSel ? _clSuitAt(_clSetSel) : null;
+  if(!suit){
+    preview = '<div style="padding:30px;font-family:var(--ui-font);font-size:12px;color:var(--ink-faint);font-style:italic">Select a set on the left to preview its pieces.</div>';
+  } else {
+    var pieces = suit.primary_set || [];
+    var pcHtml = pieces.map(function(p){
+      var wc = (p.wcids && p.wcids[0]) || 0;
+      return '<div style="display:flex;align-items:center;gap:10px;padding:5px 4px;border-bottom:1px solid var(--border-lt)">'
+        +(typeof gearIconThumb==='function' ? gearIconThumb(wc) : '')
+        +'<span style="font-family:var(--ui-font);font-size:12px;flex:1;color:var(--ink)">'+escHtml(p.name||'')+'</span>'
+        +'<span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint)">'+(p.slots||[]).join(', ')+'</span>'
+        +'<span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint);white-space:nowrap">WCID '+wc+'</span>'
+        +'</div>';
+    }).join('');
+    var lbl = _clSetSel.cat + (_clSetSel.sub && _clSetSel.sub!=='null' ? ' \u2014 '+_clSetSel.sub : '');
+    preview = '<div style="padding:10px 14px;overflow-y:auto;flex:1">'
+      +'<div style="font-family:var(--ui-font);font-size:12px;font-weight:700;color:var(--ink);margin-bottom:6px">'+escHtml(lbl)+' <span style="color:var(--ink-faint);font-weight:400">('+pieces.length+' pieces)</span></div>'
+      +pcHtml
+      +'<button onclick="clAddSelectedSet()" style="margin-top:12px;font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.06em;padding:8px 16px;border:1px solid var(--gold);background:var(--gold);color:#1a1a1a;cursor:pointer;border-radius:4px">+ Add Set to Create Items ('+pieces.length+') \u2192 Wield</button>'
+      +'</div>';
+  }
+
+  return '<div id="clSetList" style="width:290px;border-right:1px solid var(--border);overflow-y:auto">'+listHtml+'</div>'
+    +'<div style="flex:1;display:flex;flex-direction:column;overflow:hidden">'+preview+'</div>';
+}
+
+function clSelectSet(g, cat, sub){ _clSetSel = {group:g, cat:cat, sub:sub}; clRerender(); }
+function clAddSelectedSet(){
+  var suit = _clSuitAt(_clSetSel); if(!suit) return;
+  (suit.primary_set||[]).forEach(function(p){
+    if(p.wcids && p.wcids.length){ createList.push({dest:2, wcid:p.wcids[0], stack:1, prob:1}); }
+  });
+  clCloseArmorSetModal();
+  rebuildPanel('properties');
 }
 
 function buildPositionTab(){
@@ -11221,9 +11368,12 @@ var KILL_TASK_FIELDS = [
     {id:'grant_flag_name',   label:'Flag Name',     type:'text',   placeholder:'e.g. VaultAccess',                  required:false, showWhen:{toggle:'use_grant_flag',value:'yes'}, help:'The quest flag that gets stamped. No spaces.'},
     {id:'grant_flag_desc',   label:'Unlock Description', type:'text', placeholder:'e.g. access to the Vault',       required:false, showWhen:{toggle:'use_grant_flag',value:'yes'}, help:'Used in NPC dialogue — "You are now flagged for [this]."'},
   {type:'endsection'},
-  {type:'section', label:'NPC',      icon:'NPC', id:'s_npc',      open:true},
-    {id:'npc_name',       label:'NPC Name',           type:'text',   placeholder:'e.g. Ulgrim the Unpleasant', required:true},
-    {id:'npc_description',label:'Personality',        type:'text',   placeholder:'e.g. Gruff, dismissive',     required:false, help:'Used to write dialogue in the right voice.'},
+  {type:'section', label:'Quest Giver', icon:'NPC', id:'s_npc',      open:true},
+    {id:'use_item_giver', label:'Use an Item as the giver (instead of an NPC)', type:'toggle', required:false, help:'Item = a contract you Use to start, then Use again to turn in. No dialogue or personality — plain broadcast messages, based on the Kill Contract template.'},
+    {id:'npc_name',       label:'NPC / Item Name',    type:'text',   placeholder:'e.g. Ulgrim the Unpleasant  /  Kill Contract', required:true},
+    {id:'npc_description',label:'Personality',        type:'text',   placeholder:'e.g. Gruff, dismissive',     required:false, help:'Used to write NPC dialogue in the right voice.', showWhen:{toggle:'use_item_giver', value:'no'}},
+    {id:'item_icon',      label:'Item Icon',          type:'icon',   placeholder:'0x060030A8',                 required:false, help:'Pick the contract item icon. Falls back to the template icon if left blank.', showWhen:{toggle:'use_item_giver', value:'yes'}},
+    {id:'item_wcid',      label:'Item WCID (optional)', type:'number', placeholder:'auto — 860000 range',       required:false, help:'Leave blank to auto-assign in the kill_contracts (860000) range.', showWhen:{toggle:'use_item_giver', value:'yes'}},
   {type:'endsection'},
   {type:'section', label:'Creature', icon:'C', id:'s_creature', open:true},
     {id:'creature_name',  label:'Creature Name',      type:'text',   placeholder:'e.g. Tumerok Berserker',     required:true},
@@ -11534,6 +11684,11 @@ function _renderField(f){
     inp = '<input type="number" id="qf_'+f.id+'" placeholder="'+(f.placeholder||'')+'" style="'+_FIELD_STYLES.input+'">';
   } else if(f.type==='reward_builder'){
     inp = _buildRewardBuilder(f.id);
+  } else if(f.type==='icon'){
+    inp = '<div style="display:flex;gap:6px;align-items:center">'
+        + '<input type="text" id="qf_'+f.id+'" placeholder="'+(f.placeholder||'0x060030A8')+'" style="'+_FIELD_STYLES.input+';flex:1">'
+        + '<button type="button" onclick="_qfPickIcon(\''+f.id+'\')" style="padding:4px 10px;font-family:var(--ui-font);font-size:9px;font-weight:700;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;white-space:nowrap">&#x1F3A8; Pick</button>'
+        + '</div>';
   } else {
     inp = '<input type="text" id="qf_'+f.id+'" placeholder="'+(f.placeholder||'')+'" style="'+_FIELD_STYLES.input+'">';
   }
@@ -11594,6 +11749,13 @@ function _qfToggle(fieldId, val){
   _qfConditionalShow();
 }
 
+function _qfPickIcon(fieldId){
+  openIconPicker(function(iconHex){
+    var el = document.getElementById('qf_'+fieldId);
+    if(el) el.value = iconHex;  // openIconPicker returns '0x......'
+  });
+}
+
 function _qfConditionalShow(){
   // Walk all current template fields and show/hide based on showWhen
   var tFields = (QUEST_FIELDS[_curQuestType]||[]);
@@ -11616,7 +11778,7 @@ function _qfConditionalShow(){
     if(sw.toggle){
       var tv = document.getElementById('qf_'+sw.toggle);
       // Hidden input value is 'yes' or 'no'
-      if(!tv || tv.value !== 'yes') visible = false;
+      if(!tv || tv.value !== (sw.value||'yes')) visible = false;
     }
     if(visible && sw.xpTypes){
       var typeEl = document.getElementById('qf_xp_type');
@@ -11697,7 +11859,7 @@ function _collectQuestParams(){
     var sw = f.showWhen;
     if(sw.toggle){
       var tv = document.getElementById('qf_'+sw.toggle);
-      if(!tv || tv.value !== 'yes') return false;
+      if(!tv || tv.value !== (sw.value||'yes')) return false;
     }
     if(sw.xpTypes){
       var typeEl = document.getElementById('qf_xp_type');
@@ -11722,6 +11884,10 @@ function _collectQuestParams(){
     });
   }
   collectFields(fields);
+
+  // Kill-task giver type — the toggle controls visibility only, so read it directly.
+  var _giverT = document.getElementById('qf_use_item_giver');
+  if(_giverT && _giverT.value==='yes') params['giver_type'] = 'item';
 
   // Collect reward builder rows
   // If a reward item has a name but no WCID, flag it for auto-generation (leave wcid blank)
@@ -14734,6 +14900,13 @@ document.addEventListener('DOMContentLoaded', function(){
         </div>
 
         <div class="ttk-sh"><span class="ttk-st">Combat Skills</span><div class="ttk-sl"></div></div>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--ui-font);font-size:10px;font-weight:600;color:var(--ink);margin:2px 0 3px">
+          <input type="checkbox" id="ttkInclAttr" checked>
+          Values already include attribute bonus (Treestats / in-game panel)
+        </label>
+        <div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);font-style:italic;margin-bottom:6px">
+          Uncheck if entering raw skill points — the calculator will add the End-of-Retail attribute base (e.g. Heavy = (Str+Coord)/3).
+        </div>
         <div id="ttkSkillsBlock"></div>
 
         <div class="ttk-sh">
@@ -14768,38 +14941,50 @@ document.addEventListener('DOMContentLoaded', function(){
           <div class="ttk-field"><label>Dmg Min</label><input type="number" id="twDmgMin" value="40" min="1"></div>
           <div class="ttk-field"><label>Dmg Max</label><input type="number" id="twDmgMax" value="80" min="1"></div>
           <div class="ttk-field"><label>Weapon Speed</label><input type="number" id="twSpeed" value="40" min="1" max="200"></div>
+          <div class="ttk-field"><label>Spell Level (casters)</label>
+            <select id="twSpellLevel" title="Cast time is set by spell level for War/Void Magic">
+              <option value="1">I &mdash; 1.2s</option>
+              <option value="2">II &mdash; 2.0s</option>
+              <option value="3">III &mdash; 2.75s</option>
+              <option value="4">IV &mdash; 3.0s</option>
+              <option value="5">V &mdash; 3.3s</option>
+              <option value="6" selected>VI &mdash; 3.3s</option>
+              <option value="7">VII &mdash; 3.0s</option>
+              <option value="8">VIII &mdash; 3.0s</option>
+            </select>
+          </div>
           <div class="ttk-field"><label>Attack Bonus % (mod)</label><input type="number" id="twAtkBonus" value="0" step="0.01" placeholder="e.g. 0.18"></div>
         </div>
 
         <div class="ttk-sh"><span class="ttk-st">Buff Profile</span><div class="ttk-sl"></div></div>
         <!-- Base buff tier -->
         <div class="ttk-buff-grid">
-          <label class="ttk-buff-opt active" onclick="ttkSelectBuff('none')">
-            <input type="radio" name="ttkBuff" value="none" checked>
+          <label class="ttk-buff-opt active">
+            <input type="radio" name="ttkBuff" value="none" checked onchange="ttkSelectBuff('none')">
             <div><div class="ttk-buff-label">No Buffs</div><div class="ttk-buff-sub">Base stats only</div></div>
           </label>
-          <label class="ttk-buff-opt" onclick="ttkSelectBuff('self6')">
-            <input type="radio" name="ttkBuff" value="self6">
+          <label class="ttk-buff-opt">
+            <input type="radio" name="ttkBuff" value="self6" onchange="ttkSelectBuff('self6')">
             <div><div class="ttk-buff-label">Self-Buffed L6</div><div class="ttk-buff-sub">+28 attr &amp; skill</div></div>
           </label>
-          <label class="ttk-buff-opt" onclick="ttkSelectBuff('self7')">
-            <input type="radio" name="ttkBuff" value="self7">
+          <label class="ttk-buff-opt">
+            <input type="radio" name="ttkBuff" value="self7" onchange="ttkSelectBuff('self7')">
             <div><div class="ttk-buff-label">Self-Buffed L7</div><div class="ttk-buff-sub">+35 attr &amp; skill</div></div>
           </label>
-          <label class="ttk-buff-opt" onclick="ttkSelectBuff('self8')">
-            <input type="radio" name="ttkBuff" value="self8">
+          <label class="ttk-buff-opt">
+            <input type="radio" name="ttkBuff" value="self8" onchange="ttkSelectBuff('self8')">
             <div><div class="ttk-buff-label">Self-Buffed L8</div><div class="ttk-buff-sub">+45 attr &amp; skill (Incantations)</div></div>
           </label>
-          <label class="ttk-buff-opt" onclick="ttkSelectBuff('full6')">
-            <input type="radio" name="ttkBuff" value="full6">
+          <label class="ttk-buff-opt">
+            <input type="radio" name="ttkBuff" value="full6" onchange="ttkSelectBuff('full6')">
             <div><div class="ttk-buff-label">Full Buffs L6</div><div class="ttk-buff-sub">Group buffs +28</div></div>
           </label>
-          <label class="ttk-buff-opt" onclick="ttkSelectBuff('full7')">
-            <input type="radio" name="ttkBuff" value="full7">
+          <label class="ttk-buff-opt">
+            <input type="radio" name="ttkBuff" value="full7" onchange="ttkSelectBuff('full7')">
             <div><div class="ttk-buff-label">Full Buffs L7</div><div class="ttk-buff-sub">Endgame +35</div></div>
           </label>
-          <label class="ttk-buff-opt" onclick="ttkSelectBuff('full8')">
-            <input type="radio" name="ttkBuff" value="full8">
+          <label class="ttk-buff-opt">
+            <input type="radio" name="ttkBuff" value="full8" onchange="ttkSelectBuff('full8')">
             <div><div class="ttk-buff-label">Full Buffs L8</div><div class="ttk-buff-sub">Max group +45</div></div>
           </label>
         </div>
@@ -14810,28 +14995,28 @@ document.addEventListener('DOMContentLoaded', function(){
             Stacking Addons <span style="font-weight:400;color:var(--ink-faint)">(these stack on top of base buff)</span>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
-            <label class="ttk-buff-opt" onclick="ttkToggleAddon('prodigal',this)">
-              <input type="checkbox" id="ttkAddon_prodigal">
+            <label class="ttk-buff-opt">
+              <input type="checkbox" id="ttkAddon_prodigal" onchange="ttkToggleAddon('prodigal',this)">
               <div><div class="ttk-buff-label">Prodigal Gems</div><div class="ttk-buff-sub">Rare gems: +250 attr/skill (15 min)</div></div>
             </label>
-            <label class="ttk-buff-opt" onclick="ttkToggleAddon('minor',this)">
-              <input type="checkbox" id="ttkAddon_minor">
+            <label class="ttk-buff-opt">
+              <input type="checkbox" id="ttkAddon_minor" onchange="ttkToggleAddon('minor',this)">
               <div><div class="ttk-buff-label">Minor Cantrips</div><div class="ttk-buff-sub">Gear cantrips: +5</div></div>
             </label>
-            <label class="ttk-buff-opt" onclick="ttkToggleAddon('moderate',this)">
-              <input type="checkbox" id="ttkAddon_moderate">
+            <label class="ttk-buff-opt">
+              <input type="checkbox" id="ttkAddon_moderate" onchange="ttkToggleAddon('moderate',this)">
               <div><div class="ttk-buff-label">Moderate Cantrips</div><div class="ttk-buff-sub">Gear cantrips: +10</div></div>
             </label>
-            <label class="ttk-buff-opt" onclick="ttkToggleAddon('major',this)">
-              <input type="checkbox" id="ttkAddon_major">
+            <label class="ttk-buff-opt">
+              <input type="checkbox" id="ttkAddon_major" onchange="ttkToggleAddon('major',this)">
               <div><div class="ttk-buff-label">Major Cantrips</div><div class="ttk-buff-sub">Gear cantrips: +15</div></div>
             </label>
-            <label class="ttk-buff-opt" onclick="ttkToggleAddon('epic',this)">
-              <input type="checkbox" id="ttkAddon_epic">
+            <label class="ttk-buff-opt">
+              <input type="checkbox" id="ttkAddon_epic" onchange="ttkToggleAddon('epic',this)">
               <div><div class="ttk-buff-label">Epic Cantrips</div><div class="ttk-buff-sub">Gear cantrips: +20</div></div>
             </label>
-            <label class="ttk-buff-opt" onclick="ttkToggleAddon('legendary',this)">
-              <input type="checkbox" id="ttkAddon_legendary">
+            <label class="ttk-buff-opt">
+              <input type="checkbox" id="ttkAddon_legendary" onchange="ttkToggleAddon('legendary',this)">
               <div><div class="ttk-buff-label">Legendary Cantrips</div><div class="ttk-buff-sub">Gear cantrips: +25</div></div>
             </label>
           </div>
@@ -14876,6 +15061,7 @@ document.addEventListener('DOMContentLoaded', function(){
         <div class="ttk-sh">
           <span class="ttk-st">Creature</span><div class="ttk-sl"></div>
           <button class="top-btn" style="font-size:9px;padding:4px 10px" onclick="ttkClearCreature()">Clear</button>
+          <button class="top-btn" style="font-size:9px;padding:4px 10px" onclick="ttkImportOpenCreature()" title="Pull stats from the creature currently open in WeenieForge">&#x1F517; Import Open Weenie</button>
           <button class="top-btn" style="font-size:9px;padding:4px 10px" onclick="ttkImportCreature()">&#x2B06; Import SQL</button>
         </div>
 
@@ -14917,6 +15103,7 @@ document.addEventListener('DOMContentLoaded', function(){
         <div class="ttk-sh"><span class="ttk-st">Attack</span><div class="ttk-sl"></div></div>
         <div class="ttk-g2">
           <div class="ttk-field"><label>Attack Skill</label><input type="number" id="tcAtkSkill" value="200" min="0"></div>
+          <div class="ttk-field"><label>Strength</label><input type="number" id="tcStr" value="100" min="1" max="600" title="Adds the same strength damage bonus the player side uses"></div>
           <div class="ttk-field"><label>Damage Type</label>
             <select id="tcDmgType">
               <option value="slash">Slash</option>
@@ -15035,6 +15222,8 @@ const TTK_CREATURE_DEF = {
   two_handed:'tcMeleeDef', missile:'tcMissileDef',
   war:'tcMagicDef', void:'tcMagicDef',
 };
+// Caster cast time (seconds) by spell level — casters cast, they don't swing.
+const TTK_CAST_TIME = {1:1.2, 2:2.0, 3:2.75, 4:3.0, 5:3.3, 6:3.3, 7:3.0, 8:3.0};
 
 let _ttkBuff = 'none';
 
@@ -15188,18 +15377,23 @@ window.ttkParseWeaponSQL = function(sql, filename){
   }
 };
 
-window.ttkToggleAddon = function(addon, labelEl){
+window.ttkToggleAddon = function(addon, inputEl){
   var cb = document.getElementById('ttkAddon_'+addon);
   if(!cb) return;
-  // Uncheck all others (only one cantrip tier at a time)
-  ['prodigal','minor','moderate','major','epic','legendary'].forEach(function(a){
-    if(a !== addon){
-      var el = document.getElementById('ttkAddon_'+a);
-      if(el){ el.checked = false; el.closest('.ttk-buff-opt').classList.remove('active'); }
-    }
-  });
-  cb.checked = !cb.checked;
-  labelEl.classList.toggle('active', cb.checked);
+  // Fired from the input's onchange, so the native toggle has ALREADY happened.
+  // Read cb.checked — never flip it here (flipping is what caused the old
+  // double-toggle where clicks appeared to do nothing).
+  if(cb.checked){
+    // Only one cantrip tier active at a time — clear the others
+    ['prodigal','minor','moderate','major','epic','legendary'].forEach(function(a){
+      if(a !== addon){
+        var el = document.getElementById('ttkAddon_'+a);
+        if(el){ el.checked = false; var lo = el.closest('.ttk-buff-opt'); if(lo) lo.classList.remove('active'); }
+      }
+    });
+  }
+  var lbl = cb.closest('.ttk-buff-opt');
+  if(lbl) lbl.classList.toggle('active', cb.checked);
   _ttkActiveAddon = cb.checked ? addon : 'none';
 };
 
@@ -15242,6 +15436,7 @@ window.ttkLoadCreature = function(idx){
   tsv('tcDmgMax', c.dmg_max);
   tsv('tcAL', c.al);
   tsv('tcSwings', 20);
+  tsv('tcStr', 100); // library creatures carry no strength data — keep it neutral
   var dmgSel = document.getElementById('tcDmgType');
   if(dmgSel) dmgSel.value = c.dmg_type;
   var r = c.resist;
@@ -15274,48 +15469,81 @@ window.ttkHandleCreatureSQL = function(fileInput){
 };
 
 window.ttkParseCreatureSQL = function(sql, filename){
-  // Helper: find integer property value by type ID
-  function gInt(t){ var m=sql.match(new RegExp('[,(]\\s*'+t+'\\s*,\\s*(-?\\d+)')); return m?parseInt(m[1]):null; }
-  function gFloat(t){ var m=sql.match(new RegExp('[,(]\\s*'+t+'\\s*,\\s*([\\d.\\-]+)')); return m?parseFloat(m[1]):null; }
-  function gStr(t){ var m=sql.match(new RegExp('[,(]\\s*'+t+"\\s*,\\s*'([^']+)'")); return m?m[1]:null; }
-
-  // Parse attribute 2nd (vitals) current_Level — last column in each row
-  // INSERT INTO weenie_properties_attribute_2nd ... VALUES (wcid, type, init, lfcp, cpspent, current)
-  function gVital(typeId){
-    var re = new RegExp('\\(\\s*\\d+\\s*,\\s*'+typeId+'\\s*,\\s*\\d+\\s*,\\s*\\d+\\s*,\\s*\\d+\\s*,\\s*(\\d+)');
-    var m = sql.match(re); return m ? parseInt(m[1]) : null;
+  // ── Isolate each property table so a value in one table can't be mistaken
+  //    for a type ID in another (e.g. attribute Strength row #1 masquerading
+  //    as vital MaxHealth #1, or a stray "68" grabbing the wrong resist).
+  function block(table){
+    var m = sql.match(new RegExp('INSERT INTO `weenie_properties_'+table+'`[\\s\\S]+?;','i'));
+    return m ? m[0] : '';
   }
-  // Parse skill init_Level: VALUES (wcid, type, lfpp, sac, pp, init_level, ...)
-  function gSkillInit(typeId){
-    var re = new RegExp('\\(\\s*\\d+\\s*,\\s*'+typeId+'\\s*,\\s*0\\s*,\\s*\\d\\s*,\\s*0\\s*,\\s*(\\d+)');
-    var m = sql.match(re); return m ? parseInt(m[1]) : null;
+  var intB   = block('int');
+  var floatB = block('float');
+  var strB   = block('string');
+  var skillB = block('skill');
+  var attr2B = block('attribute_2nd');
+  var attrB  = block('attribute');
+  var bodyB  = block('body_part');
+
+  // Scoped extractors — (wcid, type, value) within one block only
+  function gIntIn(b,t){ var m=b.match(new RegExp('\\(\\s*\\d+\\s*,\\s*'+t+'\\s*,\\s*(-?\\d+)')); return m?parseInt(m[1]):null; }
+  function gFloatIn(b,t){ var m=b.match(new RegExp('\\(\\s*\\d+\\s*,\\s*'+t+'\\s*,\\s*(-?[\\d.]+)')); return m?parseFloat(m[1]):null; }
+  function gStrIn(b,t){ var m=b.match(new RegExp('\\(\\s*\\d+\\s*,\\s*'+t+"\\s*,\\s*'([^']+)'")); return m?m[1]:null; }
+
+  // Vital (attribute_2nd): (wcid, type, init, lfcp, cpspent, current) -> current_Level
+  function gVital(t){
+    var m = attr2B.match(new RegExp('\\(\\s*\\d+\\s*,\\s*'+t+'\\s*,\\s*\\d+\\s*,\\s*\\d+\\s*,\\s*\\d+\\s*,\\s*(\\d+)'));
+    return m ? parseInt(m[1]) : null;
+  }
+  // Skill (skill): (wcid, type, lfpp, sac, pp, init_level, ...) -> init_level
+  function gSkillInit(t){
+    var m = skillB.match(new RegExp('\\(\\s*\\d+\\s*,\\s*'+t+'\\s*,\\s*\\d+\\s*,\\s*\\d+\\s*,\\s*\\d+\\s*,\\s*(\\d+)'));
+    return m ? parseInt(m[1]) : null;
   }
 
-  var name     = gStr(1) || filename.replace(/\.sql$/i,'');
-  var level    = gInt(25) || 50;
-  var hp       = gVital(1) || gInt(1) || 500;
+  var name     = gStrIn(strB,1) || filename.replace(/\.sql$/i,'');
+  var level    = gIntIn(intB,25) || 50;
+  var hp       = gVital(1) || 500;
   var stam     = gVital(3) || 500;
-  var mana     = gVital(5) || 500;
+  var mana     = gVital(5) || 0;
+  // Creature Strength (primary attribute table, type 1, current_Level) — drives
+  // the strength damage bonus, same formula the player side uses. Default 100 = no bonus.
+  var cStrM    = attrB.match(/\(\s*\d+\s*,\s*1\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*(\d+)/);
+  var cStr     = cStrM ? parseInt(cStrM[1]) : 100;
   var meleeDef   = gSkillInit(6)  || Math.round(level*2.5+50);
   var missileDef = gSkillInit(7)  || Math.round(level*2.2+50);
   var magicDef   = gSkillInit(15) || Math.round(level*2.0+50);
-  var atkSkill   = gSkillInit(45) || gSkillInit(46) || gSkillInit(6) || Math.round(level*2.8+50);
+  var atkSkill   = gSkillInit(45) || gSkillInit(46) || gSkillInit(44) || gSkillInit(47) || gSkillInit(6) || Math.round(level*2.8+50);
 
-  function getR(t){ var v=gFloat(t); return v!==null?Math.round(v*100)/100:1.0; }
+  // Resistances live only in the float block (types 64-70)
+  function getR(t){ var v=gFloatIn(floatB,t); return v!==null?Math.round(v*100)/100:1.0; }
   var resist = {slash:getR(64),pierce:getR(65),bludgeon:getR(66),
                 fire:getR(67),cold:getR(68),acid:getR(69),electric:getR(70)};
 
-  // Armor: first base_Armor column in body_part table
-  var alm = sql.match(/weenie_properties_body_part[\s\S]{0,800}VALUES\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*(\d+)/);
-  var al = alm ? parseInt(alm[1]) : 0;
-
-  var dmgMin = Math.max(1, Math.round(level*0.3+5));
-  var dmgMax = Math.round(dmgMin*2.6);
-  var combatMode = gInt(40) || 2;
-  var dmgType = combatMode===3 ? 'fire' : 'bludgeon';
+  // Damage + armor from body parts: (wcid, key, dType, dVal, dVar, baseArmor, ...)
+  // Melee range mirrors weapon logic: max = dVal, min = round(dVal*(1-dVar)).
+  // Use the highest-dVal part (the creature's primary attack); AL = highest base_Armor.
+  var dmgMin=null, dmgMax=null, al=0, bpDmgType=null;
+  if(bodyB){
+    var bpRe = /\(\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*,\s*(\d+)/g, bm;
+    var bestDVal=-1, bestDVar=0, bestDType=0;
+    while((bm=bpRe.exec(bodyB))!==null){
+      var dType=parseInt(bm[2]), dVal=parseInt(bm[3]), dVar=parseFloat(bm[4]), baseAL=parseInt(bm[5]);
+      if(baseAL>al) al=baseAL;
+      if(dVal>bestDVal){ bestDVal=dVal; bestDVar=dVar; bestDType=dType; }
+    }
+    if(bestDVal>0){
+      dmgMax=Math.round(bestDVal);
+      dmgMin=Math.max(1,Math.round(bestDVal*(1-bestDVar)));
+      var dtMap={1:'slash',2:'pierce',4:'bludgeon',8:'fire',16:'cold',32:'acid',64:'electric'};
+      bpDmgType=dtMap[bestDType];
+      if(!bpDmgType){ [1,2,4,8,16,32,64].forEach(function(bit){ if(!bpDmgType && (bestDType&bit)) bpDmgType=dtMap[bit]; }); }
+    }
+  }
+  if(dmgMin===null){ dmgMin=Math.max(1,Math.round(level*0.3+5)); dmgMax=Math.round(dmgMin*2.6); }
+  var dmgType = bpDmgType || 'bludgeon';
 
   tsv('tcName',name); tsv('tcLevel',level);
-  tsv('tcHP',hp); tsv('tcStam',stam); tsv('tcMana',mana);
+  tsv('tcHP',hp); tsv('tcStam',stam); tsv('tcMana',mana); tsv('tcStr',cStr);
   tsv('tcMeleeDef',meleeDef); tsv('tcMissileDef',missileDef); tsv('tcMagicDef',magicDef);
   tsv('tcAtkSkill',atkSkill);
   tsv('tcDmgMin',dmgMin); tsv('tcDmgMax',dmgMax); tsv('tcAL',al);
@@ -15326,10 +15554,32 @@ window.ttkParseCreatureSQL = function(sql, filename){
 
   var status=document.getElementById('ttkImportStatus');
   if(status){
-    status.textContent = '✓ Imported: '+name+' (L'+level+', HP:'+hp+')';
+    status.textContent = '✓ Imported: '+name+' (L'+level+', HP:'+hp+', dmg '+dmgMin+'\u2013'+dmgMax+')';
     status.className='ttk-status ok';
     setTimeout(function(){ status.textContent=''; status.className='ttk-status'; }, 4000);
   }
+};
+
+// ── Import the creature currently open in WeenieForge ────────────────────────
+// Reads the live SQL the editor has already generated and runs it through the
+// same (fixed) parser as file import, so results match "save then import SQL"
+// exactly — no separate code path to drift out of sync.
+window.ttkImportOpenCreature = function(){
+  var status = document.getElementById('ttkImportStatus');
+  function fail(msg){ if(status){ status.textContent=msg; status.className='ttk-status err'; } }
+  var out = document.getElementById('sqlOut');
+  var sql = out ? out.value : '';
+  // If the SQL pane is empty/stale, try to regenerate from current form state.
+  if((!sql || !/weenie_properties_/.test(sql)) && typeof buildSQL === 'function'){
+    try{ buildSQL(); sql = out ? out.value : ''; }catch(e){}
+  }
+  if(!sql || !/weenie_properties_/.test(sql)){
+    fail('\u2717 No weenie SQL found. Open or build a weenie first.'); return;
+  }
+  if(!/weenie_properties_body_part|weenie_properties_attribute_2nd/.test(sql)){
+    fail('\u2717 The open weenie isn\u2019t a creature (no vitals or body parts found).'); return;
+  }
+  ttkParseCreatureSQL(sql, 'Open Weenie');
 };
 
 // Close drop on outside click
@@ -15380,6 +15630,10 @@ window.ttkImport = async function(){
 };
 
 function ttkApplyData(d){
+  // Treestats reports effective skills (attribute contribution already baked in),
+  // so make sure the "values include attribute bonus" toggle is on.
+  var _incl = document.getElementById('ttkInclAttr');
+  if(_incl) _incl.checked = true;
   tsv('tpName', d.name||'');
   var a = d.attribs||{};
   tsv('taStr',  a.strength?.base||100);
@@ -15432,7 +15686,7 @@ window.ttkClearPlayer = function(){
 
 window.ttkClearCreature = function(){
   ['tcName','tcLevel','tcHP','tcStam','tcMana','tcMeleeDef','tcMissileDef','tcMagicDef',
-   'tcAtkSkill','tcDmgMin','tcDmgMax','tcAL','tcSwings',
+   'tcAtkSkill','tcStr','tcDmgMin','tcDmgMax','tcAL','tcSwings',
    'trSlash','trPierce','trBludgeon','trFire','trCold','trAcid','trElectric',
    'tpResSlash','tpResPierce','tpResBludgeon','tpResFire','tpResCold','tpResAcid','tpResElectric']
    .forEach(function(id){ var el=document.getElementById(id); if(el) el.value=el.type==='number'?0:''; });
@@ -15451,7 +15705,8 @@ function ttkArmorMit(dmg, al){
 function ttkResistMit(dmg, resist){ return resist>0 ? dmg/resist : dmg; }
 function ttkAttackInterval(wSpeed, qck){
   var qBonus = Math.max(0,(qck-100)/10)*0.05;
-  return Math.max(0.5, (wSpeed/60)*(1-qBonus));
+  // Anchored so a speed-40 weapon swings ~0.80s (was /60 => 0.667s, too fast).
+  return Math.max(0.5, (wSpeed/50)*(1-qBonus));
 }
 function ttkBuffedSkill(base, training, buffKey){
   var b=TTK_BUFF[buffKey]||TTK_BUFF.none;
@@ -15468,15 +15723,49 @@ function ttkBuffedHP(base, buffKey){
   return base+hpBuff;
 }
 
+// ── End-of-Retail base-skill contribution from attributes ────────────────────
+// Effective skill = attributeBase + points raised. When a user enters RAW skill
+// points (toggle off), we add this. A = base attributes {str,coord,quick,focus,self}.
+// Divisors confirmed against EoR: melee (S+C)/3, finesse (C+Q)/3, melee defense
+// (Q+C)/3, missile defense (Q+C)/5, magic defense (S+F)/7, war/void (F+S)/4,
+// missile weapons C/2.
+function ttkAttrBase(skillKey, A){
+  switch(skillKey){
+    case 'heavy_weapons':
+    case 'light_weapons':
+    case 'two_handed_combat': return Math.floor((A.str + A.coord)/3);
+    case 'finesse_weapons':   return Math.floor((A.coord + A.quick)/3);
+    case 'missile_weapons':   return Math.floor(A.coord/2);
+    case 'war_magic':
+    case 'void_magic':        return Math.floor((A.focus + A.self)/4);
+    case 'melee_defense':     return Math.floor((A.quick + A.coord)/3);
+    case 'missile_defense':   return Math.floor((A.quick + A.coord)/5);
+    case 'magic_defense':     return Math.floor((A.self + A.focus)/7);
+    default: return 0;
+  }
+}
+
 // ── Calculate ────────────────────────────────────────────────────
 window.ttkCalculate = function(){
   var wType    = tgs('twType');
   var atkSkId  = TTK_WEAPON_TO_SKILL[wType];
   var defSkId  = TTK_WEAPON_DEF[wType];
   var cDefId   = TTK_CREATURE_DEF[wType];
+  var isCaster  = (wType==='war' || wType==='void');
+  var isMissile = (wType==='missile');
+  var spellLevel = tgn('twSpellLevel') || 6;
+
+  // Whether the entered skill values already include the attribute bonus
+  // (Treestats / in-game panel do). If not, add the End-of-Retail attribute
+  // base derived from the entered base attributes.
+  var _inclEl  = document.getElementById('ttkInclAttr');
+  var inclAttr = _inclEl ? _inclEl.checked : true;
+  var _attrs = {str:tgn('taStr'),end:tgn('taEnd'),coord:tgn('taCrd'),
+                quick:tgn('taQck'),focus:tgn('taFcs'),self:tgn('taSelf')};
 
   // Player attack
   var pAtkBase   = tgn('twSkill');
+  if(!inclAttr) pAtkBase += ttkAttrBase(atkSkId, _attrs);
   var pAtkTr     = tgs('ttr_'+atkSkId)||'Trained';
   var pAtkBuffed = ttkBuffedSkill(pAtkBase, pAtkTr, _ttkBuff);
   var wAtkBonus  = tgn('twAtkBonus');
@@ -15484,6 +15773,7 @@ window.ttkCalculate = function(){
 
   // Player defense
   var pDefBase   = tgn('tsk_'+defSkId);
+  if(!inclAttr) pDefBase += ttkAttrBase(defSkId, _attrs);
   var pDefTr     = tgs('ttr_'+defSkId)||'Untrained';
   var pDefBuffed = ttkBuffedSkill(pDefBase, pDefTr, _ttkBuff);
 
@@ -15498,12 +15788,20 @@ window.ttkCalculate = function(){
 
   // Hit chance: player → creature
   var pHit = ttkHitChance(pAtkFinal, cDef);
+  // Missile power bar governs ACCURACY (not power): at the 85% draw the shot
+  // realizes 85% of its aimed hit chance. (Melee spends the bar on damage instead.)
+  var MISSILE_ACCURACY = 0.85;
+  if(isMissile) pHit *= MISSILE_ACCURACY;
 
   // Damage: player → creature
+  //  - Melee: 85% power bar reduces damage.
+  //  - Missile: full damage (bar = accuracy, applied to hit above).
+  //  - Caster: spells deal full listed damage.
   var dmgMin  = tgn('twDmgMin');
   var strB    = ttkStrBonus(str);
   var dmgMax  = tgn('twDmgMax') + strB;
-  var avgRaw  = (dmgMin+dmgMax)/2 * 0.85;  // 85% power bar
+  var powerMult = (isMissile || isCaster) ? 1.0 : 0.85;
+  var avgRaw  = (dmgMin+dmgMax)/2 * powerMult;
   // Player weapon damage type → creature resistance lookup
   var pDmgType   = tgs('twDmgType') || 'slash';
   var cResMap2   = {slash:'trSlash',pierce:'trPierce',bludgeon:'trBludgeon',
@@ -15513,7 +15811,8 @@ window.ttkCalculate = function(){
   var avgMit  = ttkArmorMit(avgAfterRes, cAL);
   var avgEff  = avgMit * pHit;
   var wSpeed  = tgn('twSpeed')||40;
-  var atkInt  = ttkAttackInterval(wSpeed, qck);
+  // Casters cast at a fixed per-spell-level rate; melee/missile swing by speed.
+  var atkInt  = isCaster ? (TTK_CAST_TIME[spellLevel]||3.0) : ttkAttackInterval(wSpeed, qck);
   var dps     = avgEff / atkInt;
   var pTTK    = cHP / dps;
 
@@ -15531,7 +15830,10 @@ window.ttkCalculate = function(){
   var pResMap   = {slash:'tpResSlash',pierce:'tpResPierce',bludgeon:'tpResBludgeon',
                    fire:'tpResFire',cold:'tpResCold',acid:'tpResAcid',electric:'tpResElectric'};
   var pResVal   = tgn(pResMap[cDmgType]||'tpResBludgeon')||1;
-  var cAvgRaw   = (tgn('tcDmgMin')+tgn('tcDmgMax'))/2;
+  // Creature strength damage bonus — same ttkStrBonus the player uses, added to
+  // the creature's max damage (creatures swing at full, so no 85% power bar).
+  var cStrB     = ttkStrBonus(tgn('tcStr'));
+  var cAvgRaw   = (tgn('tcDmgMin') + (tgn('tcDmgMax')+cStrB))/2;
   var cAfterRes = ttkResistMit(cAvgRaw, pResVal);
   var cAfterAL  = ttkArmorMit(cAfterRes, pAL);
   var cEff      = cAfterAL * cHit;
@@ -15546,7 +15848,7 @@ window.ttkCalculate = function(){
     cHP, pHP, pAL, pAL_base, shieldAL, isMeleeDmg,
     cAL, cAvgRaw, cAfterAL, cEff, cDPS, cTTK,
     pDmgType, cResistVal,
-    swingsPerMin: 60/atkInt, cSPM,
+    swingsPerMin: 60/atkInt, cSPM, isCaster, isMissile,
     buffLabel: TTK_BUFF[_ttkBuff].label + (_ttkActiveAddon!=='none' ? ' '+TTK_CANTRIPS[_ttkActiveAddon].label : ''),
   });
 };
@@ -15562,6 +15864,13 @@ function fmtD(v){ return isFinite(v)?v.toFixed(1):'0.0'; }
 
 function ttkRenderResults(r){
   var pWin = r.pTTK < r.cTTK;
+  // If the user previously hit the X (which hides this panel), make sure a
+  // fresh Calculate brings it back into view instead of silently updating
+  // hidden markup.
+  var _rc = document.getElementById('ttkResultsContent');
+  if(_rc) _rc.style.display = '';
+  var _cl = document.getElementById('ttkResultsClose');
+  if(_cl) _cl.title = 'Hide results';
   document.getElementById('ttkResultsContent').innerHTML =
     '<div class="ttk-result-grid">'
     +'<div class="ttk-result-cell"><div class="ttk-result-val" style="color:'+(pWin?'var(--green)':'var(--danger)')+'">'+fmtT(r.pTTK)+'</div>'
@@ -15580,10 +15889,10 @@ function ttkRenderResults(r){
     +bd('Str damage bonus','+'+r.strB)
     +bd('Dmg range',r.dmgMin+'–'+r.dmgMax)
     +bd('Dmg type × creature resist ('+r.pDmgType+')',r.cResistVal.toFixed(2)+'× → '+r.avgAfterRes.toFixed(1))
-    +bd('Avg × 85% power bar',r.avgRaw.toFixed(1))
+    +bd((r.isMissile||r.isCaster)?'Avg damage (full)':'Avg × 85% power bar',r.avgRaw.toFixed(1))
     +bd('After creature AL ('+r.cAL+')',r.avgMit.toFixed(1))
-    +bd('× hit chance ('+fmtP(r.pHit)+')',r.avgEff.toFixed(1)+' eff avg/swing')
-    +bd('Swings/min',r.swingsPerMin.toFixed(1))
+    +bd('× hit chance ('+fmtP(r.pHit)+(r.isMissile?', incl. accuracy':'')+')',r.avgEff.toFixed(1)+' eff avg/'+(r.isCaster?'cast':'swing'))
+    +bd(r.isCaster?'Casts/min':'Swings/min',r.swingsPerMin.toFixed(1))
     +bd('DPS','<span class="ttk-bd-val '+(pWin?'hi':'lo')+'">'+fmtD(r.dps)+'</span>')
     +bd('Creature HP',r.cHP)
     +bd('Time to kill','<span class="ttk-bd-val '+(pWin?'hi':'lo')+'">'+fmtT(r.pTTK)+'</span>')

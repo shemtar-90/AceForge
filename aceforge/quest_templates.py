@@ -423,6 +423,37 @@ def _npc_base_sql(wcid: int, name: str, class_name: str, filename: str) -> str:
 
 
 
+def _kill_contract_item_sql(wcid: int, name: str, use_text: str,
+                            icon_did: int, filename: str) -> str:
+    """Base SQL for a Kill Task contract ITEM (use-to-start / use-again-to-turn-in),
+    modelled on the 860000 Kill Contract Template. Emotes are appended by the caller.
+    """
+    int_rows = [
+        (1, 2048, "ItemType"), (3, 39, "PaletteTemplate"), (5, 5, "EncumbVal"),
+        (8, 5, "Mass"), (11, 50, "MaxStackSize"), (12, 1, "StackSize"),
+        (13, 5, "StackUnitEncumb"), (14, 5, "StackUnitMass"), (15, 50, "StackUnitValue"),
+        (16, 8, "ItemUseable"), (18, 0, "UiEffects"), (19, 1, "Value"),
+        (33, 1, "Bonded"), (93, 1044, "PhysicsState"), (94, 16, "TargetType"),
+        (106, 325, "ItemSpellcraft"), (107, 10000, "ItemCurMana"),
+        (108, 10000, "ItemMaxMana"), (114, 1, "Attuned"),
+    ]
+    bool_rows = [(22, True, "Inscribable"), (63, True, "UnlimitedUse")]
+    str_rows  = [(1, name, "Name"), (14, use_text, "Use")]
+    did_rows  = [
+        (1, 0x02000155, "Setup"), (3, 0x20000014, "SoundTable"),
+        (8, icon_did, "Icon"), (22, 0x3400002B, "PhysicsEffectTable"),
+        (52, 0x0600335A, "IconUnderlay"),
+    ]
+    return "\n".join([
+        f"/* ===== FILE: {filename} ===== */", "",
+        _emit_header(wcid, name, 38), "",
+        _emit_int_props(wcid, int_rows), "",
+        _emit_bool_props(wcid, bool_rows), "",
+        _emit_str_props(wcid, str_rows), "",
+        _emit_did_props(wcid, did_rows), "",
+    ])
+
+
 def _parse_grant_flag(params: dict) -> dict | None:
     """Parse grant_flag params. Returns None if toggle is off or name is blank."""
     if params.get("use_grant_flag","").strip().lower() != "yes":
@@ -509,6 +540,18 @@ def generate_kill_task(params: dict, config) -> list[dict]:
     c_xp         = _si(params.get("creature_xp", ""), c_level * 3000)
     orig_prompt  = params.get("original_prompt", "")
 
+    # ── Quest giver: NPC (Tell dialogue) or Item (plain DirectBroadcast) ──────
+    giver_type    = params.get("giver_type", "npc").strip().lower()
+    is_item_giver = (giver_type == "item")
+    giver_name    = (params.get("item_name", "").strip() or npc_name) if is_item_giver else npc_name
+    def _parse_icon(v, default=0x060030A8):
+        s = str(v).strip().lower()
+        if not s: return default
+        if s.startswith("0x"): s = s[2:]
+        try: return int(s, 16)
+        except Exception: return default
+    item_icon     = _parse_icon(params.get("item_icon", ""))
+
     # Mob/Boss toggle — "Boss" means single spawn, 1.8x scale, 3x HP, 900s respawn
     is_boss_mode = "Boss" in params.get("is_boss", "")
     has_boss     = False  # old optional named boss field removed
@@ -538,10 +581,12 @@ def generate_kill_task(params: dict, config) -> list[dict]:
     boss_flag   = f"{prefix}BossKT"      # boss kill flag (if boss exists)
 
     # Allocate WCIDs
+    _item_override = params.get("item_wcid", "").strip() if is_item_giver else ""
+    _need_item_wcid = is_item_giver and not _item_override.isdigit()
     needed = [
         ("custom_npcs",        1),
         ("campaign_creatures", 1 + (1 if has_boss else 0)),
-        ("kill_contracts",     1 + (1 if has_boss else 0)),
+        ("kill_contracts",     1 + (1 if has_boss else 0) + (1 if _need_item_wcid else 0)),
     ]
     if new_reward_count > 0:
         needed.append(("custom_items", new_reward_count))
@@ -556,6 +601,12 @@ def generate_kill_task(params: dict, config) -> list[dict]:
     boss_wcid       = wcids["campaign_creatures"][1] if has_boss else None
     gen_wcid        = wcids["kill_contracts"][0]
     boss_gen_wcid   = wcids["kill_contracts"][1] if has_boss else None
+    # The emote script and giver file use this wcid (item or NPC).
+    if is_item_giver:
+        item_wcid  = int(_item_override) if _item_override.isdigit() else wcids["kill_contracts"][-1]
+        giver_wcid = item_wcid
+    else:
+        giver_wcid = npc_wcid
 
     c_slug          = _slug(c_name)
     npc_slug        = _slug(npc_name)
@@ -690,9 +741,16 @@ def generate_kill_task(params: dict, config) -> list[dict]:
         fname_ri = f"{ri_wcid}_{ri_slug}.sql"
         files.append({"filename":fname_ri,"sql":"\n".join([f"/* ===== FILE: {fname_ri} ===== */","",_emit_header(ri_wcid,ri_name,6),"",_emit_int_props(ri_wcid,ri_int),"",_emit_str_props(ri_wcid,ri_str),"",_emit_did_props(ri_wcid,ri_did),""]),"type":"item","wcid":ri_wcid})
 
-    # ── File 5: NPC Quest Giver (base SQL — emotes added by AI call) ──────────
-    fname5 = f"{npc_wcid}_{npc_slug}.sql"
-    npc_base = _npc_base_sql(npc_wcid, npc_name, npc_slug, fname5)
+    # ── File 5: Quest Giver — NPC (Tell dialogue) or Item (plain broadcast) ───
+    if is_item_giver:
+        giver_slug = _slug(giver_name)
+        fname5 = f"{giver_wcid}_{giver_slug}.sql"
+        use_text = (f"Use this to activate the contract. Once you have slain "
+                    f"{kill_count} {c_name}, use it again to receive your rewards.")
+        npc_base = _kill_contract_item_sql(giver_wcid, giver_name, use_text, item_icon, fname5)
+    else:
+        fname5 = f"{npc_wcid}_{npc_slug}.sql"
+        npc_base = _npc_base_sql(npc_wcid, npc_name, npc_slug, fname5)
 
     # Build the emote script deterministically — exact quest flags guaranteed
     boss_check = ""
@@ -737,7 +795,7 @@ def generate_kill_task(params: dict, config) -> list[dict]:
     def emo_hdr(cat_id, cat_name, prob=1, quest=None):
         q = f"'{quest}'" if quest else "NULL"
         return (f"INSERT INTO `weenie_properties_emote` ({EMO_COLS})\n"
-                f"VALUES ({npc_wcid}, {cat_id} /* {cat_name} */, {prob}, NULL, NULL, NULL, {q}, NULL, NULL, NULL);\n"
+                f"VALUES ({giver_wcid}, {cat_id} /* {cat_name} */, {prob}, NULL, NULL, NULL, {q}, NULL, NULL, NULL);\n"
                 f"\nSET @parent_id = LAST_INSERT_ID();\n")
 
     def act_row(order, type_id, type_name, *,
@@ -816,9 +874,14 @@ def generate_kill_task(params: dict, config) -> list[dict]:
         if grant_flag:
             rows.append(_ar(o, 22, "StampQuest", message=grant_flag["name"]))
             o += 1
-            rows.append(_ar(o, 10, "Tell",
-                           message=f"You are now flagged for {grant_flag['desc']}.",
-                           suffix=";"))
+            if is_item_giver:
+                rows.append(_ar(o, 18, "DirectBroadcast",
+                               message=f"You are now flagged for {grant_flag['desc']}.",
+                               suffix=";"))
+            else:
+                rows.append(_ar(o, 10, "Tell",
+                               message=f"You are now flagged for {grant_flag['desc']}.",
+                               suffix=";"))
         else:
             rows[-1] = rows[-1].rstrip(";") + ";"  # close last row
         return rows
@@ -904,9 +967,9 @@ def generate_kill_task(params: dict, config) -> list[dict]:
     files.append({
         "filename":       fname5,
         "sql":            npc_sql_full,
-        "type":           "npc",
-        "wcid":           npc_wcid,
-        "npc_name":       npc_name,
+        "type":           "item" if is_item_giver else "npc",
+        "wcid":           giver_wcid,
+        "npc_name":       giver_name,
         "npc_desc":       npc_desc,
         "quest_flag":     kt_flag,
         "kill_count":     kill_count,
