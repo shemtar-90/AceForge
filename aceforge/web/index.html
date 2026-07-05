@@ -5690,7 +5690,9 @@ function _applyImportedSQLSections(lines, wcid) {
       const isLast=(i===validDrops.length-1);
       const prefix=i===0?'VALUES ':'     , ';
       const stackPad=String(r.stack||0).padStart(2,' ');
-      lines.push(`${prefix}(${wcid}, ${r.dest}, ${String(r.wcid).padStart(5,' ')}, ${stackPad}, 0, 0, False)${isLast?';':''} /* ${destNames[r.dest]||r.dest}: WCID ${r.wcid} */`);
+      const pal=parseInt(r.palette)||0;
+      const shade=(parseFloat(r.shade)||0);
+      lines.push(`${prefix}(${wcid}, ${r.dest}, ${String(r.wcid).padStart(5,' ')}, ${stackPad}, ${pal}, ${shade}, False)${isLast?';':''} /* ${destNames[r.dest]||r.dest}: WCID ${r.wcid} */`);
     });
     lines.push('');
   }
@@ -6161,14 +6163,16 @@ function _parseCreateListSQL(sql){
   createList = [];
   if(!sql) return;
   // Match each VALUES row: (obj_Id, destination_Type, weenie_Class_Id, stack_Size, palette, shade, try_To_Bond [, probability])
-  var re = /(?:VALUES|,)\s*\(\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(-?\d+)\s*,\s*\d+\s*,\s*[0-9.]+\s*,\s*(?:True|False|0|1)(?:\s*,\s*([0-9.]+))?\s*\)/gi;
+  var re = /(?:VALUES|,)\s*\(\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(-?\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*,\s*(?:True|False|0|1)(?:\s*,\s*([0-9.]+))?\s*\)/gi;
   var m;
   while((m = re.exec(sql)) !== null){
     createList.push({
-      dest:  parseInt(m[1]) || 2,
-      wcid:  parseInt(m[2]) || 0,
-      stack: parseInt(m[3]) || 1,
-      prob:  parseFloat(m[4] || '1') || 1,
+      dest:    parseInt(m[1]) || 2,
+      wcid:    parseInt(m[2]) || 0,
+      stack:   parseInt(m[3]) || 1,
+      palette: parseInt(m[4]) || 0,
+      shade:   parseFloat(m[5]) || 0,
+      prob:    parseFloat(m[6] || '1') || 1,
     });
   }
 }
@@ -6482,6 +6486,28 @@ function buildCreateListTab(){
       +'<input type="text" value="'+(r.prob!==undefined?r.prob:1)+'" placeholder="Prob" oninput="createList['+i+'].prob=parseFloat(this.value)||1;regen()" style="'+IST+'">'
       +'<button onclick="createList.splice('+i+',1);rebuildPanel(\'properties\')" style="font-family:var(--ui-font);font-size:10px;padding:2px 8px;border:1px solid var(--border);background:transparent;color:var(--crimson);cursor:pointer">✕</button>'
       +'</div>';
+    // Palette + Shade sub-row (applies to items with a ClothingBase — armor/clothing/weapons)
+    var _pal=(typeof PALETTE_COLORS!=='undefined')?PALETTE_COLORS.find(function(p){return p[0]===(parseInt(r.palette)||0);}):null;
+    var _sw=(_pal&&_pal[2])?_pal[2]:null;
+    var _shv=(parseFloat(r.shade)||0);
+    var ps = '<div style="display:flex;align-items:center;gap:14px;margin:5px 0 2px 0;flex-wrap:wrap">'
+      +'<div style="display:flex;align-items:center;gap:5px">'
+        +'<span style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--ink-dim)">PALETTE</span>'
+        +'<input type="number" value="'+(parseInt(r.palette)||0)+'" oninput="createList['+i+'].palette=parseInt(this.value)||0;regen()" style="width:52px;'+IST+'">'
+        +'<button onclick="_clPickPalette('+i+')" title="'+((_pal&&_pal[1])?_pal[1].replace(/"/g,"&quot;"):'')+'" style="padding:3px 8px;font-family:var(--ui-font);font-size:9px;font-weight:700;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;white-space:nowrap">&#x1F3A8; Pick</button>'
+        +(_sw?'<span style="width:15px;height:15px;border-radius:3px;border:1px solid rgba(0,0,0,.35);background:'+_sw+'"></span>':'')
+      +'</div>'
+      +'<div style="display:flex;align-items:center;gap:6px">'
+        +'<span style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--ink-dim)">SHADE</span>'
+        +'<input type="range" min="0" max="1" step="0.02" value="'+_shv+'" oninput="_clApplyShade('+i+',this.value)" style="width:90px;accent-color:var(--gold)">'
+        +'<span id="cl_shade_'+i+'" style="width:30px;text-align:right;font-family:JetBrains Mono,monospace;font-size:11px;font-weight:600;color:var(--ink)">'+_shv.toFixed(2)+'</span>'
+        // shade strip: base color (0.0) → darkened end (1.0), with a live marker
+        +'<div style="position:relative;width:110px;height:14px;border:1px solid var(--border);border-radius:3px;background:linear-gradient(to right,'+_clShadeBase(r.palette)+','+_clShadeRgb(_clShadeBase(r.palette),1)+')" title="Shade darkens the palette color from 0.0 (left) to 1.0 (right)">'
+          +'<div id="cl_shade_mk_'+i+'" style="position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff;box-shadow:0 0 2px #000;left:'+(_shv*100)+'%"></div>'
+        +'</div>'
+        +'<span id="cl_shade_sw_'+i+'" style="width:15px;height:15px;flex-shrink:0;border-radius:3px;border:1px solid rgba(0,0,0,.35);background:'+_clShadeRgb(_clShadeBase(r.palette),_shv)+'" title="Resulting shaded color"></span>'
+      +'</div>'
+      +'</div>';
     // Wield rows get a name search that fills the WCID (custom WCIDs still editable above)
     var search = '';
     if(r.dest===2){
@@ -6491,7 +6517,7 @@ function buildCreateListTab(){
         +'<div id="cl_dd_'+i+'" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--parch-lt);border:1px solid var(--border);border-top:none;max-height:220px;overflow-y:auto;box-shadow:0 6px 16px rgba(0,0,0,.28)"></div>'
         +'</div>';
     }
-    return '<div style="margin-bottom:3px;padding:4px 0;border-bottom:1px solid var(--border-lt)">'+main+search+'</div>';
+    return '<div style="margin-bottom:3px;padding:4px 0;border-bottom:1px solid var(--border-lt)">'+main+ps+search+'</div>';
   }).join('') : none;
 
   var BTN = 'font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;padding:5px 14px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer';
@@ -6538,6 +6564,12 @@ function _clWeenieSearch(term, i){
 function _clWeenieSelect(i, wcid){
   if(createList[i]){ createList[i].wcid = wcid; }
   rebuildPanel('properties');
+}
+function _clPickPalette(i){
+  if(typeof openPalettePicker!=='function') return;
+  openPalettePicker(function(val){
+    if(createList[i]){ createList[i].palette = val; rebuildPanel('properties'); }
+  });
 }
 
 // ── Create Items: Add Armor Set modal (reuses GearForge suit data + icons) ────
@@ -14410,20 +14442,24 @@ var _MP_FRAG = [
   'precision mediump float;',
   'varying vec3 vNorm; varying vec2 vUV;',
   'uniform sampler2D uTex; uniform int uHasTex;',
-  'uniform vec3 uLightDir;',
+  'uniform vec3 uLightDir; uniform vec4 uColor;',
   'void main(){',
   '  vec3 n=normalize(vNorm);',
   '  float diff=abs(dot(n,normalize(uLightDir)))*0.7+0.3;',
-  '  vec4 col=uHasTex==1 ? texture2D(uTex,vUV) : vec4(0.7,0.7,0.75,1.0);',
+  '  vec4 col=uHasTex==1 ? texture2D(uTex,vUV) : uColor;',
   '  gl_FragColor=vec4(col.rgb*diff,col.a);',
   '}',
 ].join('\n');
 
 function _mpMat4Mul(a,b){
+  // Column-major multiply (GLSL/WebGL convention): result = A·B, so that
+  // gl_Position = mvp*v applies model, then view, then projection in order.
+  // (The matrix builders below are all column-major; a row-major multiply here
+  //  produced a degenerate MVP — w=0 — and a black screen.)
   var r=new Float32Array(16);
-  for(var i=0;i<4;i++) for(var j=0;j<4;j++){
-    var s=0; for(var k=0;k<4;k++) s+=a[i*4+k]*b[k*4+j];
-    r[i*4+j]=s;
+  for(var col=0;col<4;col++) for(var row=0;row<4;row++){
+    var s=0; for(var k=0;k<4;k++) s+=a[k*4+row]*b[col*4+k];
+    r[col*4+row]=s;
   }
   return r;
 }
@@ -14553,17 +14589,21 @@ function _mpLoadGLB(glb_data_b64){
       var ibo=mkbuf(idxData,gl.ELEMENT_ARRAY_BUFFER);
 
       var tex=null;
+      var color=[0.72,0.72,0.75,1.0];
       var mat=gltf.materials&&gltf.materials[prim.material];
       if(mat){
         var pbr=mat.pbrMetallicRoughness;
-        if(pbr&&pbr.baseColorTexture!=null){
-          var ti=gltf.textures[pbr.baseColorTexture.index];
-          if(ti) tex=gltf_textures[ti.source];
+        if(pbr){
+          if(pbr.baseColorFactor) color=pbr.baseColorFactor;
+          if(pbr.baseColorTexture!=null){
+            var ti=gltf.textures[pbr.baseColorTexture.index];
+            if(ti) tex=gltf_textures[ti.source];
+          }
         }
       }
       var idxType=idxData instanceof Uint32Array?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT;
       _mp.meshes.push({vbo:vbo,nbo:nbo,tbo:tbo,ibo:ibo,
-                       count:idxData.length,tex:tex,idxType:idxType});
+                       count:idxData.length,tex:tex,color:color,idxType:idxType});
     });
   });
   if(_bbMax[0]>=_bbMin[0]){
@@ -14576,16 +14616,21 @@ function _mpLoadGLB(glb_data_b64){
 
 function _mpDraw(){
   var gl=_mp.gl; if(!gl) return;
+  var W=gl.canvas.width, H=gl.canvas.height;
+  gl.viewport(0,0,W,H);
   gl.clearColor(0.08,0.08,0.1,1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   if(!_mp.meshes.length) return;
   var p=_mp.prog;
-  var W=gl.canvas.width, H=gl.canvas.height;
   var proj=_mpPerspective(0.8,W/H,0.1,200);
   var view=_mpTranslate(0,0,_mp.zoom);
   var rx=_mpRotX(_mp.rotation[1]);
   var ry=_mpRotY(_mp.rotation[0]);
-  var rot=_mpMat4Mul(rx,ry);
+  // AC setups are authored Z-up; the viewer is Y-up. Bake in a fixed base
+  // rotation so models stand upright (Z-up → Y-up) and face the camera, then
+  // apply the user's interactive yaw/pitch on top of that.
+  var base=_mpMat4Mul(_mpRotY(Math.PI),_mpRotX(Math.PI/2));
+  var rot=_mpMat4Mul(_mpMat4Mul(rx,ry),base);
   // Frame the model: translate to origin then scale to ~unit size so any setup
   // (tiny ring or large armor) fills the view consistently.
   var c=_mp.center||[0,0,0], span=_mp.span||1;
@@ -14596,6 +14641,7 @@ function _mpDraw(){
   var uModel=gl.getUniformLocation(p,'uModel');
   var uTex=gl.getUniformLocation(p,'uTex');
   var uHasTex=gl.getUniformLocation(p,'uHasTex');
+  var uColor=gl.getUniformLocation(p,'uColor');
   var uLight=gl.getUniformLocation(p,'uLightDir');
   gl.uniformMatrix4fv(uMVP,false,mvp);
   gl.uniformMatrix4fv(uModel,false,rot);   // normals only need rotation
@@ -14618,6 +14664,7 @@ function _mpDraw(){
       gl.enableVertexAttribArray(aUV);
       gl.vertexAttribPointer(aUV,2,gl.FLOAT,false,0,0);
     }
+    gl.uniform4fv(uColor, m.color||[0.72,0.72,0.75,1.0]);
     if(m.tex){
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D,m.tex);
@@ -14725,18 +14772,24 @@ function openModelPreview(setup_id_hex, label){
 
     // Step 3: prefer WebGL — true 3D with depth, smooth normal-based shading,
     // and textures. Only fall back to the flat 2D canvas painter if it fails.
+    console.log('[3D] renderer decision: _mp.gl='+(_mp.gl?'ready':'NULL')+
+                ', imgs='+((gltf.images||[]).length)+', mats='+((gltf.materials||[]).length));
     var usedWebGL=false;
     try{
       var glOk=_mpLoadGLB(r.data_b64);
+      console.log('[3D] _mpLoadGLB -> '+glOk+', meshes='+((_mp.meshes||[]).length)+
+                  ', span='+(_mp.span||'?'));
       if(glOk && _mp.meshes && _mp.meshes.length){
         var _ov=document.getElementById('modelPreview2D');
         if(_ov) _ov.style.display='none';       // hide any stale 2D overlay
         msg.style.display='none';
-        _mp.rotation=[0.7,0.35]; _mp.zoom=-3.0;  // frame the freshly-loaded model
+        _mp.rotation=[0,0]; _mp.zoom=-3.0;  // neutral: show the baked upright, camera-facing pose
         _mpDraw();
         usedWebGL=true;
+        console.log('[3D] WebGL render active');
       }
-    }catch(e){ console.warn('[3D] WebGL failed, falling back to 2D:',e); }
+    }catch(e){ console.error('[3D] WebGL threw, falling back to 2D: '+(e&&e.stack||e)); }
+    if(!usedWebGL) console.warn('[3D] using 2D fallback renderer');
 
     if(!usedWebGL){
       var _ov2=document.getElementById('modelPreview2D');

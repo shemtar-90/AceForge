@@ -256,13 +256,19 @@ def _packed_dword(data: bytes, off: int) -> Tuple[int, int]:
 
 # ── Texture parsing ───────────────────────────────────────────────────────────
 
-# SurfacePixelFormat values we can handle
-PFID_R8G8B8    = 0x14
-PFID_A8R8G8B8  = 0x15
-PFID_DXT1      = 0x31
-PFID_DXT5      = 0x33
-PFID_P8        = 0x12   # indexed, 8-bit
-PFID_INDEX16   = 0x65   # indexed, 16-bit
+# SurfacePixelFormat values (canonical ACE SurfacePixelFormat enum — decimal).
+# The DXT ids are FourCC codes ('DXT1'/'DXT5'), not small ints.
+PFID_R8G8B8         = 20
+PFID_A8R8G8B8       = 21
+PFID_A8B8G8R8       = 32
+PFID_P8             = 41    # indexed, 8-bit (most common AC texture format)
+PFID_INDEX16        = 101   # indexed, 16-bit
+PFID_CUSTOM_R8G8B8A8 = 240
+PFID_CUSTOM_A8B8G8R8 = 241
+PFID_CUSTOM_B8G8R8   = 242
+PFID_DXT1           = 827611204
+PFID_DXT5           = 894720068
+PFID_RAW_JPEG       = 500
 
 @dataclass
 class AcTexture:
@@ -276,15 +282,29 @@ class AcTexture:
         """Convert any supported format to raw RGBA8 bytes."""
         w, h = self.width, self.height
 
-        if self.fmt == PFID_A8R8G8B8:
-            # BGRA → RGBA
+        if self.fmt in (PFID_A8R8G8B8, PFID_CUSTOM_A8B8G8R8):
+            # Stored little-endian; A8R8G8B8 bytes are B,G,R,A. ABGR bytes are R,G,B,A.
             out = bytearray(w * h * 4)
+            abgr = self.fmt == PFID_CUSTOM_A8B8G8R8
             for i in range(w * h):
-                b, g, r, a = self.data[i*4], self.data[i*4+1], self.data[i*4+2], self.data[i*4+3]
+                c0, c1, c2, a = self.data[i*4], self.data[i*4+1], self.data[i*4+2], self.data[i*4+3]
+                if abgr: r, g, b = c0, c1, c2
+                else:    b, g, r = c0, c1, c2
                 out[i*4:i*4+4] = (r, g, b, a)
             return bytes(out)
 
-        if self.fmt == PFID_R8G8B8:
+        if self.fmt == PFID_A8B8G8R8:
+            # ABGR8888 little-endian bytes = R,G,B,A
+            out = bytearray(w * h * 4)
+            for i in range(w * h):
+                r, g, b, a = self.data[i*4], self.data[i*4+1], self.data[i*4+2], self.data[i*4+3]
+                out[i*4:i*4+4] = (r, g, b, a)
+            return bytes(out)
+
+        if self.fmt == PFID_CUSTOM_R8G8B8A8:
+            return bytes(self.data[:w*h*4])
+
+        if self.fmt in (PFID_R8G8B8, PFID_CUSTOM_B8G8R8):
             out = bytearray(w * h * 4)
             for i in range(w * h):
                 b, g, r = self.data[i*3], self.data[i*3+1], self.data[i*3+2]
@@ -411,17 +431,20 @@ def parse_palette(db: DatDatabase, pal_id: int) -> Optional[List[int]]:
 
 
 def parse_surface_texture(db: DatDatabase, st_id: int) -> Optional[int]:
-    """Parse a SurfaceTexture (0x05xxxxxx) and return the highest-res texture ID."""
+    """Parse a SurfaceTexture (0x05xxxxxx) and return its first (highest-res)
+    Texture (0x06) id. Layout: Id(u32) Unknown(i32) UnknownByte(u8)
+    Textures[List<uint>: Int32 count + count×u32]."""
     data = db.read_file(st_id)
     if not data:
         return None
     try:
-        off = 4  # skip object_id
-        unknown, off = _u32(data, off)
-        count, off   = _u32(data, off)
-        if count == 0:
+        off = 4      # Id
+        off += 4     # Unknown (int32)
+        off += 1     # UnknownByte
+        count, off = _i32(data, off)
+        if count <= 0:
             return None
-        tex_id, _ = _u32(data, off)
+        tex_id, _ = _u32(data, off)   # mip 0 = highest resolution
         return tex_id
     except Exception:
         return None
@@ -831,20 +854,7 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
         return None
 
     # ── Collect geometry ──────────────────────────────────────────────────────
-    meshes        = []      # list of (vertices, indices, tex_index)
-    texture_ids   = []      # ordered list of surface_texture IDs to embed
-    tex_id_map    = {}      # surface_texture_id → index in texture_ids
-
-    def get_tex_index(surf_id: int) -> int:
-        st_id = parse_surface_texture(db, surf_id)
-        if st_id is None:
-            return -1
-        if st_id not in tex_id_map:
-            if len(texture_ids) >= max_textures:
-                return -1
-            tex_id_map[st_id] = len(texture_ids)
-            texture_ids.append(st_id)
-        return tex_id_map[st_id]
+    meshes = []   # list of (vertices, indices, surface_id)  — surface_id is a 0x08 id or None
 
     import math
 
@@ -882,13 +892,9 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
             if len(poly.vertex_ids) < 3:
                 continue
 
-            tex_idx = -1
+            mesh_surf_id = None
             if 0 <= poly.surface_idx < len(gfx.surfaces):
-                surf_id = gfx.surfaces[poly.surface_idx]
-                surf_data = db.read_file(surf_id)
-                if surf_data and len(surf_data) >= 12:
-                    st_id_raw, _ = _u32(surf_data, 8)
-                    tex_idx = get_tex_index(st_id_raw)
+                mesh_surf_id = gfx.surfaces[poly.surface_idx]
 
             verts = []
             for i, vid in enumerate(poly.vertex_ids):
@@ -915,7 +921,7 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
                 indices += [0, i, i + 1]
 
             if verts and indices:
-                meshes.append((verts, indices, tex_idx))
+                meshes.append((verts, indices, mesh_surf_id))
 
     if not meshes:
         import logging
@@ -953,65 +959,85 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
         accessors.append(acc)
         return len(accessors) - 1
 
-    # ── Embed textures as PNG chunks ──────────────────────────────────────────
+    # ── Materials: one per unique Surface (0x08) ──────────────────────────────
+    # A Surface is either a solid ARGB color or an image (SurfaceTexture 0x05 →
+    # Texture 0x06, optionally palettized). We build a glTF material per surface
+    # on demand and cache it by surface id, so a whole model's worth of polygons
+    # collapses to a few materials.
     images_json    = []
     materials_json = []
-    samplers_json  = [{"magFilter": 9728, "minFilter": 9728,
+    samplers_json  = [{"magFilter": 9729, "minFilter": 9729,
                        "wrapS": 10497, "wrapT": 10497}]
     textures_json  = []
+    _surf_mat_cache = {}   # surface_id -> material index
+    ST_BASE1_SOLID   = 0x1
+    ST_BASE1_IMAGE   = 0x2
+    ST_BASE1_CLIPMAP = 0x4
 
-    for st_id in texture_ids:
-        tex_id_hi = parse_surface_texture(db, st_id) or st_id
-        tex_obj   = parse_texture(db, tex_id_hi)
-        rgba      = None
-        w = h = 4
+    def _argb_to_factor(argb):
+        a = (argb >> 24) & 0xFF; r = (argb >> 16) & 0xFF
+        g = (argb >>  8) & 0xFF; b =  argb        & 0xFF
+        if a == 0: a = 255   # AC solid colors commonly leave alpha 0 = opaque
+        return [r/255.0, g/255.0, b/255.0, a/255.0]
 
-        if tex_obj:
-            w, h = tex_obj.width, tex_obj.height
-            pal = None
-            if tex_obj.palette_id:
-                pal = parse_palette(db, tex_obj.palette_id)
+    def _embed_texture(rgba, w, h):
+        png = _rgba_to_png(rgba, w, h)
+        off = bin_buf.tell(); bin_buf.write(png)
+        bv = len(bufviews)
+        bufviews.append({"buffer": 0, "byteOffset": off, "byteLength": len(png)})
+        img = len(images_json); images_json.append({"bufferView": bv, "mimeType": "image/png"})
+        t = len(textures_json); textures_json.append({"sampler": 0, "source": img})
+        return t
+
+    def material_for_surface(surface_id):
+        if surface_id in _surf_mat_cache:
+            return _surf_mat_cache[surface_id]
+        mat = None
+        surf = db.read_file(surface_id) if surface_id else None
+        if surf and len(surf) >= 12:
             try:
-                rgba = tex_obj.to_rgba(pal)
+                stype, _ = _u32(surf, 4)   # Surface: [Id][Type][...]
+                if stype & (ST_BASE1_IMAGE | ST_BASE1_CLIPMAP):
+                    orig_tex_id, _ = _u32(surf, 8)    # SurfaceTexture (0x05)
+                    orig_pal_id, _ = _u32(surf, 12)   # Palette (0x04), may be 0
+                    st_tex = parse_surface_texture(db, orig_tex_id)
+                    tex_obj = parse_texture(db, st_tex) if st_tex else None
+                    if tex_obj:
+                        pid = orig_pal_id or tex_obj.palette_id
+                        pal = parse_palette(db, pid) if pid else None
+                        rgba = None
+                        try: rgba = tex_obj.to_rgba(pal)
+                        except Exception: rgba = None
+                        if rgba:
+                            tgltf = _embed_texture(rgba, tex_obj.width, tex_obj.height)
+                            mat = {"pbrMetallicRoughness": {
+                                       "baseColorTexture": {"index": tgltf},
+                                       "metallicFactor": 0.0, "roughnessFactor": 0.9},
+                                   "doubleSided": True}
+                else:
+                    color_value, _ = _u32(surf, 8)    # solid ARGB
+                    mat = {"pbrMetallicRoughness": {
+                               "baseColorFactor": _argb_to_factor(color_value),
+                               "metallicFactor": 0.0, "roughnessFactor": 0.9},
+                           "doubleSided": True}
             except Exception:
-                pass
+                mat = None
+        if mat is None:
+            mat = {"pbrMetallicRoughness": {
+                       "baseColorFactor": [0.72, 0.72, 0.75, 1.0],
+                       "metallicFactor": 0.0, "roughnessFactor": 0.9},
+                   "doubleSided": True}
+        idx = len(materials_json); materials_json.append(mat)
+        _surf_mat_cache[surface_id] = idx
+        return idx
 
-        if not rgba:
-            rgba = bytes([180, 180, 180, 255] * (w * h))
-            w = h = 1
-
-        png_bytes = _rgba_to_png(rgba, w, h)
-
-        img_bv_off = bin_buf.tell()
-        bin_buf.write(png_bytes)
-        bv_idx = len(bufviews)
-        bufviews.append({
-            "buffer": 0,
-            "byteOffset": img_bv_off,
-            "byteLength": len(png_bytes),
-        })
-        img_idx = len(images_json)
-        images_json.append({"bufferView": bv_idx, "mimeType": "image/png"})
-        tex_idx_gltf = len(textures_json)
-        textures_json.append({"sampler": 0, "source": img_idx})
-        mat_idx = len(materials_json)
-        materials_json.append({
-            "pbrMetallicRoughness": {
-                "baseColorTexture": {"index": tex_idx_gltf},
-                "metallicFactor":   0.0,
-                "roughnessFactor":  0.8,
-            },
-            "doubleSided": True,
-        })
-        # Remap tex_id_map values to material indices (same ordering)
-
-    # Default untextured material
+    # Fallback material for polygons with no surface at all
     default_mat_idx = len(materials_json)
     materials_json.append({
         "pbrMetallicRoughness": {
-            "baseColorFactor": [0.7, 0.7, 0.7, 1.0],
+            "baseColorFactor": [0.72, 0.72, 0.75, 1.0],
             "metallicFactor":  0.0,
-            "roughnessFactor": 0.8,
+            "roughnessFactor": 0.9,
         },
         "doubleSided": True,
     })
@@ -1022,7 +1048,7 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
     UINT16 = 5123  # GL_UNSIGNED_SHORT
     UINT32 = 5125  # GL_UNSIGNED_INT
 
-    for verts, indices, tex_idx in meshes:
+    for verts, indices, surf_id in meshes:
         if not verts:
             continue
 
@@ -1045,7 +1071,7 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
         idx_acc = add_accessor(idx_data, len(indices), "SCALAR",
                                UINT32 if use_u32 else UINT16, "SCALAR")
 
-        mat_idx = tex_idx if 0 <= tex_idx < len(materials_json) - 1 else default_mat_idx
+        mat_idx = material_for_surface(surf_id) if surf_id else default_mat_idx
 
         primitives.append({
             "attributes": {
@@ -1102,7 +1128,7 @@ def _rgba_to_png(rgba: bytes, w: int, h: int) -> bytes:
 # ── Cache helpers (used by app_api.py) ───────────────────────────────────────
 
 # Increment this when parse logic changes — forces cache invalidation
-_PARSER_VERSION = "v10"
+_PARSER_VERSION = "v11"
 
 def get_cache_dir() -> Path:
     appdata = os.environ.get("APPDATA", str(Path.home()))
