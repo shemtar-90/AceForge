@@ -2342,7 +2342,9 @@ def generate_kill_task_batch(params: dict, config) -> list[dict]:
     for idx, row in enumerate(rows, 1):
         p = dict(shared)
         p.update(row or {})
-        p["giver_type"] = "item"   # batch is item-based only (for now)
+        # Each task chooses NPC or Item giver; default to Item when unspecified.
+        if str(p.get("giver_type", "")).strip().lower() != "npc":
+            p["giver_type"] = "item"
         if not str(p.get("quest_prefix", "")).strip():
             continue
         try:

@@ -642,7 +642,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 
     <!-- QUEST TYPE TABS -->
     <div id="questTypeTabs" style="display:flex;gap:0;border:1px solid var(--border);border-radius:3px;overflow:hidden;margin-bottom:14px">
-      <button class="qtab active" id="qtab_kill_task" onclick="selectQuestType('kill_task',this)"
+      <button class="qtab active" id="qtab_kill_task" onclick="selectQuestType('batch_kill_task',this)"
         style="flex:1;padding:9px 12px;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--crimson);color:#fff;border:none;cursor:pointer;border-right:1px solid var(--border)">
         ⚔ Kill Task
       </button>
@@ -651,12 +651,8 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
         📦 Item Turn-In
       </button>
       <button class="qtab" id="qtab_delivery" onclick="selectQuestType('delivery',this)"
-        style="flex:1;padding:9px 12px;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:transparent;color:var(--ink-mid);border:none;cursor:pointer;border-right:1px solid var(--border)">
-        📬 Delivery
-      </button>
-      <button class="qtab" id="qtab_batch_kill_task" onclick="selectQuestType('batch_kill_task',this)"
         style="flex:1;padding:9px 12px;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:transparent;color:var(--ink-mid);border:none;cursor:pointer">
-        ⚔×N Batch KT
+        📬 Delivery
       </button>
     </div>
 
@@ -11802,7 +11798,7 @@ function _scheduleAutoNext(nextIdx){
 
 // ── Quest Forge ───────────────────────────────────────────────────────────────
 
-var _curQuestType = 'kill_task';
+var _curQuestType = 'batch_kill_task';   // Kill Task tab now uses the batch (multi-task) layout
 var _questFiles   = [];   // [{filename, sql, type}] after generation
 
 
@@ -11975,39 +11971,9 @@ function _loadWeenieNames(cb){
 }
 
 function _weenieSearch(term, rowIdx){
-  var dd = document.getElementById('reward_dd_'+rowIdx);
-  if(!dd) return;
-  if(!term || term.length < 2){ dd.style.display='none'; return; }
-  if(!_weenieNames || !_weenieNames.length){ dd.style.display='none'; return; }
-
-  var q = term.toLowerCase();
-  var hits = [];
-  for(var i=0; i<_weenieNames.length && hits.length<12; i++){
-    var entry = _weenieNames[i];
-    if(entry[1].toLowerCase().indexOf(q) !== -1){
-      hits.push(entry);
-    }
-  }
-
-  if(!hits.length){ dd.style.display='none'; return; }
-
-  var html = '';
-  for(var j=0; j<hits.length; j++){
-    var e = hits[j];
-    var wcid = e[0], name = e[1], cat = e[2];
-    // Escape for onclick attribute
-    var safeName = name.replace(/'/g,"&#39;").replace(/"/g,"&quot;");
-    html += '<div class="reward-dd-item" onclick="_weenieSelect('+rowIdx+','+wcid+',\''+safeName+'\')"'
-          + ' style="padding:4px 8px;cursor:pointer;font-family:var(--ui-font);font-size:10px;'
-          + 'display:flex;justify-content:space-between;align-items:center;gap:8px;'
-          + 'border-bottom:1px solid var(--border-lt)">'
-          + '<span style="color:var(--ink)">' + name + '</span>'
-          + '<span style="color:var(--ink-faint);font-size:9px;white-space:nowrap">'
-          + cat + ' &middot; ' + wcid
-          + '</span></div>';
-  }
-  dd.innerHTML = html;
-  dd.style.display = 'block';
+  // Delegates to the shared merged search (saved output-folder items + base-game
+  // index) so the kill-task reward field matches Batch KT and Create Items.
+  _savedSearchInto(term, 'reward_dd_'+rowIdx, '_weenieSelect('+rowIdx+',');
 }
 
 function _weenieSelect(rowIdx, wcid, name){
@@ -12319,37 +12285,64 @@ function renderQuestForm(type){
 }
 
 // ── Batch Kill Tasks (item-based) ──────────────────────────────────────────
-var _batchKT = { rows: [] };
+var _batchKT = { rows: [], shared: null };
 function _batchKTNewRow(){
-  return {prefix:'', item_name:'', creature_name:'', creature_level:'150',
-          kill_count:'50', reward_xp:'5000000', reward_name:'', reward_wcid:''};
+  return {prefix:'', giver_type:'item', item_name:'', npc_description:'', item_icon:'',
+          creature_name:'', creature_type:'Tumerok (6)', creature_level:'150',
+          kill_count:'50', loot_tier:'T4 (3101)', spawn_count:'5',
+          reward_xp:'5000000', xp_percent:'0.25', reward_luminance:'5000000',
+          reward_name:'', reward_wcid:''};
 }
+function _batchKTDefaultShared(){
+  return { repeat_hours:'20', use_reward_xp:'no', xp_type:'AwardXP', use_reward_lum:'no' };
+}
+function _batchKTEnsureShared(){ if(!_batchKT.shared) _batchKT.shared=_batchKTDefaultShared(); }
 function _batchKTEnsure(n){
   n = Math.max(1, Math.min(50, parseInt(n)||1));
   while(_batchKT.rows.length < n) _batchKT.rows.push(_batchKTNewRow());
   if(_batchKT.rows.length > n) _batchKT.rows.length = n;
 }
 function _batchKTSet(i, field, val){ if(_batchKT.rows[i]) _batchKT.rows[i][field]=val; }
+// Changing the task count preserves Shared Settings and existing task data.
 function _batchKTSetCount(val){ _batchKTEnsure(val); renderBatchKT(); }
 function _batchKTAdd(){ _batchKT.rows.push(_batchKTNewRow()); renderBatchKT(); }
 function _batchKTRemove(i){ _batchKT.rows.splice(i,1); if(!_batchKT.rows.length)_batchKT.rows.push(_batchKTNewRow()); renderBatchKT(); }
+// Shared reward toggles/type — re-render so per-task fields show/hide to match.
+function _batchKTSharedSet(field, val, rerender){ _batchKTEnsureShared(); _batchKT.shared[field]=val; if(rerender) renderBatchKT(); }
+// Per-task giver toggle (Item ↔ NPC) — re-render to swap Personality/Icon fields.
+function _batchKTSetGiver(i, val){ if(_batchKT.rows[i]) _batchKT.rows[i].giver_type=val; renderBatchKT(); }
+function _batchKTPickIcon(i){ if(typeof openIconPicker!=='function') return; openIconPicker(function(hex){ if(_batchKT.rows[i]){ _batchKT.rows[i].item_icon=hex; renderBatchKT(); } }); }
 
 function renderBatchKT(){
   var form=document.getElementById('questForm'); if(!form) return;
   if(!_batchKT.rows.length) _batchKT.rows.push(_batchKTNewRow());
+  _batchKTEnsureShared();
+  var s=_batchKT.shared;
   var LBL='font-family:var(--ui-font);font-size:8px;font-weight:700;letter-spacing:.06em;color:var(--ink-dim);text-transform:uppercase;margin-bottom:2px';
   var INP='width:100%;box-sizing:border-box;font-family:var(--ui-font);font-size:11px;padding:5px 7px;background:var(--parch-lt);border:1px solid var(--border);color:var(--ink);border-radius:2px';
-  var CT=(typeof _CT!=='undefined')?_CT:['Human (1)'];
+  var CT=(typeof _CT!=='undefined')?_CT:['Human (31)'];
   var LT=(typeof _LT!=='undefined')?_LT:['T4 (3101)'];
-  function optList(arr){ return arr.map(function(o){return '<option value="'+o+'">'+o+'</option>';}).join(''); }
+  function optSel(arr, cur){ return arr.map(function(o){return '<option'+(o===cur?' selected':'')+'>'+_esc(o)+'</option>';}).join(''); }
+  // Yes/No pill toggle bound to shared state.
+  function pill(field){
+    var on=s[field]==='yes';
+    var y='padding:4px 14px;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;border:1px solid var(--border);cursor:pointer;';
+    return '<div style="display:flex;gap:0">'
+      +'<button onclick="_batchKTSharedSet(\''+field+'\',\'yes\',true)" style="'+y+'border-right:none;border-radius:2px 0 0 2px;'+(on?'background:var(--border-lt);color:var(--ink)':'background:transparent;color:var(--ink-dim)')+'">Yes</button>'
+      +'<button onclick="_batchKTSharedSet(\''+field+'\',\'no\',true)" style="'+y+'border-radius:0 2px 2px 0;'+(!on?'background:var(--border-lt);color:var(--ink)':'background:transparent;color:var(--ink-dim)')+'">No</button>'
+      +'</div>';
+  }
+  var useXp=s.use_reward_xp==='yes', useLum=s.use_reward_lum==='yes', prop=s.xp_type==='AwardLevelProportionalXP';
 
   var shared='<div style="border:1px solid var(--border);border-radius:4px;padding:10px;margin-bottom:12px;background:rgba(200,184,152,.06)">'
     +'<div style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--gold);text-transform:uppercase;margin-bottom:8px">Shared Settings (apply to all tasks)</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-      +'<div><div style="'+LBL+'">Creature Type</div><select id="bkt_ctype" style="'+INP+'">'+optList(CT)+'</select></div>'
-      +'<div><div style="'+LBL+'">Loot Tier</div><select id="bkt_loot" style="'+INP+'">'+optList(LT)+'</select></div>'
-      +'<div><div style="'+LBL+'">Repeat Timer (hrs)</div><input id="bkt_repeat" type="number" value="20" style="'+INP+'"></div>'
-      +'<div><div style="'+LBL+'">Spawn Count</div><input id="bkt_spawn" type="number" value="5" style="'+INP+'"></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end">'
+      +'<div><div style="'+LBL+'">Repeat Timer (hrs)</div><input id="bkt_repeat" type="number" value="'+_esc(s.repeat_hours)+'" oninput="_batchKTSharedSet(\'repeat_hours\',this.value,false)" style="'+INP+'"></div>'
+      +'<div></div>'
+      +'<div><div style="'+LBL+'">Reward XP</div>'+pill('use_reward_xp')+'</div>'
+      +(useXp?'<div><div style="'+LBL+'">XP Award Type</div><select onchange="_batchKTSharedSet(\'xp_type\',this.value,true)" style="'+INP+'">'+optSel(['AwardXP','AwardNoShareXP','AwardLevelProportionalXP'], s.xp_type)+'</select></div>':'<div></div>')
+      +'<div><div style="'+LBL+'">Reward Luminance</div>'+pill('use_reward_lum')+'</div>'
+      +'<div></div>'
     +'</div>'
     +'<div style="display:flex;align-items:center;gap:8px;margin-top:10px">'
       +'<span style="'+LBL+';margin:0">Number of tasks</span>'
@@ -12359,22 +12352,54 @@ function renderBatchKT(){
   +'</div>';
 
   var rows=_batchKT.rows.map(function(r,i){
+    var xpField = useXp ? (prop
+        ? '<div><div style="'+LBL+'">XP Percent (0.25 = 25%)</div><input type="number" value="'+_esc(r.xp_percent)+'" oninput="_batchKTSet('+i+',\'xp_percent\',this.value)" style="'+INP+'"></div>'
+        : '<div><div style="'+LBL+'">Reward XP Amount</div><input type="number" value="'+_esc(r.reward_xp)+'" oninput="_batchKTSet('+i+',\'reward_xp\',this.value)" style="'+INP+'"></div>')
+      : '';
+    var lumField = useLum
+        ? '<div><div style="'+LBL+'">Luminance Amount</div><input type="number" value="'+_esc(r.reward_luminance)+'" oninput="_batchKTSet('+i+',\'reward_luminance\',this.value)" style="'+INP+'"></div>'
+        : '';
+    // Per-task giver: Item (icon-based contract) or NPC (dialogue + personality).
+    var isNpc = r.giver_type==='npc';
+    var gPillBtn='padding:4px 14px;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;border:1px solid var(--border);cursor:pointer;';
+    var giverToggle='<div style="grid-column:1 / -1;display:flex;align-items:center;gap:8px">'
+      +'<span style="'+LBL+';margin:0">Quest Giver</span>'
+      +'<div style="display:flex;gap:0">'
+        +'<button onclick="_batchKTSetGiver('+i+',\'item\')" style="'+gPillBtn+'border-right:none;border-radius:2px 0 0 2px;'+(!isNpc?'background:var(--border-lt);color:var(--ink)':'background:transparent;color:var(--ink-dim)')+'">Item</button>'
+        +'<button onclick="_batchKTSetGiver('+i+',\'npc\')" style="'+gPillBtn+'border-radius:0 2px 2px 0;'+(isNpc?'background:var(--border-lt);color:var(--ink)':'background:transparent;color:var(--ink-dim)')+'">NPC</button>'
+      +'</div>'
+    +'</div>';
+    var nameField='<div><div style="'+LBL+'">'+(isNpc?'NPC Name':'Giver Item Name')+'</div><input value="'+_esc(r.item_name)+'" oninput="_batchKTSet('+i+',\'item_name\',this.value)" placeholder="'+(isNpc?'e.g. Ulgrim the Unpleasant':'e.g. Archon Contract')+'" style="'+INP+'"></div>';
+    var giverExtra = isNpc
+      ? '<div><div style="'+LBL+'">Personality</div><input value="'+_esc(r.npc_description)+'" oninput="_batchKTSet('+i+',\'npc_description\',this.value)" placeholder="e.g. Gruff, dismissive" style="'+INP+'"></div>'
+      : '<div><div style="'+LBL+'">Item Icon</div><div style="display:flex;gap:6px;align-items:center"><input value="'+_esc(r.item_icon)+'" oninput="_batchKTSet('+i+',\'item_icon\',this.value)" placeholder="0x060030A8" style="'+INP+';flex:1"><button onclick="_batchKTPickIcon('+i+')" style="padding:5px 10px;font-family:var(--ui-font);font-size:9px;font-weight:700;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;white-space:nowrap">🎨 Pick</button></div></div>';
     return '<div style="border:1px solid var(--border-lt);border-radius:4px;padding:9px;margin-bottom:8px">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
         +'<span style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--ink-mid)">TASK '+(i+1)+'</span>'
         +'<button onclick="_batchKTRemove('+i+')" title="Remove task" style="font-family:var(--ui-font);font-size:10px;padding:1px 7px;border:1px solid var(--border);background:transparent;color:var(--crimson);cursor:pointer">✕</button>'
       +'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">'
-        +'<div><div style="'+LBL+'">KT Name (quest prefix)</div><input value="'+_esc(r.prefix)+'" oninput="_batchKTSet('+i+',\'prefix\',this.value)" placeholder="e.g. ArchonOne" style="'+INP+'"></div>'
-        +'<div><div style="'+LBL+'">Giver Item Name</div><input value="'+_esc(r.item_name)+'" oninput="_batchKTSet('+i+',\'item_name\',this.value)" placeholder="e.g. Archon Contract" style="'+INP+'"></div>'
+        +'<div style="grid-column:1 / -1"><div style="'+LBL+'">KT Name (quest prefix)</div><input value="'+_esc(r.prefix)+'" oninput="_batchKTSet('+i+',\'prefix\',this.value)" placeholder="e.g. ArchonOne" style="'+INP+'"></div>'
+        +giverToggle
+        +nameField
+        +giverExtra
         +'<div><div style="'+LBL+'">Creature Name</div><input value="'+_esc(r.creature_name)+'" oninput="_batchKTSet('+i+',\'creature_name\',this.value)" placeholder="e.g. Archon Warrior" style="'+INP+'"></div>'
+        +'<div><div style="'+LBL+'">Creature Type</div><select onchange="_batchKTSet('+i+',\'creature_type\',this.value)" style="'+INP+'">'+optSel(CT, r.creature_type)+'</select></div>'
         +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">'
           +'<div><div style="'+LBL+'">Level</div><input type="number" value="'+_esc(r.creature_level)+'" oninput="_batchKTSet('+i+',\'creature_level\',this.value)" style="'+INP+'"></div>'
           +'<div><div style="'+LBL+'">Kill Count</div><input type="number" value="'+_esc(r.kill_count)+'" oninput="_batchKTSet('+i+',\'kill_count\',this.value)" style="'+INP+'"></div>'
         +'</div>'
-        +'<div><div style="'+LBL+'">Reward XP</div><input type="number" value="'+_esc(r.reward_xp)+'" oninput="_batchKTSet('+i+',\'reward_xp\',this.value)" style="'+INP+'"></div>'
-        +'<div><div style="'+LBL+'">Reward Item Name</div><input value="'+_esc(r.reward_name)+'" oninput="_batchKTSet('+i+',\'reward_name\',this.value)" placeholder="optional" style="'+INP+'"></div>'
-        +'<div style="grid-column:1 / -1;position:relative"><div style="'+LBL+'">Reward Item WCID <span style="text-transform:none;font-weight:400;color:var(--ink-faint)">(blank = generate new item with the name above; or search your saved items)</span></div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">'
+          +'<div><div style="'+LBL+'">Loot Tier</div><select onchange="_batchKTSet('+i+',\'loot_tier\',this.value)" style="'+INP+'">'+optSel(LT, r.loot_tier)+'</select></div>'
+          +'<div><div style="'+LBL+'">Spawn Count</div><input type="number" value="'+_esc(r.spawn_count)+'" oninput="_batchKTSet('+i+',\'spawn_count\',this.value)" style="'+INP+'"></div>'
+        +'</div>'
+        +xpField
+        +lumField
+        +'<div style="grid-column:1 / -1;position:relative"><div style="'+LBL+'">Reward Item Name <span style="text-transform:none;font-weight:400;color:var(--ink-faint)">(search your saved items by name or WCID)</span></div>'
+          +'<input type="text" value="'+_esc(r.reward_name)+'" oninput="_batchKTSet('+i+',\'reward_name\',this.value);_savedSearchInto(this.value,\'bkt_ndd_'+i+'\',\'_batchKTPickReward('+i+',\')" onfocus="_savedSearchInto(this.value,\'bkt_ndd_'+i+'\',\'_batchKTPickReward('+i+',\')" onblur="setTimeout(function(){var d=document.getElementById(\'bkt_ndd_'+i+'\');if(d)d.style.display=\'none\';},180)" placeholder="item name — or leave blank" style="'+INP+'">'
+          +'<div id="bkt_ndd_'+i+'" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:60;background:var(--parch-lt);border:1px solid var(--border);border-top:none;max-height:200px;overflow-y:auto;box-shadow:0 6px 16px rgba(0,0,0,.28)"></div>'
+        +'</div>'
+        +'<div style="grid-column:1 / -1;position:relative"><div style="'+LBL+'">Reward Item WCID <span style="text-transform:none;font-weight:400;color:var(--ink-faint)">(blank = generate a new item with the name above; or search saved items)</span></div>'
           +'<input type="text" value="'+_esc(r.reward_wcid)+'" oninput="_batchKTSet('+i+',\'reward_wcid\',this.value);_savedSearchInto(this.value,\'bkt_rdd_'+i+'\',\'_batchKTPickReward('+i+',\')" onfocus="_savedSearchInto(this.value,\'bkt_rdd_'+i+'\',\'_batchKTPickReward('+i+',\')" onblur="setTimeout(function(){var d=document.getElementById(\'bkt_rdd_'+i+'\');if(d)d.style.display=\'none\';},180)" placeholder="existing WCID or name, or leave blank" style="'+INP+'">'
           +'<div id="bkt_rdd_'+i+'" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:60;background:var(--parch-lt);border:1px solid var(--border);border-top:none;max-height:200px;overflow-y:auto;box-shadow:0 6px 16px rgba(0,0,0,.28)"></div>'
         +'</div>'
@@ -12382,35 +12407,51 @@ function renderBatchKT(){
     +'</div>';
   }).join('');
 
-  form.innerHTML='<div style="font-family:var(--ui-font);font-style:italic;font-size:11px;color:var(--ink-dim);margin-bottom:10px">Generate several item-based kill tasks at once. Each task creates a giver item, a creature, a generator, its quest flags, and an optional reward item.</div>'
+  form.innerHTML='<div style="font-family:var(--ui-font);font-style:italic;font-size:11px;color:var(--ink-dim);margin-bottom:10px">Generate several kill tasks at once. Each task creates its giver (Item or NPC), a creature, a generator, its quest flags, and an optional reward item.</div>'
     +shared+rows;
 }
 function _esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
 function _collectBatchKT(){
+  _batchKTEnsureShared();
+  var s=_batchKT.shared;
   var missing=[];
-  var ctypeRaw=(document.getElementById('bkt_ctype')||{}).value||'';
-  var lootRaw =(document.getElementById('bkt_loot')||{}).value||'';
-  var common={
-    creature_type: ctypeRaw.replace(/\s*\(\d+\)/,'').trim().toLowerCase(),
-    loot_tier: (lootRaw.match(/\((\d+)\)/)||[])[1] || '0',
-    repeat_hours: (document.getElementById('bkt_repeat')||{}).value||'20',
-    spawn_count: (document.getElementById('bkt_spawn')||{}).value||'5',
-  };
-  var ctInt=(ctypeRaw.match(/\((\d+)\)/)||[])[1]; if(ctInt) common.creature_type_int=ctInt;
+  var useXp=s.use_reward_xp==='yes', useLum=s.use_reward_lum==='yes', prop=s.xp_type==='AwardLevelProportionalXP';
+  var common={ repeat_hours: s.repeat_hours||'20' };
+  if(useXp) common.xp_type = s.xp_type||'AwardXP';
   var rows=[];
   _batchKT.rows.forEach(function(r,i){
     if(!r.prefix.trim() || !r.creature_name.trim()){
       missing.push('Task '+(i+1)+' needs a KT name and creature name'); return;
     }
+    var ctypeRaw=r.creature_type||'';
+    var lootRaw =r.loot_tier||'';
+    var isNpc=r.giver_type==='npc';
+    var giverName=r.item_name.trim() || (r.prefix.trim()+(isNpc?' Giver':' Contract'));
     var row={
       quest_prefix: r.prefix.trim(),
-      item_name: r.item_name.trim() || (r.prefix.trim()+' Contract'),
+      giver_type: isNpc?'npc':'item',
       creature_name: r.creature_name.trim(),
+      creature_type: ctypeRaw.replace(/\s*\(\d+\)/,'').trim(),
       creature_level: r.creature_level.trim()||'150',
       kill_count: r.kill_count.trim()||'50',
-      reward_xp: r.reward_xp.trim()||'0',
+      loot_tier: (lootRaw.match(/\((\d+)\)/)||[])[1] || '0',
+      spawn_count: r.spawn_count.trim()||'5',
     };
+    if(isNpc){
+      row.npc_name=giverName;
+      if(r.npc_description.trim()) row.npc_description=r.npc_description.trim();
+    } else {
+      row.item_name=giverName;
+      if(r.item_icon.trim()) row.item_icon=r.item_icon.trim();
+    }
+    var ctInt=(ctypeRaw.match(/\((\d+)\)/)||[])[1]; if(ctInt) row.creature_type_int=ctInt;
+    // Shared Yes/No governs whether each task awards XP / Luminance; amounts stay per-task.
+    if(useXp){
+      if(prop) row.xp_percent = r.xp_percent.trim()||'0.25';
+      else     row.reward_xp  = r.reward_xp.trim()||'0';
+    }
+    if(useLum) row.reward_luminance = r.reward_luminance.trim()||'0';
     if(r.reward_name.trim()){
       row.reward_1_name=r.reward_name.trim();
       row.reward_1_qty='1';
@@ -12421,29 +12462,58 @@ function _collectBatchKT(){
   return {common:common, rows:rows, missing:missing};
 }
 
-// Generic saved-item search dropdown. `pickPrefix` is a partial JS call string
-// (e.g. "_batchKTPickReward(0,") to which the helper appends wcid,'name').
+// Merged item search dropdown — your saved output-folder items (★, ranked first)
+// plus the bundled base-game weenie index. `pickPrefix` is a partial JS call
+// string (e.g. "_batchKTPickReward(0,") to which the helper appends wcid,'name').
+// Used by both the QuestForge kill-task reward field and Batch KT rewards so they
+// behave identically.
 function _savedSearchInto(term, ddId, pickPrefix){
   var dd=document.getElementById(ddId); if(!dd) return;
   term=String(term||'').trim();
   if(term.length<2){ dd.style.display='none'; return; }
-  if(!(window.pywebview && typeof window.pywebview.api.search_saved_items==='function')){ dd.style.display='none'; return; }
-  window.pywebview.api.search_saved_items(term, 12).then(function(r){
-    var items=(r&&r.items)||[];
-    if(!items.length){ dd.innerHTML='<div style="padding:5px 8px;font-family:var(--ui-font);font-size:10px;color:var(--ink-faint);font-style:italic">No saved items match.</div>'; dd.style.display='block'; return; }
-    dd.innerHTML=items.map(function(it){
+  var q=term.toLowerCase();
+
+  // Base-game hits from the bundled index (any item category — reward can be anything).
+  function _baseHits(){
+    var out=[];
+    if(_weenieNames && _weenieNames.length){
+      for(var k=0; k<_weenieNames.length && out.length<12; k++){
+        var e=_weenieNames[k];
+        if(e[1].toLowerCase().indexOf(q)!==-1) out.push({wcid:e[0], name:e[1], label:e[2], saved:false});
+      }
+    }
+    return out;
+  }
+  function _render(saved, base){
+    var all=saved.concat(base);
+    if(!all.length){ dd.innerHTML='<div style="padding:5px 8px;font-family:var(--ui-font);font-size:10px;color:var(--ink-faint);font-style:italic">No items match.</div>'; dd.style.display='block'; return; }
+    dd.innerHTML=all.slice(0,16).map(function(it){
       var nm=String(it.name).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      var star=it.saved?'<span style="color:var(--gold)">★ </span>':'';
       return '<div onmousedown="'+pickPrefix+it.wcid+",'"+nm+"')\" style=\"padding:4px 8px;cursor:pointer;font-family:var(--ui-font);font-size:10px;display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--border-lt)\" onmouseover=\"this.style.background='var(--accent-tint)'\" onmouseout=\"this.style.background=''\">"
-        +'<span style="color:var(--ink)"><span style="color:var(--gold)">★ </span>'+escHtml(it.name)+'</span>'
-        +'<span style="color:var(--ink-faint);font-size:9px;white-space:nowrap">'+escHtml(it.type_label)+' &middot; '+it.wcid+'</span></div>';
+        +'<span style="color:var(--ink)">'+star+escHtml(it.name)+'</span>'
+        +'<span style="color:var(--ink-faint);font-size:9px;white-space:nowrap">'+escHtml(it.label)+' &middot; '+it.wcid+'</span></div>';
     }).join('');
     dd.style.display='block';
-  }).catch(function(){ dd.style.display='none'; });
+  }
+  // Ensure the base index is loaded, then merge with saved items.
+  function _go(){
+    var base=_baseHits();
+    if(window.pywebview && typeof window.pywebview.api.search_saved_items==='function'){
+      window.pywebview.api.search_saved_items(term, 12).then(function(r){
+        var saved=((r&&r.items)||[]).map(function(it){ return {wcid:it.wcid, name:it.name, label:'Saved · '+it.type_label, saved:true}; });
+        _render(saved, base);
+      }).catch(function(){ _render([], base); });
+    } else {
+      _render([], base);
+    }
+  }
+  if(_weenieNames===null && typeof _loadWeenieNames==='function') _loadWeenieNames(_go); else _go();
 }
 function _batchKTPickReward(i, wcid, name){
   if(_batchKT.rows[i]){
     _batchKT.rows[i].reward_wcid=String(wcid);
-    if(name && !String(_batchKT.rows[i].reward_name||'').trim()) _batchKT.rows[i].reward_name=name;
+    if(name) _batchKT.rows[i].reward_name=name;
   }
   renderBatchKT();
 }
@@ -12511,7 +12581,7 @@ function _collectQuestParams(){
 }
 
 function clearQuestForm(){
-  if(_curQuestType==='batch_kill_task'){ _batchKT.rows=[_batchKTNewRow()]; renderBatchKT(); return; }
+  if(_curQuestType==='batch_kill_task'){ _batchKT.rows=[_batchKTNewRow()]; _batchKT.shared=_batchKTDefaultShared(); renderBatchKT(); return; }
   var fields = QUEST_FIELDS[_curQuestType] || [];
   function clearFields(flist){
     flist.forEach(function(f){
@@ -12625,17 +12695,22 @@ function _renderQuestResults(files){
 
   var fl=$('aiFileList');
   if(!fl) return;
-  var typeLabel={creature:'C',boss:'B',generator:'G',npc:'NPC',quest_flag:'Q',item:'I',chest:'K',quest:'Q'};
-  fl.innerHTML='<div style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.1em;color:var(--ink-dim);margin-bottom:8px">GENERATED FILES</div>'
+  // This panel sits on the always-dark var(--sql) background, so text must use
+  // light colors (not theme --ink, which is near-black in light mode).
+  var typeLabel={creature:'CREATURE',boss:'BOSS',generator:'GENERATOR',npc:'NPC',quest_flag:'QUEST FLAG',item:'ITEM',chest:'CHEST',quest:'QUEST',error:'ERROR'};
+  var typeColor={creature:'#e0a458',boss:'#e0745b',generator:'#8ab4f8',npc:'#c9a0ff',quest_flag:'#d4a72c',item:'#34c28b',chest:'#c9a0ff',quest:'#d4a72c',error:'#e0745b'};
+  fl.innerHTML='<div style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.1em;color:#8b94a3;margin-bottom:8px">GENERATED FILES</div>'
     +files.map(function(f,i){
-      var lbl=typeLabel[f.type]||'F';
-      var badge='<span style="display:inline-block;font-family:var(--ui-font);font-size:8px;font-weight:700;padding:1px 5px;background:rgba(0,0,0,.2);border-radius:2px;margin-right:5px">'+lbl+'</span>';
-      return '<div id="qfile_row_'+i+'" onclick="_showQuestPreview(_questFiles,'+i+')" style="cursor:pointer;padding:6px 0;border-bottom:1px solid var(--border-lt)">'
-        +'<div style="display:flex;justify-content:space-between;align-items:center">'
-        +'<div style="font-family:var(--ui-font);font-size:10px;color:var(--ink)">'+badge+f.filename+'</div>'
+      var lbl=typeLabel[f.type]||(f.type||'FILE').toUpperCase();
+      var col=typeColor[f.type]||'#8b94a3';
+      var name=(f.filename||'').replace(/\.sql$/i,'');
+      var badge='<span style="display:inline-block;font-family:var(--ui-font);font-size:7px;font-weight:700;letter-spacing:.06em;padding:1px 5px;border:1px solid '+col+';color:'+col+';border-radius:2px;margin-right:6px;white-space:nowrap">'+lbl+'</span>';
+      return '<div id="qfile_row_'+i+'" onclick="_showQuestPreview(_questFiles,'+i+')" style="cursor:pointer;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+        +'<div style="font-family:var(--ui-font);font-size:11px;color:#eaecef;font-weight:600;word-break:break-word">'+escHtml(name)+'</div>'
         +'<button id="qsave_'+i+'" onclick="event.stopPropagation();saveQuestFile('+i+')" style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.05em;padding:3px 8px;border:1px solid var(--green);background:transparent;color:var(--green);cursor:pointer;flex-shrink:0">SAVE</button>'
         +'</div>'
-        +'<div style="font-family:var(--ui-font);font-size:9px;color:var(--ink-dim)">'+(f.type||'')+(f.wcid?' &middot; WCID '+f.wcid:'')+'</div>'
+        +'<div style="margin-top:3px">'+badge+(f.wcid?'<span style="font-family:var(--ui-font);font-size:9px;color:#8b94a3">WCID '+f.wcid+'</span>':'')+'</div>'
         +'</div>';
     }).join('');
 }
