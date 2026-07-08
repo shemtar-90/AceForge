@@ -124,6 +124,17 @@ def main():
     # http_server=True serves local files over http://127.0.0.1 instead of file://.
     # WebView2 (the Edge engine pywebview uses on Windows) has a known bug where native
     # <select> dropdown popups silently fail to render when the page origin is file://.
+    #
+    # Disable WebView2's disk cache so the served index.html / JS is never stale.
+    # With private_mode=False the Edge engine keeps a persistent cache under
+    # %APPDATA%\pywebview\EBWebView that survives app restarts — which meant UI
+    # updates to index.html would not appear until that cache was manually cleared.
+    # --disk-cache-size=1 forces near-zero HTTP caching; localStorage (separate DB)
+    # is unaffected, so user prefs persist. See WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS.
+    os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = (
+        os.environ.get("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "").strip()
+        + " --disk-cache-size=1"
+    ).strip()
     webview.start(debug=False, private_mode=False, http_server=True, icon=icon_path if icon_path else None)
 
 
