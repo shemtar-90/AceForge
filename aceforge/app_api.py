@@ -38,6 +38,8 @@ class AppAPI(LoreMixin):
         self._chunk_queue      = queue.Queue()
         self._last_ai_response = ''  # stored Python-side to avoid bridge size limit
         self._agent_loop = None  # AgentLoop instance for Advanced Generation mode
+        self._saved_index = []          # cached searchable saved-item index
+        self._saved_index_built = False # rebuilt lazily / after saves
 
     def set_window(self, window):
         self._window = window
@@ -508,9 +510,97 @@ class AppAPI(LoreMixin):
                 filename = f"{wcid} {name}.sql"
             fpath     = out_path / filename
             fpath.write_text(sql_text, encoding="utf-8")
+            self._saved_index_built = False   # invalidate saved-item index
             return {"success": True, "path": str(fpath), "filename": filename}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    # ── Searchable saved-item index ────────────────────────────────────────────
+    # Weenie types that are NOT items and must never appear in the index.
+    _SAVED_SKIP_TYPES = {10, 12}   # 10=Creature, 12=Vendor/NPC
+    _SAVED_TYPE_LABEL = {
+        1: "Item", 2: "Armor/Clothing", 3: "Weapon", 4: "Ammo", 6: "Weapon",
+        8: "Book", 9: "Coin", 18: "Food", 19: "Door", 20: "Chest", 21: "Container",
+        22: "Key", 25: "Lifestone", 34: "Scroll", 35: "Caster", 37: "ManaStone",
+        38: "Gem", 51: "Stackable",
+    }
+
+    def _saved_index_dirs(self):
+        dirs, seen = [], set()
+        for d in ([self.config.output_dir] +
+                  [self.config.get(k, "") for k in (
+                      "weenie_output_dir", "recipe_output_dir",
+                      "quest_output_dir", "event_output_dir")]):
+            d = str(d or "").strip()
+            if d and d not in seen:
+                seen.add(d); dirs.append(Path(d))
+        if not dirs:
+            dirs.append(Path.home() / "Documents" / "ACEForge" / "output")
+        return dirs
+
+    def _parse_saved_item(self, text: str, filename: str):
+        """Extract an indexable item from one SQL file, or None if it isn't an
+        item weenie (creature/NPC/generator/quest files are skipped)."""
+        m = re.search(r"INSERT\s+INTO\s+`?weenie`?\s*\([^)]*\)\s*VALUES\s*"
+                      r"\(\s*(\d+)\s*,\s*'([^']*)'\s*,\s*(\d+)", text, re.I)
+        if not m:
+            return None
+        wtype = int(m.group(3))
+        if wtype in self._SAVED_SKIP_TYPES:
+            return None
+        if re.search(r"weenie_properties_generator", text, re.I):
+            return None   # generator weenie, not a referenceable item
+        wcid, class_name = int(m.group(1)), m.group(2)
+        name = class_name
+        nm = re.search(r"weenie_properties_string`[^;]*?VALUES\s*\(\s*\d+\s*,\s*1\s*,\s*'([^']*)'",
+                       text, re.I | re.S)
+        if nm and nm.group(1).strip():
+            name = nm.group(1)
+        return {"wcid": wcid, "name": name, "class_name": class_name,
+                "type": wtype, "type_label": self._SAVED_TYPE_LABEL.get(wtype, f"Type {wtype}"),
+                "file": filename}
+
+    def _build_saved_index(self):
+        idx = {}
+        for d in self._saved_index_dirs():
+            try:
+                if not d.exists():
+                    continue
+                for f in d.glob("*.sql"):
+                    try:
+                        it = self._parse_saved_item(
+                            f.read_text(encoding="utf-8", errors="ignore"), f.name)
+                        if it:
+                            idx[it["wcid"]] = it   # dedupe by wcid, newest wins
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+        self._saved_index = list(idx.values())
+        self._saved_index_built = True
+        return self._saved_index
+
+    def search_saved_items(self, query: str = "", limit: int = 40) -> dict:
+        """Search items previously saved to the output folder(s) by WCID or name.
+        Only weapons/armor/clothing/jewelry/items are indexed (no creatures/NPCs)."""
+        try:
+            if not self._saved_index_built:
+                self._build_saved_index()
+            q = str(query or "").strip().lower()
+            items = self._saved_index
+            if q:
+                items = [it for it in items
+                         if q in str(it["wcid"]) or q in it["name"].lower()
+                         or q in it["class_name"].lower()]
+            items = sorted(items, key=lambda it: it["name"].lower())[:int(limit or 40)]
+            return {"items": items, "total": len(self._saved_index)}
+        except Exception as e:
+            return {"items": [], "error": str(e)}
+
+    def rescan_saved_items(self) -> dict:
+        """Force a rescan of the output folders and return the item count."""
+        self._build_saved_index()
+        return {"count": len(self._saved_index)}
 
     # ── Emote Parser ──────────────────────────────────────────────────────────
 
@@ -877,6 +967,7 @@ Start with: /* ===== FILE: {fname} ===== */
                 fpath = Path(output_dir) / fname
                 fpath.write_text(clean_sql(content), encoding="utf-8")
                 written = [str(fpath)]
+            self._saved_index_built = False   # invalidate saved-item index
             return {
                 "success": True,
                 "files": [os.path.basename(f) for f in written],

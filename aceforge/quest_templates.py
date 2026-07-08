@@ -88,6 +88,24 @@ def _file_header(filename: str) -> str:
     return f"/* ===== FILE: {filename} ===== */"
 
 
+def _capfn(name: str) -> str:
+    """Capitalize the first character of a quest-flag filename stem."""
+    return (name[:1].upper() + name[1:]) if name else name
+
+
+def _fnbase(slug: str) -> str:
+    """Turn a lowercase_underscore slug into a Title Case, space-separated
+    filename stem (AC convention: '850010 Shadow Fiend.sql')."""
+    return slug.replace("_", " ").title() if slug else slug
+
+
+def _user_wcid(params: dict, key: str, default: int) -> int:
+    """Return a user-supplied WCID override from params[key] if it's a valid
+    positive integer, otherwise the auto-allocated default."""
+    v = str(params.get(key, "")).strip()
+    return int(v) if v.isdigit() and int(v) > 0 else default
+
+
 def _creature_sql(wcid: int, data: dict, filename: str) -> str:
     """Generate creature weenie SQL matching Shattered Dawn reference format.
     Based on Rift Stabil (800003) and Rift Anchora (800011) reference files.
@@ -473,8 +491,8 @@ def _grant_flag_file(flag_name: str) -> dict:
         f"VALUES ('0', '{flag_name}', '0', '-1', 'permanent access flag');"
     )
     return {
-        "filename": f"Quest_{flag_name}.sql",
-        "sql":      f"/* ===== FILE: Quest_{flag_name}.sql ===== */\n\n{sql}",
+        "filename": f"{_capfn(flag_name)}.sql",
+        "sql":      f"/* ===== FILE: {_capfn(flag_name)}.sql ===== */\n\n{sql}",
         "type":     "quest_flag",
     }
 
@@ -510,7 +528,9 @@ def generate_kill_task(params: dict, config) -> list[dict]:
     Returns list of {"filename": str, "sql": str} dicts.
     """
     prefix       = params["quest_prefix"].replace(" ", "")
-    npc_name     = params["npc_name"]
+    # For item-based givers the display name comes from item_name; npc_name is
+    # optional in that case (and always supplied by the single-quest form).
+    npc_name     = (params.get("npc_name") or params.get("item_name") or "Quest Giver")
     npc_desc     = params.get("npc_description", npc_name)
     c_name       = params["creature_name"]
     # Safe conversion helpers — handle empty strings and placeholder text
@@ -596,11 +616,14 @@ def generate_kill_task(params: dict, config) -> list[dict]:
     for r in reward_items:
         r["wcid"] = int(r["wcid_raw"]) if r["is_existing"] else _ri_pool.pop(0)
 
-    npc_wcid        = wcids["custom_npcs"][0]
-    creature_wcid   = wcids["campaign_creatures"][0]
-    boss_wcid       = wcids["campaign_creatures"][1] if has_boss else None
-    gen_wcid        = wcids["kill_contracts"][0]
-    boss_gen_wcid   = wcids["kill_contracts"][1] if has_boss else None
+    # Auto-allocated WCIDs, with optional per-file user overrides. When the user
+    # supplies a WCID it is used verbatim (the auto-allocated slot is simply left
+    # unused — no collision with the user's number).
+    npc_wcid        = _user_wcid(params, "wcid_npc",       wcids["custom_npcs"][0])
+    creature_wcid   = _user_wcid(params, "wcid_creature",  wcids["campaign_creatures"][0])
+    boss_wcid       = _user_wcid(params, "wcid_boss",      wcids["campaign_creatures"][1]) if has_boss else None
+    gen_wcid        = _user_wcid(params, "wcid_generator", wcids["kill_contracts"][0])
+    boss_gen_wcid   = _user_wcid(params, "wcid_boss_generator", wcids["kill_contracts"][1]) if has_boss else None
     # The emote script and giver file use this wcid (item or NPC).
     if is_item_giver:
         item_wcid  = int(_item_override) if _item_override.isdigit() else wcids["kill_contracts"][-1]
@@ -617,7 +640,7 @@ def generate_kill_task(params: dict, config) -> list[dict]:
     # ── Quest Flag Files — one file per flag ──────────────────────────────────
     n_kt_ids = 2 if has_boss else 1
     kt_quest_ids     = alloc_wcids(config, [("kill_tasks", n_kt_ids)])
-    kt_quest_id      = kt_quest_ids["kill_tasks"][0]
+    kt_quest_id      = _user_wcid(params, "wcid_quest", kt_quest_ids["kill_tasks"][0])
     max_solves_timer = 1 if repeat_sec > 0 else -1
 
     def _qf(flag_name, quest_id, min_delta, max_solves, message):
@@ -626,8 +649,8 @@ def generate_kill_task(params: dict, config) -> list[dict]:
             f"INSERT INTO quest (id, name, min_Delta, max_Solves, message)\n"
             f"VALUES ('{quest_id}', '{flag_name}', '{min_delta}', '{max_solves}', '{message}');"
         )
-        return {"filename": f"Quest_{flag_name}.sql",
-                "sql": f"/* ===== FILE: Quest_{flag_name}.sql ===== */\n\n{sql}",
+        return {"filename": f"{_capfn(flag_name)}.sql",
+                "sql": f"/* ===== FILE: {_capfn(flag_name)}.sql ===== */\n\n{sql}",
                 "type": "quest_flag"}
 
     files.append(_qf(kt_flag,  kt_quest_id, '0', '100',              'kill counter'))
@@ -675,7 +698,7 @@ def generate_kill_task(params: dict, config) -> list[dict]:
         "stamina":            c_level * (18 if is_boss_mode else 6),
         "mana":               c_level * (6 if is_boss_mode else 2),
     }
-    fname2 = f"{creature_wcid}_{c_slug}.sql"
+    fname2 = f"{creature_wcid} {_fnbase(c_slug)}.sql"
     files.append({
         "filename": fname2,
         "sql":      _creature_sql(creature_wcid, creature_data, fname2),
@@ -684,7 +707,7 @@ def generate_kill_task(params: dict, config) -> list[dict]:
     })
 
     # ── File 3: Creature Generator ────────────────────────────────────────────
-    fname3 = f"{gen_wcid}_{c_slug}_generator.sql"
+    fname3 = f"{gen_wcid} {_fnbase(c_slug)} Generator.sql"
     files.append({
         "filename": fname3,
         "sql":      _generator_sql(gen_wcid, creature_wcid, c_slug, fname3,
@@ -714,14 +737,14 @@ def generate_kill_task(params: dict, config) -> list[dict]:
             "loot_tier":          min(loot_tier + 1, 3105),
             "scale":              1.5,
         }
-        fname4 = f"{boss_wcid}_{boss_slug}.sql"
+        fname4 = f"{boss_wcid} {_fnbase(boss_slug)}.sql"
         files.append({
             "filename": fname4,
             "sql":      _creature_sql(boss_wcid, boss_data, fname4),
             "type":     "boss",
             "wcid":     boss_wcid,
         })
-        fname4g = f"{boss_gen_wcid}_{boss_slug}_generator.sql"
+        fname4g = f"{boss_gen_wcid} {_fnbase(boss_slug)} Generator.sql"
         files.append({
             "filename": fname4g,
             "sql":      _generator_sql(boss_gen_wcid, boss_wcid, boss_slug,
@@ -738,18 +761,18 @@ def generate_kill_task(params: dict, config) -> list[dict]:
         ri_desc_text = r.get("desc","").strip() or ri_name
         ri_str  = [(1,ri_name,"Name"),(15,ri_desc_text,"ShortDesc")]
         ri_did  = [(1,0x02000155,"Setup"),(3,0x20000014,"SoundTable"),(8,0x06001310,"Icon"),(22,0x3400002B,"PhysicsEffectTable")]
-        fname_ri = f"{ri_wcid}_{ri_slug}.sql"
+        fname_ri = f"{ri_wcid} {_fnbase(ri_slug)}.sql"
         files.append({"filename":fname_ri,"sql":"\n".join([f"/* ===== FILE: {fname_ri} ===== */","",_emit_header(ri_wcid,ri_name,6),"",_emit_int_props(ri_wcid,ri_int),"",_emit_str_props(ri_wcid,ri_str),"",_emit_did_props(ri_wcid,ri_did),""]),"type":"item","wcid":ri_wcid})
 
     # ── File 5: Quest Giver — NPC (Tell dialogue) or Item (plain broadcast) ───
     if is_item_giver:
         giver_slug = _slug(giver_name)
-        fname5 = f"{giver_wcid}_{giver_slug}.sql"
+        fname5 = f"{giver_wcid} {_fnbase(giver_slug)}.sql"
         use_text = (f"Use this to activate the contract. Once you have slain "
                     f"{kill_count} {c_name}, use it again to receive your rewards.")
         npc_base = _kill_contract_item_sql(giver_wcid, giver_name, use_text, item_icon, fname5)
     else:
-        fname5 = f"{npc_wcid}_{npc_slug}.sql"
+        fname5 = f"{npc_wcid} {_fnbase(npc_slug)}.sql"
         npc_base = _npc_base_sql(npc_wcid, npc_name, npc_slug, fname5)
 
     # Build the emote script deterministically — exact quest flags guaranteed
@@ -1269,8 +1292,8 @@ def generate_item_turnin(params: dict, config) -> list[dict]:
             f"INSERT INTO quest (id, name, min_Delta, max_Solves, message)\n"
             f"VALUES ('{quest_id}', '{flag_name}', '{min_delta}', '{max_solves}', '{message}');"
         )
-        return {"filename": f"Quest_{flag_name}.sql",
-                "sql": f"/* ===== FILE: Quest_{flag_name}.sql ===== */\n\n{sql}",
+        return {"filename": f"{_capfn(flag_name)}.sql",
+                "sql": f"/* ===== FILE: {_capfn(flag_name)}.sql ===== */\n\n{sql}",
                 "type": "quest_flag"}
 
     files.append(_qf(qt_timer,   '0', repeat_sec,    max_solves_timer, 'item turn-in timer'))
@@ -1299,7 +1322,7 @@ def generate_item_turnin(params: dict, config) -> list[dict]:
         (8,  0x06001310, "Icon"),
         (22, 0x3400002B, "PhysicsEffectTable"),
     ]
-    fname_item = f"{item_wcid}_{item_slug}.sql"
+    fname_item = f"{item_wcid} {_fnbase(item_slug)}.sql"
     item_sections = [
         f"/* ===== FILE: {fname_item} ===== */", "",
         _emit_header(item_wcid, item_name, 6),  # includes DELETE + INSERT weenie
@@ -1342,7 +1365,7 @@ def generate_item_turnin(params: dict, config) -> list[dict]:
                  "comment": f"{item_name} trophy drop"},
             ],
         }
-        fname_drop = f"{drop_wcid}_{drop_slug}.sql"
+        fname_drop = f"{drop_wcid} {_fnbase(drop_slug)}.sql"
         files.append({
             "filename": fname_drop,
             "sql":      _creature_sql(drop_wcid, drop_data, fname_drop),
@@ -1351,7 +1374,7 @@ def generate_item_turnin(params: dict, config) -> list[dict]:
         })
 
         # ── File 4: Drop Creature Generator ──────────────────────────────────
-        fname_gen = f"{gen_wcid}_{drop_slug}_generator.sql"
+        fname_gen = f"{gen_wcid} {_fnbase(drop_slug)} Generator.sql"
         files.append({
             "filename": fname_gen,
             "sql":      _generator_sql(gen_wcid, drop_wcid, drop_slug,
@@ -1373,7 +1396,7 @@ def generate_item_turnin(params: dict, config) -> list[dict]:
         ri_str  = [(1,ri_name,"Name"),(15,ri_desc,"ShortDesc")]
         ri_did  = [(1,0x02000155,"Setup"),(3,0x20000014,"SoundTable"),
                    (8,0x06001310,"Icon"),(22,0x3400002B,"PhysicsEffectTable")]
-        fname_ri = f"{ri_wcid}_{ri_slug}.sql"
+        fname_ri = f"{ri_wcid} {_fnbase(ri_slug)}.sql"
         ri_secs  = [
             f"/* ===== FILE: {fname_ri} ===== */", "",
             _emit_header(ri_wcid, ri_name, 6),
@@ -1389,7 +1412,7 @@ def generate_item_turnin(params: dict, config) -> list[dict]:
         })
 
     # ── NPC Quest Giver — direct SQL emotes ───────────────────────────────────
-    fname_npc = f"{npc_wcid}_{npc_slug}.sql"
+    fname_npc = f"{npc_wcid} {_fnbase(npc_slug)}.sql"
     npc_base  = _npc_base_sql(npc_wcid, npc_name, npc_slug, fname_npc)
 
     rp = _rp  # reward dict from _parse_reward_params
@@ -1603,8 +1626,8 @@ def generate_delivery(params: dict, config) -> list[dict]:
             f"INSERT INTO quest (id, name, min_Delta, max_Solves, message)\n"
             f"VALUES ('{quest_id}', '{flag_name}', '{min_delta}', '{max_solves_val}', '{message}');"
         )
-        return {"filename": f"Quest_{flag_name}.sql",
-                "sql": f"/* ===== FILE: Quest_{flag_name}.sql ===== */\n\n{sql}",
+        return {"filename": f"{_capfn(flag_name)}.sql",
+                "sql": f"/* ===== FILE: {_capfn(flag_name)}.sql ===== */\n\n{sql}",
                 "type": "quest_flag"}
 
     for npc in npc_defs:
@@ -1634,7 +1657,7 @@ def generate_delivery(params: dict, config) -> list[dict]:
         (8,  0x06001310, "Icon"),
         (22, 0x3400002B, "PhysicsEffectTable"),
     ]
-    fname_item = f"{item_wcid}_{item_slug}.sql"
+    fname_item = f"{item_wcid} {_fnbase(item_slug)}.sql"
     item_secs  = [
         f"/* ===== FILE: {fname_item} ===== */", "",
         f"DELETE FROM `weenie` WHERE `class_Id` = {item_wcid};", "",
@@ -1661,7 +1684,7 @@ def generate_delivery(params: dict, config) -> list[dict]:
         ri_str  = [(1,r["name"],"Name"),(15,r.get("desc",r["name"]),"ShortDesc")]
         ri_did  = [(1,0x02000155,"Setup"),(3,0x20000014,"SoundTable"),
                    (8,0x06001310,"Icon"),(22,0x3400002B,"PhysicsEffectTable")]
-        fname_ri = f"{r['wcid']}_{ri_slug}.sql"
+        fname_ri = f"{r['wcid']} {_fnbase(ri_slug)}.sql"
         ri_secs  = [
             f"/* ===== FILE: {fname_ri} ===== */","",
             _emit_header(r["wcid"], r["name"], 6),
@@ -1772,7 +1795,7 @@ def generate_delivery(params: dict, config) -> list[dict]:
 
     npc_a_emote_sql = "\n\n".join(npc_a_parts)
 
-    fname_a = f"{npc_a_wcid}_{npc_a['slug']}.sql"
+    fname_a = f"{npc_a_wcid} {_fnbase(npc_a['slug'])}.sql"
     npc_a_base = _npc_base_sql(npc_a_wcid, npc_a["name"], npc_a["slug"], fname_a)
     files.append({"filename": fname_a, "sql": npc_a_base + "\n" + npc_a_emote_sql + "\n",
                   "type": "npc", "wcid": npc_a_wcid})
@@ -1861,7 +1884,7 @@ def generate_delivery(params: dict, config) -> list[dict]:
 
     npc_b_emote_sql = "\n\n".join(npc_b_parts)
 
-    fname_b = f"{npc_b_wcid}_{npc_b['slug']}.sql"
+    fname_b = f"{npc_b_wcid} {_fnbase(npc_b['slug'])}.sql"
     npc_b_base = _npc_base_sql(npc_b_wcid, npc_b["name"], npc_b["slug"], fname_b)
     files.append({"filename": fname_b, "sql": npc_b_base + "\n" + npc_b_emote_sql + "\n",
                   "type": "npc", "wcid": npc_b_wcid})
@@ -1997,8 +2020,8 @@ def generate_flagging(params: dict, config) -> list[dict]:
             f"INSERT INTO quest (id, name, min_Delta, max_Solves, message)\n"
             f"VALUES ('{quest_id}', '{flag_name}', '{min_delta}', '{max_solves_val}', '{message}');"
         )
-        return {"filename": f"Quest_{flag_name}.sql",
-                "sql": f"/* ===== FILE: Quest_{flag_name}.sql ===== */\n\n{sql}",
+        return {"filename": f"{_capfn(flag_name)}.sql",
+                "sql": f"/* ===== FILE: {_capfn(flag_name)}.sql ===== */\n\n{sql}",
                 "type": "quest_flag"}
 
     if req_type == "kill_task":
@@ -2029,13 +2052,13 @@ def generate_flagging(params: dict, config) -> list[dict]:
             "attack_skill":        c_level + 50, "melee_defense": c_level + 30,
             "kill_quest":          req_flag, "loot_tier": loot_t,
         }
-        fname_c = f"{req_creature_wcid}_{c_slug}.sql"
+        fname_c = f"{req_creature_wcid} {_fnbase(c_slug)}.sql"
         files.append({
             "filename": fname_c,
             "sql":      _creature_sql(req_creature_wcid, c_data, fname_c),
             "type":     "creature", "wcid": req_creature_wcid,
         })
-        fname_g = f"{req_gen_wcid}_{c_slug}_generator.sql"
+        fname_g = f"{req_gen_wcid} {_fnbase(c_slug)} Generator.sql"
         sc = _si(params.get("req_spawn_count",""), 5)
         sd = _sf(params.get("req_spawn_delay",""), 300.0)
         files.append({
@@ -2058,7 +2081,7 @@ def generate_flagging(params: dict, config) -> list[dict]:
         ri_str  = [(1,ri_name,"Name"),(15,ri_desc,"ShortDesc")]
         ri_did  = [(1,0x02000155,"Setup"),(3,0x20000014,"SoundTable"),
                    (8,0x06001310,"Icon"),(22,0x3400002B,"PhysicsEffectTable")]
-        fname_ri = f"{req_item_wcid}_{ri_slug}.sql"
+        fname_ri = f"{req_item_wcid} {_fnbase(ri_slug)}.sql"
         ri_secs  = [
             f"/* ===== FILE: {fname_ri} ===== */","",
             f"DELETE FROM `weenie` WHERE `class_Id` = {req_item_wcid};","",
@@ -2098,13 +2121,13 @@ def generate_flagging(params: dict, config) -> list[dict]:
                 "create_list": [{"wcid": req_item_wcid, "qty": 1,
                                  "destination":"corpse_drop","comment": ri_name}],
             }
-            fname_dc = f"{req_creature_wcid}_{dc_slug}.sql"
+            fname_dc = f"{req_creature_wcid} {_fnbase(dc_slug)}.sql"
             files.append({
                 "filename": fname_dc,
                 "sql":      _creature_sql(req_creature_wcid, dc_data, fname_dc),
                 "type":     "creature", "wcid": req_creature_wcid,
             })
-            fname_dg = f"{req_gen_wcid}_{dc_slug}_generator.sql"
+            fname_dg = f"{req_gen_wcid} {_fnbase(dc_slug)} Generator.sql"
             files.append({
                 "filename": fname_dg,
                 "sql":      _generator_sql(req_gen_wcid, req_creature_wcid,
@@ -2122,7 +2145,7 @@ def generate_flagging(params: dict, config) -> list[dict]:
         ri_str  = [(1,r["name"],"Name"),(15,r.get("desc",r["name"]),"ShortDesc")]
         ri_did  = [(1,0x02000155,"Setup"),(3,0x20000014,"SoundTable"),
                    (8,0x06001310,"Icon"),(22,0x3400002B,"PhysicsEffectTable")]
-        fname_ri = f"{r['wcid']}_{ri_slug}.sql"
+        fname_ri = f"{r['wcid']} {_fnbase(ri_slug)}.sql"
         ri_secs  = [
             f"/* ===== FILE: {fname_ri} ===== */","",
             _emit_header(r["wcid"], r["name"], 6),
@@ -2137,7 +2160,7 @@ def generate_flagging(params: dict, config) -> list[dict]:
         })
 
     # ── NPC Quest Giver — direct SQL emotes ─────────────────────────────────
-    fname_npc = f"{npc_wcid}_{npc_slug}.sql"
+    fname_npc = f"{npc_wcid} {_fnbase(npc_slug)}.sql"
     npc_base  = _npc_base_sql(npc_wcid, npc_name, npc_slug, fname_npc)
 
     ACT_COLS = ("`emote_Id`, `order`, `type`, `delay`, `extent`, `motion`, `message`,"
@@ -2298,7 +2321,48 @@ def generate_flagging(params: dict, config) -> list[dict]:
 
 # ── Registry ──────────────────────────────────────────────────────────────────
 
+def generate_kill_task_batch(params: dict, config) -> list[dict]:
+    """Generate several item-based kill-task quests in one shot.
+
+    params = { <shared kill-task fields...>, "rows": [ {per-task overrides}, ... ] }
+    Each row is merged over the shared params and forced to item-giver mode, then
+    run through the normal single kill-task generator. WCID allocation advances
+    across rows automatically (config is mutated), so nothing collides. Returns a
+    flat list of every file across every task.
+    """
+    import json as _json
+    rows = params.get("rows")
+    if isinstance(rows, str):
+        try: rows = _json.loads(rows)
+        except Exception: rows = []
+    rows = rows or []
+    shared = {k: v for k, v in params.items() if k != "rows"}
+
+    all_files = []
+    for idx, row in enumerate(rows, 1):
+        p = dict(shared)
+        p.update(row or {})
+        p["giver_type"] = "item"   # batch is item-based only (for now)
+        if not str(p.get("quest_prefix", "")).strip():
+            continue
+        try:
+            all_files.extend(generate_kill_task(p, config))
+        except Exception as e:
+            all_files.append({
+                "filename": f"BatchError {idx}.txt",
+                "sql": f"/* Batch kill-task row {idx} failed: {e} */",
+                "type": "error",
+            })
+    return all_files
+
+
 QUEST_TEMPLATES = {
+    "batch_kill_task": {
+        "label":       "Batch Kill Tasks",
+        "description": "Generate multiple item-based kill tasks at once.",
+        "generator":   generate_kill_task_batch,
+        "fields":      [],   # custom UI rendered client-side
+    },
     "kill_task": {
         "label":       "Kill Task",
         "description": "NPC sends player to kill X of a creature type. Optional named boss.",
