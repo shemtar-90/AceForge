@@ -2124,31 +2124,52 @@ Start with: /* ===== FILE: {fname} ===== */
         exists = Path(path).exists()
         return {"configured": exists, "path": path}
 
-    def get_model_glb(self, setup_id_hex: str) -> dict:
+    def get_model_glb(self, setup_id_hex: str, clothing_id_hex: str = "",
+                      motion_id_hex: str = "") -> dict:
         """
         Return a base64-encoded GLB for the given Setup DID (as hex string).
         Uses the cache — extracts from DAT on first request, cached thereafter.
+        clothing_id_hex: optional ClothingBase DID (0x10xxxxxx) — armor/clothing
+        weenies point their Setup at base body parts; the clothing table swaps
+        in the armor models/textures.
+        motion_id_hex: optional MotionTable DID (0x09xxxxxx) — bakes the default
+        idle animation into the GLB so the viewer can play it.
         Result: {success, data_b64} or {success: False, error}
         """
         import base64, traceback
+
+        def _parse_did(raw):
+            # DIDs may be hex ("0x02000001") or decimal ("33554433"). Auto-
+            # detect by the 0x prefix rather than assuming base-16.
+            s = str(raw).strip()
+            if not s:
+                return 0
+            return int(s, 16) if s.lower().startswith("0x") else int(s, 10)
+
         try:
-            # Setup DID may be written as hex ("0x02000001") or decimal
-            # ("33554433"). Auto-detect by the 0x prefix rather than assuming
-            # base-16, so plain-decimal weenies resolve to the correct file.
-            raw_id = str(setup_id_hex).strip()
-            if raw_id.lower().startswith("0x"):
-                setup_id = int(raw_id, 16)
-            else:
-                setup_id = int(raw_id, 10)
+            setup_id = _parse_did(setup_id_hex)
         except (ValueError, TypeError):
             return {"success": False, "error": "Invalid setup ID"}
+        try:
+            clothing_id = _parse_did(clothing_id_hex)
+        except (ValueError, TypeError):
+            clothing_id = 0
+        try:
+            motion_id = _parse_did(motion_id_hex)
+        except (ValueError, TypeError):
+            motion_id = 0
+        # Only ClothingTable (0x10) / MotionTable (0x09) DIDs make sense here
+        if clothing_id and (clothing_id >> 24) != 0x10:
+            clothing_id = 0
+        if motion_id and (motion_id >> 24) != 0x09:
+            motion_id = 0
 
         from aceforge.dat_loader import (cached_glb_path, DatDatabase,
                                           get_or_export_glb, export_setup_glb,
                                           parse_setup, parse_gfxobj)
         from pathlib import Path
 
-        cached = cached_glb_path(setup_id)
+        cached = cached_glb_path(setup_id, clothing_id, motion_id)
         if cached.exists():
             return {"success": True,
                     "data_b64": base64.b64encode(cached.read_bytes()).decode()}
@@ -2223,7 +2244,7 @@ Start with: /* ===== FILE: {fname} ===== */
                         f"{len(gfx.surfaces)} surfaces. ")
             # ── End diagnostics ───────────────────────────────────────────────
 
-            glb_path = get_or_export_glb(db, setup_id)
+            glb_path = get_or_export_glb(db, setup_id, clothing_id, motion_id)
             db.close()
             if glb_path is None:
                 return {"success": False,

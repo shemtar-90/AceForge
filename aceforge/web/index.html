@@ -2410,6 +2410,54 @@ const EA_HINTS={
 
 
 // ── Body Part Key Reference ──────────────────────────────────────────────────
+// Per-creature-type Setup catalog scraped from the base-game weenie DB
+// (build_creature_setups.py). {ctype: [{s,n,mt,st,ct4,pb,cb,pt}, ...]}
+var _CSETUPS=null;
+(function(){
+  try{
+    fetch((window._appBase||'')+'creature_setups.json')
+      .then(function(r){return r.json();})
+      .then(function(d){_CSETUPS=d;})
+      .catch(function(){_CSETUPS={};});
+  }catch(e){_CSETUPS={};}
+})();
+
+// Write a creature-setup catalog entry into the DID rows: Setup plus all its
+// companion tables (MotionTable, SoundTable, CombatTable, PaletteBase,
+// ClothingBase, PhysicsEffectTable). Existing rows update; missing rows append.
+function _applyCreatureSetupEntry(ent){
+  if(!ent) return;
+  function setDID(t,v){
+    if(!v) return;
+    var row=extraDID.find(function(x){return parseInt(x.type)===t;});
+    if(row) row.value=v; else extraDID.push({type:t, value:v});
+  }
+  setDID(1,ent.s);  setDID(2,ent.mt); setDID(3,ent.st); setDID(4,ent.ct4);
+  setDID(6,ent.pb); setDID(7,ent.cb); setDID(22,ent.pt);
+}
+
+// Dropdown pick handler — value is the Setup hex string of the chosen model.
+function _pickCreatureSetup(sHex){
+  if(!sHex) return;
+  var ctE=extraInt.find(function(x){return parseInt(x.type)===2;});
+  var cType=ctE?parseInt(ctE.value):31;
+  var list=_CSETUPS?_CSETUPS[String(cType)]:null;
+  var ent=(list||[]).find(function(e){return e.s===sHex;});
+  if(!ent) return;
+  _applyCreatureSetupEntry(ent);
+  // Body parts follow the model (they vary even within a creature type)
+  if(ent.bp){
+    bodyParts=getBodyParts(cType, ent.bp);
+    var bpPanel=document.querySelector('.sub-panel[data-sub="bodyparts"]');
+    if(bpPanel){
+      bpPanel.innerHTML=buildBodyPartsTab();
+      bpPanel.querySelectorAll('input,select').forEach(function(e){e.addEventListener('input',onFieldInput);});
+    }
+  }
+  rebuildPanel('properties');
+  regen();
+}
+
 // Keys match weenie_properties_body_part.key in ACE DB
 const BP_KEY_NAMES={
   0:'Head',1:'Chest',2:'Abdomen',3:'Upper Arm',4:'Lower Arm',5:'Hand',
@@ -2963,14 +3011,21 @@ function onCTypeChange(){
   // Read CreatureType from extraInt (type 2) — form fields no longer exist
   var ctEntry=extraInt.find(function(r){return parseInt(r.type)===2;});
   var cType=ctEntry?parseInt(ctEntry.value):31;
-  bodyParts=getBodyParts(cType);
+  // Auto-populate the DID rows from the scraped base-game catalog: the first
+  // model of the new creature type sets Setup + MotionTable + SoundTable +
+  // CombatTable + PaletteBase + ClothingBase + PhysicsEffectTable. The Setup
+  // row's model dropdown lets the user switch to any other model of the type.
+  var _csList=_CSETUPS&&_CSETUPS[String(cType)];
+  var _csEnt=(_csList&&_csList.length)?_csList[0]:null;
+  if(_csEnt) _applyCreatureSetupEntry(_csEnt);
+  // Body parts: use the model's actual scraped keys when available (they vary
+  // per model — Olthoi have Breath, some types have Tail, etc.)
+  bodyParts=getBodyParts(cType, _csEnt&&_csEnt.bp);
   var bpPanel=document.querySelector('.sub-panel[data-sub="bodyparts"]');
   if(bpPanel){
     bpPanel.innerHTML=buildBodyPartsTab();
     bpPanel.querySelectorAll('input,select').forEach(function(e){e.addEventListener('input',onFieldInput);});
   }
-  // DID auto-population removed — CREATURE_TYPE_DID_DEFAULTS had incorrect values.
-  // Users should set DID values manually or import from an existing weenie file.
   // Rebuild the full Properties panel so DID / Int / Bool sub-tabs all refresh
   rebuildPanel('properties');
   regen();
@@ -6129,8 +6184,10 @@ const CREATURE_BODY_MAP={31:'biped',2:'biped',3:'biped',4:'biped',5:'biped',6:'b
 
 
 
-function getBodyParts(cType){
-  const keys=CREATURE_BP_MAP[cType]||CREATURE_BP_MAP[31];
+function getBodyParts(cType, keysOverride){
+  // Scraped per-model keys (from the creature-setup catalog) beat the static
+  // per-type map — body parts differ even between models of the same type.
+  const keys=keysOverride||CREATURE_BP_MAP[cType]||CREATURE_BP_MAP[31];
   return keys.map(function(k){
     return {k:k, name:BP_KEY_NAMES[k]||('Part '+k),
       dType:4, dVal:0, dVar:0.25, baseAL:0, sl:0, pi:0, bl:0, co:0, fi:0, ac:0, el:0, nt:0};
@@ -9102,10 +9159,22 @@ function buildAdvanced(){
           +'<button onclick="_pickPalette('+i+')" style="padding:3px 10px;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.05em;background:transparent;border:1px solid var(--border);cursor:pointer;color:var(--ink-dim);flex-shrink:0;white-space:nowrap">&#x1F3A8; Picker</button>'
           +valCtrl+'</div>';
       }
-      // DID type 1 = Setup — add 3D preview button
+      // DID type 1 = Setup — add 3D preview button, plus a model dropdown
+      // listing every base-game Setup for the current CreatureType.
       if(arrRef==='extraDID' && parseInt(r.type)===1){
+        var _csDD='';
+        var _ctRow=extraInt.find(function(x){return parseInt(x.type)===2;});
+        var _csL=(_CSETUPS&&_ctRow)?_CSETUPS[String(parseInt(_ctRow.value))]:null;
+        if(_csL&&_csL.length){
+          var _cur=String(r.value||'').toUpperCase();
+          _csDD='<select onchange="_pickCreatureSetup(this.value)" title="Base-game models for this creature type — picking one also sets the matching Motion/Sound/Palette/Clothing tables" style="flex-shrink:0;max-width:190px;font-family:var(--ui-font);font-size:10px;padding:3px 4px;background:var(--parch);border:1px solid var(--border);color:var(--ink)">'
+            +'<option value="">— '+_csL.length+' model'+(_csL.length!==1?'s':'')+' —</option>'
+            +_csL.map(function(ent){return '<option value="'+ent.s+'"'+(ent.s.toUpperCase()===_cur?' selected':'')+'>'+escHtml(ent.n)+'</option>';}).join('')
+            +'</select>';
+        }
         valCtrl='<div style="display:flex;align-items:center;gap:6px;">'
           +_setupPreviewBtnHtml(String(r.value||'0x00000000'))
+          +_csDD
           +valCtrl+'</div>';
       }
       return '<div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-lt)">'
@@ -14574,7 +14643,7 @@ function _mp2dFetch(canvas, msg, setup_id_hex){
     msg.style.color='rgba(255,150,150,.9)';
     msg.textContent='3D preview requires the desktop app.'; return;
   }
-  window.pywebview.api.get_model_glb(setup_id_hex).then(function(r){
+  window.pywebview.api.get_model_glb(setup_id_hex, _mp.cloHex||'', _mp.motHex||'').then(function(r){
     if(!r.success){
       msg.style.color='rgba(255,150,150,.9)';
       msg.textContent='Error loading model:\n'+r.error; return;
@@ -14726,6 +14795,7 @@ var _MP_FRAG = [
   '  vec3 n=normalize(vNorm);',
   '  float diff=abs(dot(n,normalize(uLightDir)))*0.7+0.3;',
   '  vec4 col=uHasTex==1 ? texture2D(uTex,vUV) : uColor;',
+  '  if(col.a < 0.5) discard;',   // ClipMap sprites (wisp glow etc.) use keyed transparency
   '  gl_FragColor=vec4(col.rgb*diff,col.a);',
   '}',
 ].join('\n');
@@ -14751,6 +14821,8 @@ function _mpRotY(a){ var c=Math.cos(a),s=Math.sin(a);
   return new Float32Array([c,0,s,0, 0,1,0,0, -s,0,c,0, 0,0,0,1]); }
 function _mpRotX(a){ var c=Math.cos(a),s=Math.sin(a);
   return new Float32Array([1,0,0,0, 0,c,-s,0, 0,s,c,0, 0,0,0,1]); }
+function _mpRotZ(a){ var c=Math.cos(a),s=Math.sin(a);
+  return new Float32Array([c,-s,0,0, s,c,0,0, 0,0,1,0, 0,0,0,1]); }
 function _mpTranslate(x,y,z){ var m=new Float32Array(16);
   m[0]=m[5]=m[10]=m[15]=1; m[12]=x;m[13]=y;m[14]=z; return m; }
 function _mpScale(s){ var m=new Float32Array(16);
@@ -14815,7 +14887,7 @@ function _mpLoadGLB(glb_data_b64){
       var copy=raw.buffer.slice(raw.byteOffset,raw.byteOffset+bytes);
       return new ctor(copy);
     }
-    var elems=acc.type==='VEC3'?3:acc.type==='VEC2'?2:1;
+    var elems=acc.type==='VEC4'?4:acc.type==='VEC3'?3:acc.type==='VEC2'?2:1;
     if(acc.componentType===5126) return aligned(raw,Float32Array,elems,acc.count);
     if(acc.componentType===5123) return aligned(raw,Uint16Array,1,acc.count);
     if(acc.componentType===5125) return aligned(raw,Uint32Array,1,acc.count);
@@ -14847,14 +14919,33 @@ function _mpLoadGLB(glb_data_b64){
 
   _mp.meshes=[];
   var _bbMin=[1e9,1e9,1e9], _bbMax=[-1e9,-1e9,-1e9];
-  (gltf.meshes||[]).forEach(function(mesh){
+  // Node transforms: newer GLBs emit one node per setup part with a TRS the
+  // idle animation drives; old cached GLBs have a single identity node.
+  var nodeOfMesh={};   // mesh index -> node index
+  _mp.nodeRest={};     // node index -> {t:[x,y,z], r:[x,y,z,w]}
+  (gltf.nodes||[]).forEach(function(nd,ni){
+    if(nd.mesh!=null) nodeOfMesh[nd.mesh]=ni;
+    _mp.nodeRest[ni]={t:nd.translation||[0,0,0], r:nd.rotation||[0,0,0,1]};
+  });
+
+  function qrot(q,v){  // rotate vec3 by quat [x,y,z,w]
+    var x=q[0],y=q[1],z=q[2],w=q[3];
+    var tx=2*(y*v[2]-z*v[1]), ty=2*(z*v[0]-x*v[2]), tz=2*(x*v[1]-y*v[0]);
+    return [v[0]+w*tx+y*tz-z*ty, v[1]+w*ty+z*tx-x*tz, v[2]+w*tz+x*ty-y*tx];
+  }
+
+  (gltf.meshes||[]).forEach(function(mesh,mi){
+    var nodeIdx=nodeOfMesh[mi];
+    var rest=(nodeIdx!=null&&_mp.nodeRest[nodeIdx])||{t:[0,0,0],r:[0,0,0,1]};
     (mesh.primitives||[]).forEach(function(prim){
       var posData=acc_data(prim.attributes['POSITION']);
       var nrmData=prim.attributes['NORMAL']!=null?acc_data(prim.attributes['NORMAL']):null;
       var uvData =prim.attributes['TEXCOORD_0']!=null?acc_data(prim.attributes['TEXCOORD_0']):null;
       var idxData=acc_data(prim.indices);
+      // BBox in setup space: apply the rest-pose node transform to each vertex
       for(var _vi=0;_vi+2<posData.length;_vi+=3){
-        for(var _k=0;_k<3;_k++){ var _val=posData[_vi+_k];
+        var _p=qrot(rest.r,[posData[_vi],posData[_vi+1],posData[_vi+2]]);
+        for(var _k=0;_k<3;_k++){ var _val=_p[_k]+rest.t[_k];
           if(_val<_bbMin[_k])_bbMin[_k]=_val; if(_val>_bbMax[_k])_bbMax[_k]=_val; }
       }
 
@@ -14882,15 +14973,81 @@ function _mpLoadGLB(glb_data_b64){
       }
       var idxType=idxData instanceof Uint32Array?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT;
       _mp.meshes.push({vbo:vbo,nbo:nbo,tbo:tbo,ibo:ibo,
-                       count:idxData.length,tex:tex,color:color,idxType:idxType});
+                       count:idxData.length,tex:tex,color:color,idxType:idxType,
+                       node:nodeIdx});
     });
   });
+
+  // ── Idle animation channels (baked by the exporter from the MotionTable) ──
+  _mp.animByNode=null; _mp.animDuration=0;
+  var anim=(gltf.animations||[])[0];
+  if(anim){
+    var byNode={};
+    var dur=0;
+    (anim.channels||[]).forEach(function(ch){
+      var smp=anim.samplers[ch.sampler];
+      var times=acc_data(smp.input);
+      var vals=acc_data(smp.output);
+      var nd=ch.target.node;
+      byNode[nd]=byNode[nd]||{};
+      byNode[nd][ch.target.path]={times:times,vals:vals};
+      if(times.length&&times[times.length-1]>dur) dur=times[times.length-1];
+    });
+    if(dur>0){ _mp.animByNode=byNode; _mp.animDuration=dur; _mp.animStart=performance.now(); }
+  }
+
   if(_bbMax[0]>=_bbMin[0]){
     _mp.center=[(_bbMin[0]+_bbMax[0])/2,(_bbMin[1]+_bbMax[1])/2,(_bbMin[2]+_bbMax[2])/2];
     _mp.span=Math.max(_bbMax[0]-_bbMin[0],_bbMax[1]-_bbMin[1],_bbMax[2]-_bbMin[2],0.001);
   } else { _mp.center=[0,0,0]; _mp.span=1; }
-  console.log('[GLB] done: '+_mp.meshes.length+' meshes, span='+_mp.span.toFixed(3));
+  console.log('[GLB] done: '+_mp.meshes.length+' meshes, span='+_mp.span.toFixed(3)
+              +(_mp.animByNode?(', anim '+_mp.animDuration.toFixed(2)+'s'):''));
   return _mp.meshes.length > 0;
+}
+
+// Quaternion [x,y,z,w] → column-major 4x4 rotation matrix
+function _mpQuatMat(q){
+  var x=q[0],y=q[1],z=q[2],w=q[3];
+  var xx=x*x,yy=y*y,zz=z*z,xy=x*y,xz=x*z,yz=y*z,wx=w*x,wy=w*y,wz=w*z;
+  return new Float32Array([
+    1-2*(yy+zz), 2*(xy+wz),   2*(xz-wy),   0,
+    2*(xy-wz),   1-2*(xx+zz), 2*(yz+wx),   0,
+    2*(xz+wy),   2*(yz-wx),   1-2*(xx+yy), 0,
+    0,0,0,1]);
+}
+
+// Sample a node's animated TRS at time t (uniform keyframes, linear interp,
+// nlerp for quats). Falls back to the rest pose when the node has no channels.
+function _mpNodeTRS(nodeIdx, t){
+  var rest=(_mp.nodeRest&&_mp.nodeRest[nodeIdx])||{t:[0,0,0],r:[0,0,0,1]};
+  var an=_mp.animByNode&&_mp.animByNode[nodeIdx];
+  if(!an) return rest;
+  // Locate the keyframe pair bracketing t: returns {a,b,f} value offsets + mix
+  function seg(tr, comps){
+    var times=tr.times, n=times.length;
+    if(n===1) return {a:0, b:0, f:0};
+    var i=0;
+    while(i<n-2 && times[i+1]<=t) i++;
+    var t0=times[i], t1=times[i+1];
+    var f=(t1>t0)?Math.min(1,Math.max(0,(t-t0)/(t1-t0))):0;
+    return {a:i*comps, b:(i+1)*comps, f:f};
+  }
+  var tr=rest.t, r=rest.r;
+  if(an.translation){
+    var sT=seg(an.translation,3), vT=an.translation.vals, out=[];
+    for(var k=0;k<3;k++) out.push(vT[sT.a+k]+(vT[sT.b+k]-vT[sT.a+k])*sT.f);
+    tr=out;
+  }
+  if(an.rotation){
+    // nlerp with neighborhood correction
+    var sR=seg(an.rotation,4), va=an.rotation.vals, a=sR.a, b=sR.b, f=sR.f;
+    var dot=va[a]*va[b]+va[a+1]*va[b+1]+va[a+2]*va[b+2]+va[a+3]*va[b+3];
+    var s=dot<0?-1:1, q=[], len=0;
+    for(var k2=0;k2<4;k2++){ q[k2]=va[a+k2]+(s*va[b+k2]-va[a+k2])*f; len+=q[k2]*q[k2]; }
+    len=Math.sqrt(len)||1;
+    r=[q[0]/len,q[1]/len,q[2]/len,q[3]/len];
+  }
+  return {t:tr, r:r};
 }
 
 function _mpDraw(){
@@ -14909,6 +15066,13 @@ function _mpDraw(){
   // rotation so models stand upright (Z-up → Y-up) and face the camera, then
   // apply the user's interactive yaw/pitch on top of that.
   var base=_mpMat4Mul(_mpRotY(Math.PI),_mpRotX(Math.PI/2));
+  // Items (weapons, armor pieces) are authored with their long axis along
+  // model +Y, which the creature base leaves pointing at the camera. An extra
+  // view-space -90° pitch stands them up, then a 180° in-plane roll flips them
+  // right-side-up while keeping the same face toward the camera.
+  if(_mp.itemMode) base=_mpMat4Mul(_mpRotZ(Math.PI), _mpMat4Mul(_mpRotX(-Math.PI/2), base));
+  // Headgear keeps the upright creature pose but faces away — yaw it around.
+  if(_mp.headMode) base=_mpMat4Mul(_mpRotY(Math.PI), base);
   var rot=_mpMat4Mul(_mpMat4Mul(rx,ry),base);
   // Frame the model: translate to origin then scale to ~unit size so any setup
   // (tiny ring or large armor) fills the view consistently.
@@ -14922,14 +15086,28 @@ function _mpDraw(){
   var uHasTex=gl.getUniformLocation(p,'uHasTex');
   var uColor=gl.getUniformLocation(p,'uColor');
   var uLight=gl.getUniformLocation(p,'uLightDir');
-  gl.uniformMatrix4fv(uMVP,false,mvp);
-  gl.uniformMatrix4fv(uModel,false,rot);   // normals only need rotation
   gl.uniform3fv(uLight,[0.6,1.0,0.8]);
   gl.uniform1i(uTex,0);
   var aPos=gl.getAttribLocation(p,'aPos');
   var aNorm=gl.getAttribLocation(p,'aNorm');
   var aUV=gl.getAttribLocation(p,'aUV');
+  // Idle animation clock (loops); node TRS matrices computed once per node/frame
+  var animT=0;
+  if(_mp.animByNode&&_mp.animDuration>0)
+    animT=((performance.now()-(_mp.animStart||0))/1000)%_mp.animDuration;
+  var nodeMats={};
+  function nodeMat(ni){
+    if(ni==null) return null;
+    if(nodeMats[ni]) return nodeMats[ni];
+    var trs=_mpNodeTRS(ni,animT);
+    var R=_mpQuatMat(trs.r);
+    var N=_mpMat4Mul(_mpTranslate(trs.t[0],trs.t[1],trs.t[2]),R);
+    return (nodeMats[ni]={mvp:_mpMat4Mul(mvp,N), nrm:_mpMat4Mul(rot,R)});
+  }
   _mp.meshes.forEach(function(m){
+    var nm=nodeMat(m.node);
+    gl.uniformMatrix4fv(uMVP,false,nm?nm.mvp:mvp);
+    gl.uniformMatrix4fv(uModel,false,nm?nm.nrm:rot);   // normals only need rotation
     gl.bindBuffer(gl.ARRAY_BUFFER,m.vbo);
     gl.enableVertexAttribArray(aPos);
     gl.vertexAttribPointer(aPos,3,gl.FLOAT,false,0,0);
@@ -14972,6 +15150,35 @@ function openModelPreview(setup_id_hex, label){
   if(_mp.animFrame){ cancelAnimationFrame(_mp.animFrame); _mp.animFrame=null; }
   _mp.meshes=[];
 
+  // Creature-type weenies (Creature/Vendor/Pet/CombatPet) are authored upright
+  // already; everything else (weapons, items) needs the item base rotation.
+  var _wtEl=document.getElementById('fWeenieType');
+  var _wt=_wtEl?parseInt(_wtEl.value):NaN;
+  _mp.itemMode = !(_wt===10 || _wt===12 || _wt===51 || _wt===76);
+  // Headgear (ValidLocations Int 9 with the HeadWear 0x1 bit) is authored
+  // upright like creatures, not long-axis like weapons — keep the creature
+  // pose but yaw 180° so the face opening points at the camera.
+  _mp.headMode=false;
+  try{
+    (typeof extraInt!=='undefined'?extraInt:[]).forEach(function(r){
+      if(parseInt(r.type)===9 && (parseInt(r.value)&1)){ _mp.itemMode=false; _mp.headMode=true; }
+    });
+  }catch(e){}
+
+  // Armor/clothing weenies point their Setup at base body parts; the
+  // ClothingBase DID (type 7, 0x10xxxxxx) swaps in the armor models/textures.
+  // The MotionTable DID (type 2, 0x09xxxxxx) bakes the idle animation in.
+  var _cloHex='', _motHex='';
+  try{
+    (typeof extraDID!=='undefined'?extraDID:[]).forEach(function(r){
+      var v=String(r.value||'');
+      if(!v || v==='0x00000000') return;
+      if(parseInt(r.type)===7) _cloHex=v;
+      if(parseInt(r.type)===2) _motHex=v;
+    });
+  }catch(e){}
+  _mp.cloHex=_cloHex; _mp.motHex=_motHex;   // also used by the 2D fallback fetch
+
   if(!_mp.gl){
     _mp.gl=_mpInitGL(canvas);
     if(!_mp.gl){ console.error('[3D] WebGL init failed'); msg.textContent='WebGL not supported in this environment.'; return; }
@@ -14980,8 +15187,9 @@ function openModelPreview(setup_id_hex, label){
     canvas.addEventListener('mouseup',function(){_mp.dragging=false;});
     canvas.addEventListener('mousemove',function(e){
       if(!_mp.dragging||!_mp.lastMouse) return;
-      _mp.rotation[0]+=(e.clientX-_mp.lastMouse[0])*0.01;
-      _mp.rotation[1]+=(e.clientY-_mp.lastMouse[1])*0.01;
+      // Negative: drag right spins right, drag down pitches down (turntable feel)
+      _mp.rotation[0]-=(e.clientX-_mp.lastMouse[0])*0.01;
+      _mp.rotation[1]-=(e.clientY-_mp.lastMouse[1])*0.01;
       _mp.lastMouse=[e.clientX,e.clientY];
     });
     canvas.addEventListener('wheel',function(e){
@@ -14995,7 +15203,7 @@ function openModelPreview(setup_id_hex, label){
     return;
   }
 
-  window.pywebview.api.get_model_glb(setup_id_hex).then(function(r){
+  window.pywebview.api.get_model_glb(setup_id_hex, _cloHex, _motHex).then(function(r){
     // Always show status in msg first
     if(!r.success){
       msg.style.color='rgba(255,150,150,.9)';

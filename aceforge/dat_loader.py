@@ -138,12 +138,23 @@ def _read_directory(stream: io.RawIOBase, offset: int, block_size: int,
 class DatDatabase:
     """Minimal client_portal.dat reader — indexes all files, reads on demand."""
 
-    def __init__(self, dat_path: str):
+    def __init__(self, dat_path: str, _is_companion: bool = False):
         self.path       = dat_path
         self.block_size = 0
         self.entries:   Dict[int, DatEntry] = {}
         self._stream:   Optional[io.RawIOBase] = None
+        self.highres:   Optional["DatDatabase"] = None
         self._open()
+        # Auto-attach client_highres.dat from the same folder: it carries the
+        # full-resolution versions of 0x06 textures (the portal copies of some
+        # sprites — e.g. wisp glows — are tiny or entirely key-color).
+        if not _is_companion:
+            try:
+                hr = Path(dat_path).parent / "client_highres.dat"
+                if hr.exists():
+                    self.highres = DatDatabase(str(hr), _is_companion=True)
+            except Exception:
+                self.highres = None
 
     def _open(self) -> None:
         f = open(self.path, "rb")
@@ -183,6 +194,11 @@ class DatDatabase:
 
     def read_file(self, object_id: int) -> Optional[bytes]:
         """Read and reassemble a file from the DAT by its object ID."""
+        # Textures (0x06): prefer the high-resolution copy when available
+        if self.highres is not None and (object_id >> 24) == 0x06:
+            hi = self.highres.read_file(object_id)
+            if hi is not None:
+                return hi
         entry = self.entries.get(object_id)
         if entry is None:
             return None
@@ -199,6 +215,9 @@ class DatDatabase:
         if self._stream:
             self._stream.close()
             self._stream = None
+        if self.highres is not None:
+            self.highres.close()
+            self.highres = None
 
     def __del__(self):
         self.close()
@@ -278,8 +297,13 @@ class AcTexture:
     data:    bytes
     palette_id: Optional[int]
 
-    def to_rgba(self, palette: Optional[List[int]] = None) -> bytes:
-        """Convert any supported format to raw RGBA8 bytes."""
+    def to_rgba(self, palette: Optional[List[int]] = None,
+                colorkey: bool = False) -> bytes:
+        """Convert any supported format to raw RGBA8 bytes.
+
+        colorkey: for ClipMap surfaces — palette index 0 is the transparent
+        key color (how AC renders sprite-style textures like wisp glows).
+        """
         w, h = self.width, self.height
 
         if self.fmt in (PFID_A8R8G8B8, PFID_CUSTOM_A8B8G8R8):
@@ -317,6 +341,9 @@ class AcTexture:
             for i in range(w * h):
                 idx = struct.unpack_from("<H" if stride == 2 else "B",
                                         self.data, i * stride)[0]
+                if colorkey and idx == 0:
+                    out[i*4:i*4+4] = (0, 0, 0, 0)   # ClipMap key → transparent
+                    continue
                 color = palette[idx % len(palette)] if idx < len(palette) else 0xFFFFFFFF
                 r = (color >> 16) & 0xFF
                 g = (color >>  8) & 0xFF
@@ -431,9 +458,14 @@ def parse_palette(db: DatDatabase, pal_id: int) -> Optional[List[int]]:
 
 
 def parse_surface_texture(db: DatDatabase, st_id: int) -> Optional[int]:
-    """Parse a SurfaceTexture (0x05xxxxxx) and return its first (highest-res)
-    Texture (0x06) id. Layout: Id(u32) Unknown(i32) UnknownByte(u8)
-    Textures[List<uint>: Int32 count + count×u32]."""
+    """Parse a SurfaceTexture (0x05xxxxxx) and return the best Texture (0x06)
+    id that actually exists in this dat. Layout: Id(u32) Unknown(i32)
+    UnknownByte(u8) Textures[List<uint>: Int32 count + count×u32].
+
+    Multi-entry lists put the highest-resolution mip first, but that copy often
+    lives in client_highres.dat rather than client_portal.dat — so walk the
+    list in order and take the first id our database can actually read.
+    """
     data = db.read_file(st_id)
     if not data:
         return None
@@ -444,8 +476,163 @@ def parse_surface_texture(db: DatDatabase, st_id: int) -> Optional[int]:
         count, off = _i32(data, off)
         if count <= 0:
             return None
-        tex_id, _ = _u32(data, off)   # mip 0 = highest resolution
-        return tex_id
+        first = None
+        for _ in range(count):
+            tex_id, off = _u32(data, off)
+            if first is None:
+                first = tex_id
+            if db.read_file(tex_id) is not None:
+                return tex_id
+        return first
+    except Exception:
+        return None
+
+
+def parse_clothing_base_effect(db: DatDatabase, clothing_id: int,
+                               setup_id: int) -> Optional[Dict[int, Tuple[int, Dict[int, int]]]]:
+    """Parse a ClothingTable (0x10xxxxxx) and return the base effect for one
+    setup: {part_index: (replacement_gfxobj_id, {old_surface_tex: new_surface_tex})}.
+
+    Layout (verified against client_portal.dat 0x10000618):
+      Id(u32) numBaseEffects(u16) numSubPalEffects(u16)
+      numBaseEffects × [ SetupId(u32) numObjEffects(u32)
+                         numObjEffects × [ PartIndex(u32) ModelId(u32)
+                            numTexEffects(u32) × [ OldTex(u32) NewTex(u32) ] ] ]
+    SubPal effects (dye palettes) follow but are not needed for texture render.
+    Returns None if the table or the setup's entry is missing.
+    """
+    data = db.read_file(clothing_id)
+    if not data or len(data) < 8:
+        return None
+    try:
+        nbe, _nsp = struct.unpack_from("<HH", data, 4)
+        off = 8
+        for _ in range(nbe):
+            entry_setup, off = _u32(data, off)
+            nobj, off = _u32(data, off)
+            parts: Dict[int, Tuple[int, Dict[int, int]]] = {}
+            for _ in range(nobj):
+                pidx, off = _u32(data, off)
+                model, off = _u32(data, off)
+                ntex, off = _u32(data, off)
+                tmap: Dict[int, int] = {}
+                for _ in range(ntex):
+                    old_t, off = _u32(data, off)
+                    new_t, off = _u32(data, off)
+                    tmap[old_t] = new_t
+                parts[pidx] = (model, tmap)
+            if entry_setup == setup_id:
+                return parts
+        return None
+    except Exception:
+        return None
+
+
+def parse_motion_table_default(db: DatDatabase, mt_id: int) -> Optional[Tuple[int, int, int, float]]:
+    """Parse a MotionTable (0x09xxxxxx) and return the default idle cycle's
+    first AnimData as (anim_id, low_frame, high_frame, framerate).
+
+    Layout (validated byte-exact against client_portal.dat 0x09000001):
+      Id(u32) DefaultStyle(u32)
+      numStyleDefaults(u32) × [style u32, motion u32]
+      numCycles(u32) × [key u32, MotionData]
+      numModifiers / numLinks follow (not needed).
+    MotionData: numAnims(u8) bitfield(u8) flags(u8) pad(u8),
+      numAnims × AnimData[id u32, low i32, high i32, framerate f32],
+      then optional velocity vec3 (flags&1) and omega vec3 (flags&2).
+    Cycle key = (style & 0xFFFF) << 16 | (motion & 0xFFFF).
+    """
+    data = db.read_file(mt_id)
+    if not data or len(data) < 12:
+        return None
+    try:
+        default_style, = struct.unpack_from("<I", data, 4)
+        off = 8
+        nsd, = struct.unpack_from("<I", data, off); off += 4
+        style_defaults = {}
+        for _ in range(nsd):
+            k, v = struct.unpack_from("<II", data, off); off += 8
+            style_defaults[k] = v
+        ncyc, = struct.unpack_from("<I", data, off); off += 4
+        cycles: Dict[int, list] = {}
+        order = []
+        for _ in range(ncyc):
+            k, = struct.unpack_from("<I", data, off); off += 4
+            na, _bf, fl, _pad = struct.unpack_from("<BBBB", data, off); off += 4
+            anims = []
+            for _ in range(na):
+                aid, lo, hi = struct.unpack_from("<Iii", data, off)
+                fr, = struct.unpack_from("<f", data, off + 12)
+                off += 16
+                anims.append((aid, lo, hi, fr))
+            if fl & 1: off += 12
+            if fl & 2: off += 12
+            if anims and (anims[0][0] >> 24) == 0x03:
+                cycles[k] = anims
+                order.append(k)
+        if not cycles:
+            return None
+        style16 = default_style & 0xFFFF
+        motion = style_defaults.get(default_style, 0)
+        anims = cycles.get((style16 << 16) | (motion & 0xFFFF))
+        if not anims:
+            # any cycle belonging to the default style, else the first cycle
+            for k in order:
+                if (k >> 16) == style16:
+                    anims = cycles[k]; break
+        if not anims:
+            anims = cycles[order[0]]
+        return anims[0]
+    except Exception:
+        return None
+
+
+# AnimationHook payload sizes in dwords (after the 8-byte type+direction
+# header). Unknown types abort the parse — better a static model than garbage.
+_HOOK_DWORDS = {
+    0x01: 1, 0x02: 1, 0x03: 7, 0x04: 0, 0x06: 1, 0x07: 4, 0x08: 3, 0x09: 4,
+    0x0A: 3, 0x0B: 4, 0x0C: 2, 0x0D: 10, 0x0E: 1, 0x0F: 1, 0x10: 1, 0x11: 0,
+    0x12: 1, 0x13: 2, 0x14: 3, 0x15: 4, 0x16: 3, 0x17: 2, 0x18: 3, 0x19: 1,
+    0x1A: 10,
+}
+
+
+def parse_animation(db: DatDatabase, anim_id: int) -> Optional[list]:
+    """Parse an Animation (0x03xxxxxx) into frames[f][p] = ((x,y,z),(qw,qx,qy,qz)).
+
+    Layout: Id(u32) Flags(u32) NumParts(u32) NumFrames(u32),
+    optional object-level PosFrames (Flags&1: NumFrames × 7 floats), then per
+    frame: NumParts × [origin vec3 + quat wxyz] + numHooks(u32) + hooks.
+    Returns None on any structural surprise (unknown hook type, bad counts).
+    """
+    data = db.read_file(anim_id)
+    if not data or len(data) < 16:
+        return None
+    try:
+        _aid, flags, nparts, nframes = struct.unpack_from("<IIII", data, 0)
+        if not (0 < nparts <= 512 and 0 < nframes <= 4096):
+            return None
+        off = 16
+        if flags & 1:
+            off += 28 * nframes
+        frames = []
+        for _f in range(nframes):
+            if off + 28 * nparts + 4 > len(data):
+                return None
+            parts = []
+            for _p in range(nparts):
+                x, y, z, qw, qx, qy, qz = struct.unpack_from("<7f", data, off)
+                off += 28
+                parts.append(((x, y, z), (qw, qx, qy, qz)))
+            nh, = struct.unpack_from("<I", data, off); off += 4
+            for _h in range(nh):
+                ht, = struct.unpack_from("<I", data, off)
+                nd = _HOOK_DWORDS.get(ht)
+                if nd is None:
+                    return None
+                off += 8 + 4 * nd
+            frames.append(parts)
+        return frames
     except Exception:
         return None
 
@@ -840,10 +1027,16 @@ def _pack_glb(json_str: str, bin_data: bytes) -> bytes:
 
 
 def export_setup_glb(db: DatDatabase, setup_id: int,
-                     max_textures: int = 8) -> Optional[bytes]:
+                     max_textures: int = 8,
+                     clothing_id: int = 0,
+                     motion_id: int = 0) -> Optional[bytes]:
     """
     Read a Setup + its GfxObjs + textures from the DAT and return GLB bytes.
     Returns None if the setup is not found or has no renderable geometry.
+
+    clothing_id: optional ClothingTable (0x10xxxxxx). Armor/clothing weenies
+    point their Setup at the base body parts; the ClothingTable swaps each
+    covered part's GfxObj for the armor version and overrides its textures.
     """
     raw = db.read_file(setup_id)
     if not raw:
@@ -853,41 +1046,55 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
     if not setup or not setup.parts:
         return None
 
+    clo_parts = parse_clothing_base_effect(db, clothing_id, setup_id) if clothing_id else None
+
+    # Default idle animation from the MotionTable (0x09), if provided. Frames
+    # give every part a full transform per tick, replacing the placement frame.
+    anim_frames = None
+    anim_framerate = 30.0
+    if motion_id:
+        _md = parse_motion_table_default(db, motion_id)
+        if _md:
+            _aid, _lo, _hi, _fr = _md
+            _frames = parse_animation(db, _aid)
+            if _frames:
+                lo = max(0, _lo)
+                hi = _hi if 0 <= _hi < len(_frames) else len(_frames) - 1
+                if lo >= len(_frames) or lo > hi:
+                    lo, hi = 0, len(_frames) - 1
+                anim_frames = _frames[lo:hi + 1]
+                anim_framerate = _fr if _fr and _fr > 0 else 30.0
+                if len(anim_frames) < 2:
+                    anim_frames = None   # nothing to animate
+
     # ── Collect geometry ──────────────────────────────────────────────────────
-    meshes = []   # list of (vertices, indices, surface_id)  — surface_id is a 0x08 id or None
-
-    import math
-
-    def quat_rotate(q, v):
-        """Rotate vector v by quaternion q (qw,qx,qy,qz)."""
-        qw, qx, qy, qz = q
-        # v' = q * (0,v) * q_conj
-        tx = 2.0 * (qy * v[2] - qz * v[1])
-        ty = 2.0 * (qz * v[0] - qx * v[2])
-        tz = 2.0 * (qx * v[1] - qy * v[0])
-        return (
-            v[0] + qw * tx + qy * tz - qz * ty,
-            v[1] + qw * ty + qz * tx - qx * tz,
-            v[2] + qw * tz + qx * ty - qy * tx,
-        )
+    # Per-part: vertices stay in part-local space; the part's placement frame
+    # becomes a glTF node transform so animation frames can drive it directly.
+    # meshes: list of (part_idx, vertices, indices, surface_id, tex_map)
+    meshes = []
+    part_nodes = {}   # part_idx -> ((ox,oy,oz), (qw,qx,qy,qz)) rest pose
 
     for part_idx, part in enumerate(setup.parts):
-        raw_g = db.read_file(part.gfxobj_id)
+        # ClothingTable may replace this part's model and remap its textures.
+        gfx_id, tex_map = part.gfxobj_id, None
+        if clo_parts and part_idx in clo_parts:
+            gfx_id, tex_map = clo_parts[part_idx]
+            gfx_id = gfx_id or part.gfxobj_id
+        raw_g = db.read_file(gfx_id)
         if not raw_g:
             continue
         gfx = parse_gfxobj(raw_g)
         if not gfx or not gfx.polygons:
             continue
 
-        # Get this part's placement transform (rest pose)
+        # Rest-pose placement transform → node TRS
         if part_idx < len(setup.frames):
             pf = setup.frames[part_idx]
-            has_transform = not (pf.ox == 0 and pf.oy == 0 and pf.oz == 0
-                                 and abs(pf.qw - 1.0) < 1e-5)
+            part_nodes[part_idx] = ((pf.ox, pf.oy, pf.oz),
+                                    (pf.qw, pf.qx, pf.qy, pf.qz))
         else:
-            has_transform = False
+            part_nodes[part_idx] = ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0))
 
-        # Triangulate polygons with transform applied
         for poly in gfx.polygons:
             if len(poly.vertex_ids) < 3:
                 continue
@@ -903,17 +1110,7 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
                     continue
                 _uvi = poly.uv_indices[i] if (poly.uv_indices and i < len(poly.uv_indices)) else 0
                 uv = v.uvs[_uvi] if (v.uvs and _uvi < len(v.uvs)) else (0.0, 0.0)
-
-                # Apply placement frame transform: rotate then translate
-                if has_transform:
-                    q = (pf.qw, pf.qx, pf.qy, pf.qz)
-                    pos = quat_rotate(q, v.pos)
-                    pos = (pos[0] + pf.ox, pos[1] + pf.oy, pos[2] + pf.oz)
-                    nrm = quat_rotate(q, v.nrm)
-                else:
-                    pos, nrm = v.pos, v.nrm
-
-                verts.append((pos, nrm, uv))
+                verts.append((v.pos, v.nrm, uv))
 
             # Fan triangulation
             indices = []
@@ -921,7 +1118,7 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
                 indices += [0, i, i + 1]
 
             if verts and indices:
-                meshes.append((verts, indices, mesh_surf_id))
+                meshes.append((part_idx, verts, indices, mesh_surf_id, tex_map))
 
     if not meshes:
         import logging
@@ -989,33 +1186,75 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
         t = len(textures_json); textures_json.append({"sampler": 0, "source": img})
         return t
 
-    def material_for_surface(surface_id):
-        if surface_id in _surf_mat_cache:
-            return _surf_mat_cache[surface_id]
+    def material_for_surface(surface_id, tex_map=None):
+        # Cache key includes the clothing texture remap — the same base surface
+        # can resolve to different armor textures on different parts.
+        key = (surface_id, frozenset(tex_map.items()) if tex_map else None)
+        if key in _surf_mat_cache:
+            return _surf_mat_cache[key]
         mat = None
         surf = db.read_file(surface_id) if surface_id else None
-        if surf and len(surf) >= 12:
+        if surf and len(surf) >= 8:
             try:
-                stype, _ = _u32(surf, 4)   # Surface: [Id][Type][...]
+                # Surface (0x08) files carry NO leading Id dword (unlike GfxObj/
+                # Setup): layout is [Type][TexId|Color][PalId][...][Translucency],
+                # confirmed against client_portal.dat (e.g. 0x0800120B =
+                # 00000002 05002BC3 00000000 ...).
+                stype, _ = _u32(surf, 0)
                 if stype & (ST_BASE1_IMAGE | ST_BASE1_CLIPMAP):
-                    orig_tex_id, _ = _u32(surf, 8)    # SurfaceTexture (0x05)
-                    orig_pal_id, _ = _u32(surf, 12)   # Palette (0x04), may be 0
+                    orig_tex_id, _ = _u32(surf, 4)    # SurfaceTexture (0x05)
+                    orig_pal_id, _ = _u32(surf, 8)    # Palette (0x04), may be 0
+                    if tex_map:
+                        orig_tex_id = tex_map.get(orig_tex_id, orig_tex_id)
                     st_tex = parse_surface_texture(db, orig_tex_id)
                     tex_obj = parse_texture(db, st_tex) if st_tex else None
                     if tex_obj:
                         pid = orig_pal_id or tex_obj.palette_id
                         pal = parse_palette(db, pid) if pid else None
+                        # ClipMap = sprite-style color-keyed transparency
+                        # (palette index 0 → transparent), e.g. wisp glows.
+                        is_clip = bool(stype & ST_BASE1_CLIPMAP)
                         rgba = None
-                        try: rgba = tex_obj.to_rgba(pal)
+                        try: rgba = tex_obj.to_rgba(pal, colorkey=is_clip)
                         except Exception: rgba = None
+                        if rgba and is_clip and not any(rgba[3::4]):
+                            # Fully key-color sprite: in-game these are drawn by
+                            # particle emitters (wisps etc.). Substitute a soft
+                            # radial glow tinted from the palette so the model
+                            # reads as a glowing orb instead of vanishing.
+                            tint = (200, 220, 255)
+                            if pal:
+                                cs = [c for c in pal[1:257] if (c & 0xFFFFFF)]
+                                if cs:
+                                    n_ = len(cs)
+                                    tint = (sum((c >> 16) & 0xFF for c in cs)//n_,
+                                            sum((c >> 8) & 0xFF for c in cs)//n_,
+                                            sum(c & 0xFF for c in cs)//n_)
+                            gw = 32
+                            buf = bytearray(gw*gw*4)
+                            for yy in range(gw):
+                                for xx in range(gw):
+                                    dx = (xx - gw/2 + .5)/(gw/2)
+                                    dy = (yy - gw/2 + .5)/(gw/2)
+                                    d2 = dx*dx + dy*dy
+                                    a = max(0.0, 1.0 - d2) ** 2
+                                    o = (yy*gw + xx)*4
+                                    buf[o:o+4] = (tint[0], tint[1], tint[2],
+                                                  int(255*a))
+                            rgba = bytes(buf)
+                            tex_obj = type(tex_obj)(gw, gw, tex_obj.fmt,
+                                                    b"", None)
                         if rgba:
                             tgltf = _embed_texture(rgba, tex_obj.width, tex_obj.height)
                             mat = {"pbrMetallicRoughness": {
                                        "baseColorTexture": {"index": tgltf},
                                        "metallicFactor": 0.0, "roughnessFactor": 0.9},
                                    "doubleSided": True}
+                            if is_clip:
+                                mat["alphaMode"] = "MASK"
+                                mat["alphaCutoff"] = 0.5
                 else:
-                    color_value, _ = _u32(surf, 8)    # solid ARGB
+                    color_value, _ = _u32(surf, 4)    # solid ARGB
                     mat = {"pbrMetallicRoughness": {
                                "baseColorFactor": _argb_to_factor(color_value),
                                "metallicFactor": 0.0, "roughnessFactor": 0.9},
@@ -1028,7 +1267,7 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
                        "metallicFactor": 0.0, "roughnessFactor": 0.9},
                    "doubleSided": True}
         idx = len(materials_json); materials_json.append(mat)
-        _surf_mat_cache[surface_id] = idx
+        _surf_mat_cache[key] = idx
         return idx
 
     # Fallback material for polygons with no surface at all
@@ -1042,13 +1281,16 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
         "doubleSided": True,
     })
 
-    # ── Build mesh primitives ─────────────────────────────────────────────────
-    primitives = []
+    # ── Build mesh primitives, grouped per setup part ────────────────────────
+    # Each part becomes its own glTF node + mesh so animation frames can drive
+    # part transforms. Static models render identically (node = placement frame).
     FLOAT = 5126   # GL_FLOAT
     UINT16 = 5123  # GL_UNSIGNED_SHORT
     UINT32 = 5125  # GL_UNSIGNED_INT
 
-    for verts, indices, surf_id in meshes:
+    part_prims: Dict[int, list] = {}   # part_idx -> [primitive, ...]
+
+    for part_idx, verts, indices, surf_id, part_tex_map in meshes:
         if not verts:
             continue
 
@@ -1071,9 +1313,9 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
         idx_acc = add_accessor(idx_data, len(indices), "SCALAR",
                                UINT32 if use_u32 else UINT16, "SCALAR")
 
-        mat_idx = material_for_surface(surf_id) if surf_id else default_mat_idx
+        mat_idx = material_for_surface(surf_id, part_tex_map) if surf_id else default_mat_idx
 
-        primitives.append({
+        part_prims.setdefault(part_idx, []).append({
             "attributes": {
                 "POSITION": pos_acc,
                 "NORMAL":   nrm_acc,
@@ -1084,17 +1326,67 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
             "mode":     4,   # TRIANGLES
         })
 
-    if not primitives:
+    if not part_prims:
         return None
+
+    # ── Nodes + meshes: one per part, TRS from the rest-pose placement frame ──
+    meshes_json = []
+    nodes_json  = []
+    node_of_part = {}   # part_idx -> node index
+    for part_idx in sorted(part_prims):
+        (ox, oy, oz), (qw, qx, qy, qz) = part_nodes.get(
+            part_idx, ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)))
+        m_idx = len(meshes_json)
+        meshes_json.append({"name": f"part{part_idx}",
+                            "primitives": part_prims[part_idx]})
+        node_of_part[part_idx] = len(nodes_json)
+        nodes_json.append({
+            "mesh": m_idx,
+            "name": f"part{part_idx}",
+            "translation": [ox, oy, oz],
+            "rotation": [qx, qy, qz, qw],   # glTF quats are xyzw; AC is wxyz
+        })
+
+    # ── Animation: per-part translation + rotation channels ──────────────────
+    animations_json = []
+    if anim_frames:
+        n_anim_parts = len(anim_frames[0])
+        nframes = len(anim_frames)
+        times = b"".join(struct.pack("<f", f / anim_framerate) for f in range(nframes))
+        time_acc = add_accessor(times, nframes, "SCALAR", FLOAT, "SCALAR",
+                                [0.0], [(nframes - 1) / anim_framerate])
+        samplers, channels = [], []
+        for part_idx, node_idx in node_of_part.items():
+            if part_idx >= n_anim_parts:
+                continue   # part not driven by this animation — stays at rest
+            tdata = b"".join(struct.pack("<3f", *anim_frames[f][part_idx][0])
+                             for f in range(nframes))
+            # AC quats are (w,x,y,z); glTF wants (x,y,z,w)
+            rdata = b"".join(struct.pack("<4f",
+                                         anim_frames[f][part_idx][1][1],
+                                         anim_frames[f][part_idx][1][2],
+                                         anim_frames[f][part_idx][1][3],
+                                         anim_frames[f][part_idx][1][0])
+                             for f in range(nframes))
+            t_acc = add_accessor(tdata, nframes, "VEC3", FLOAT, "VEC3")
+            r_acc = add_accessor(rdata, nframes, "VEC4", FLOAT, "VEC4")
+            for path, out_acc in (("translation", t_acc), ("rotation", r_acc)):
+                channels.append({"sampler": len(samplers),
+                                 "target": {"node": node_idx, "path": path}})
+                samplers.append({"input": time_acc, "output": out_acc,
+                                 "interpolation": "LINEAR"})
+        if channels:
+            animations_json.append({"name": "idle", "samplers": samplers,
+                                    "channels": channels})
 
     bin_bytes = bin_buf.getvalue()
 
     gltf = {
         "asset": {"version": "2.0", "generator": "ACEForge DatLoader"},
         "scene":  0,
-        "scenes": [{"nodes": [0]}],
-        "nodes":  [{"mesh": 0, "name": f"Setup_0x{setup_id:08X}"}],
-        "meshes": [{"name": f"0x{setup_id:08X}", "primitives": primitives}],
+        "scenes": [{"nodes": list(range(len(nodes_json)))}],
+        "nodes":  nodes_json,
+        "meshes": meshes_json,
         "materials":  materials_json,
         "textures":   textures_json,
         "images":     images_json,
@@ -1103,6 +1395,8 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
         "bufferViews": bufviews,
         "buffers": [{"byteLength": len(bin_bytes)}],
     }
+    if animations_json:
+        gltf["animations"] = animations_json
 
     return _pack_glb(json.dumps(gltf, separators=(",", ":")), bin_bytes)
 
@@ -1128,7 +1422,7 @@ def _rgba_to_png(rgba: bytes, w: int, h: int) -> bytes:
 # ── Cache helpers (used by app_api.py) ───────────────────────────────────────
 
 # Increment this when parse logic changes — forces cache invalidation
-_PARSER_VERSION = "v11"
+_PARSER_VERSION = "v14"
 
 def get_cache_dir() -> Path:
     appdata = os.environ.get("APPDATA", str(Path.home()))
@@ -1137,17 +1431,25 @@ def get_cache_dir() -> Path:
     return d
 
 
-def cached_glb_path(setup_id: int) -> Path:
-    # Version in filename forces re-parse when parser changes
-    return get_cache_dir() / f"{setup_id:08X}_{_PARSER_VERSION}.glb"
+def cached_glb_path(setup_id: int, clothing_id: int = 0,
+                    motion_id: int = 0) -> Path:
+    # Version in filename forces re-parse when parser changes; clothing id
+    # distinguishes the same body setup dressed in different armor, and motion
+    # id distinguishes animated vs static exports.
+    clo = f"_C{clothing_id:08X}" if clothing_id else ""
+    mot = f"_M{motion_id:08X}" if motion_id else ""
+    return get_cache_dir() / f"{setup_id:08X}{clo}{mot}_{_PARSER_VERSION}.glb"
 
 
-def get_or_export_glb(db: DatDatabase, setup_id: int) -> Optional[Path]:
+def get_or_export_glb(db: DatDatabase, setup_id: int,
+                      clothing_id: int = 0,
+                      motion_id: int = 0) -> Optional[Path]:
     """Return path to cached GLB, exporting from DAT if needed."""
-    p = cached_glb_path(setup_id)
+    p = cached_glb_path(setup_id, clothing_id, motion_id)
     if p.exists():
         return p
-    glb = export_setup_glb(db, setup_id)
+    glb = export_setup_glb(db, setup_id, clothing_id=clothing_id,
+                           motion_id=motion_id)
     if glb is None:
         return None
     p.write_bytes(glb)
