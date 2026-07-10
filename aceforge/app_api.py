@@ -60,6 +60,7 @@ class AppAPI(LoreMixin):
             "quest_output_dir":  self.config.get("quest_output_dir", ""),
             "event_output_dir":  self.config.get("event_output_dir", ""),
             "wcid_ranges":  self.config.get_wcid_ranges(),
+            "base_wcid_ranges": self.config.get_base_wcid_ranges(),
             "auto_open_folder": self.config.get("auto_open_folder", True),
             "ollama_mode":     self.config.get("ollama_mode", False),
             # Send provider metadata to JS for building the UI
@@ -83,6 +84,22 @@ class AppAPI(LoreMixin):
                 self.config.api_key = data["api_key"]
             if "wcid_ranges" in data:
                 self.config.set("wcid_ranges", data["wcid_ranges"])
+            if "base_wcid_ranges" in data and isinstance(data["base_wcid_ranges"], list):
+                cleaned = []
+                for r in data["base_wcid_ranges"]:
+                    try:
+                        cleaned.append({
+                            "key":     str(r.get("key") or "").strip(),
+                            "name":    str(r.get("name") or "").strip(),
+                            "min":     int(r["min"]),
+                            "max":     int(r["max"]),
+                            "folder":  str(r.get("folder") or "").strip(),
+                            "builtin": bool(r.get("builtin", False)),
+                        })
+                    except (KeyError, TypeError, ValueError, AttributeError):
+                        continue
+                if cleaned:
+                    self.config.set("base_wcid_ranges", cleaned)
 
             self.config.save()
 
@@ -486,11 +503,52 @@ class AppAPI(LoreMixin):
             return "recipe"
         return "weenie"  # default: creatures, NPCs, items, gear, quest-flag weenies
 
+    @staticmethod
+    def _extract_wcid(sql: str):
+        """Pull the weenie WCID from SQL — DELETE header first, then the
+        weenie INSERT. Returns int or None."""
+        m = re.search(r"DELETE\s+FROM\s+`?weenie`?\s+WHERE\s+`?class_Id`?\s*=\s*(\d+)", sql, re.I)
+        if not m:
+            m = re.search(r"INSERT\s+INTO\s+`?weenie`?\s*\([^)]*\)\s*VALUES\s*\(\s*(\d+)", sql, re.I)
+        return int(m.group(1)) if m else None
+
+    def _folder_token_to_dir(self, token: str) -> str:
+        """Resolve a base-WCID-range folder value to a directory path.
+        '' = unset, 'default' = main output dir, 'weenie'/'recipe'/'quest'/
+        'event' = that type's configured dir, anything else = custom path."""
+        t = str(token or "").strip()
+        if not t:
+            return ""
+        if t == "default":
+            return str(self.config.output_dir or "").strip()
+        if t in ("weenie", "recipe", "quest", "event"):
+            return str(self.config.output_dir_for(t) or "").strip()
+        return t
+
+    def _range_folder_for_wcid(self, wcid: int) -> str:
+        """Return the configured output dir for the base WCID range containing
+        wcid, or '' if no range matches or the matching range has no folder."""
+        for r in self.config.get_base_wcid_ranges():
+            try:
+                if int(r.get("min")) <= wcid <= int(r.get("max")):
+                    return self._folder_token_to_dir(r.get("folder"))
+            except (TypeError, ValueError):
+                continue
+        return ""
+
     def _resolve_output_dir(self, sql: str) -> str:
-        """Pick the output directory for a piece of SQL based on its type,
-        creating it if needed. Falls back to the default output dir."""
+        """Pick the output directory for a piece of SQL, creating it if needed.
+        Weenie files whose WCID falls in a base WCID range with a folder
+        override go to that folder; everything else routes by file type,
+        falling back to the default output dir."""
         ftype = self._detect_sql_type(sql)
-        output_dir = str(self.config.output_dir_for(ftype) or "").strip()
+        output_dir = ""
+        if ftype == "weenie":
+            wcid = self._extract_wcid(sql)
+            if wcid is not None:
+                output_dir = self._range_folder_for_wcid(wcid)
+        if not output_dir:
+            output_dir = str(self.config.output_dir_for(ftype) or "").strip()
         if not output_dir:
             output_dir = str(Path.home() / "Documents" / "ACEForge" / "output")
         Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -530,7 +588,9 @@ class AppAPI(LoreMixin):
         for d in ([self.config.output_dir] +
                   [self.config.get(k, "") for k in (
                       "weenie_output_dir", "recipe_output_dir",
-                      "quest_output_dir", "event_output_dir")]):
+                      "quest_output_dir", "event_output_dir")] +
+                  [self._folder_token_to_dir(r.get("folder"))
+                   for r in self.config.get_base_wcid_ranges()]):
             d = str(d or "").strip()
             if d and d not in seen:
                 seen.add(d); dirs.append(Path(d))
@@ -959,7 +1019,8 @@ Start with: /* ===== FILE: {fname} ===== */
         Weenie directory (each file classified by its own content)."""
         try:
             output_dir = self._resolve_output_dir(content)
-            written = parse_and_save_files(content, output_dir, subfolder="")
+            written = parse_and_save_files(content, output_dir, subfolder="",
+                                           dir_for_content=self._resolve_output_dir)
             if not written:
                 # Fallback: save with suggested name
                 from aceforge.sql_parser import sanitize_filename, clean_sql
@@ -971,7 +1032,7 @@ Start with: /* ===== FILE: {fname} ===== */
             return {
                 "success": True,
                 "files": [os.path.basename(f) for f in written],
-                "folder": output_dir,
+                "folder": os.path.dirname(written[0]) if written else output_dir,
             }
         except Exception as e:
             import traceback
@@ -1048,14 +1109,15 @@ Start with: /* ===== FILE: {fname} ===== */
                 output_dir = str(Path.home() / "Documents" / "ACEForge" / "output")
             # Ensure output dir exists
             Path(output_dir).mkdir(parents=True, exist_ok=True)
-            written = parse_and_save_files(full_response, output_dir, subfolder="")
+            written = parse_and_save_files(full_response, output_dir, subfolder="",
+                                           dir_for_content=self._resolve_output_dir)
             if not written:
                 return {"success": False, "error": "Parser found no SQL content in response. Ensure AI output contains FILE: markers or valid SQL."}
             return {
                 "success": True,
                 "files":  [os.path.basename(f) for f in written],
                 "count":  len(written),
-                "folder": output_dir,
+                "folder": os.path.dirname(written[0]),
             }
         except PermissionError as e:
             return {"success": False, "error": f"Permission denied writing to output directory: {e}"}

@@ -21,6 +21,20 @@ DEFAULT_WCID_RANGES = {
     "kill_tasks":         {"start": 1000000,"next": 1000025,"label": "Kill Tasks (KT Flags)"},
 }
 
+# Base WCID ranges shown in Settings — users can edit min/max and add their
+# own categories. Distinct from wcid_ranges above, which tracks the AI
+# generator's next-available allocation cursor.
+# Each range's "folder" controls where files whose WCID falls in the range are
+# saved: "" = auto by file type, "default" = main output dir, one of
+# "weenie"/"recipe"/"quest"/"event" = that type's configured dir, or an
+# absolute path for a custom folder.
+DEFAULT_BASE_WCID_RANGES = [
+    {"key": "npcs",      "name": "NPCs",      "min": 800000, "max": 809999, "folder": "", "builtin": True},
+    {"key": "creatures", "name": "Creatures", "min": 810000, "max": 819999, "folder": "", "builtin": True},
+    {"key": "gear",      "name": "Gear",      "min": 820000, "max": 829999, "folder": "", "builtin": True},
+    {"key": "items",     "name": "Items",     "min": 830000, "max": 839999, "folder": "", "builtin": True},
+]
+
 DEFAULT_CONFIG = {
     # Provider: "anthropic" | "openai" | "compatible"
     "provider":    "ollama",
@@ -38,6 +52,7 @@ DEFAULT_CONFIG = {
     "quest_output_dir":  "",
     "event_output_dir":  "",
     "wcid_ranges": DEFAULT_WCID_RANGES,
+    "base_wcid_ranges": DEFAULT_BASE_WCID_RANGES,
 }
 
 
@@ -160,3 +175,9 @@ class Config:
 
     def get_wcid_ranges(self) -> dict:
         return self._data.get("wcid_ranges", DEFAULT_WCID_RANGES)
+
+    def get_base_wcid_ranges(self) -> list:
+        ranges = self._data.get("base_wcid_ranges")
+        if not isinstance(ranges, list) or not ranges:
+            ranges = [dict(r) for r in DEFAULT_BASE_WCID_RANGES]
+        return ranges

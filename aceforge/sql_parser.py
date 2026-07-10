@@ -151,16 +151,31 @@ def parse_and_save_files(
     full_response: str,
     output_dir: str,
     subfolder: str = "",
+    dir_for_content=None,
 ) -> list[str]:
     """
     Parse a complete Claude response into individual SQL files.
     Returns list of file paths that were written.
     If no FILE: markers are found, saves the entire response as a single file.
+    dir_for_content: optional callable(sql) -> dir path, letting each file be
+    routed individually (e.g. by WCID range); falls back to output_dir.
     """
     output_path = Path(output_dir)
     if subfolder:
         output_path = output_path / subfolder
     output_path.mkdir(parents=True, exist_ok=True)
+
+    def _dest(content: str) -> Path:
+        if dir_for_content:
+            try:
+                d = str(dir_for_content(content) or "").strip()
+                if d:
+                    p = Path(d)
+                    p.mkdir(parents=True, exist_ok=True)
+                    return p
+            except Exception:
+                pass
+        return output_path
 
     written = []
     segments = FILE_HEADER_LOOSE_RE.split(full_response)
@@ -182,7 +197,7 @@ def parse_and_save_files(
         else:
             fname = "output.sql"
 
-        fpath = output_path / fname
+        fpath = _dest(full_response) / fname
         fpath.write_text(clean_sql(full_response), encoding="utf-8")
         written.append(str(fpath))
         return written
@@ -198,7 +213,7 @@ def parse_and_save_files(
             continue
 
         fname = sanitize_filename(raw_name)
-        fpath = output_path / fname
+        fpath = _dest(content) / fname
         fpath.write_text(clean_sql(content), encoding="utf-8")
         written.append(str(fpath))
 
