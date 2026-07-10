@@ -1106,7 +1106,6 @@ const QUEST_BRANCH_ACTIONS = new Set([21,30,80,82,58,59]);
 // Event-style: success gets event name, failure gets null quest
 const EVENT_BRANCH_ACTIONS = new Set([51]);
 // Stat/item-style: success gets auto-key, failure gets null quest
-const STAT_BRANCH_ACTIONS  = new Set([76,75,35,36,37,38,39,40,41,42,43,44,45,46,71,89]);
 // Categories that are branch RESULTS (never top-level triggers)
 const BRANCH_RESULT_CATS   = new Set([12,13,22,23,27,28,35,36,31]);
 let createList    = [];
@@ -1127,7 +1126,6 @@ let _aiLastChunkTime = 0;   // timestamp of last chunk/activity from poll
 let _aiStallCount    = 0;   // consecutive empty polls while aiGenerating=true
 let aiFullText    = '';
 let curAIType     = 'creature';
-let curAISub      = 'npc';
 // ── DATA LOADING ─────────────────────────────────────────────────────────────
 let SPELLS=[], WEAPONS=[], ARMOR=[];
 async function loadData(){
@@ -1154,21 +1152,6 @@ const DEFAULT_NAMES={
 // Maps CreatureType ID → {did_type: default_value} for auto-population when
 // creature type changes. Values from standard ACE weenie database.
 // Setup=DID1 (3D model), Icon=DID8, MotionTable=DID6, SoundTable=DID9, PhysicsEffectTable=DID22
-const CREATURE_TYPE_DID_DEFAULTS = {
-  // Human family (bipeds)
-  1:  { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Undefined
-  10: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Raven (avian)
-  16: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Quadruped
-  17: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Armoredillo
-  19: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Virindi
-  20: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Wisp/Elemental
-  23: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Quadruped (alt)
-  29: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Wisp (alt)
-  31: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Human
-  44: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Grievver
-  46: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // Quadruped (alt2)
-  48: { 6:0x09000001, 9:0x20000001, 22:0x38000000 },   // HollowMinion
-};
 // Note: Setup (DID 1) varies per creature and should be set manually from the
 // weenie database. The above provides Motion/Sound/Physics defaults only.
 // A full DID database per creature type requires the ACE weenie reference files.
@@ -1176,14 +1159,7 @@ const CREATURE_TYPE_DID_DEFAULTS = {
 const CREATURE_TYPES=[[0,'None'],[1,'Olthoi'],[2,'Banderling'],[3,'Drudge'],[4,'Mosswart'],[5,'Lugian'],[6,'Tumerok'],[7,'Mite'],[8,'Tusker'],[13,'Golem'],[14,'Undead'],[15,'Gromnie'],[16,'Reedshark'],[17,'Armoredillo'],[18,'Fae'],[19,'Virindi'],[20,'Wisp'],[22,'Shadow'],[23,'Mattekar'],[28,'Monouga'],[29,'Zefir'],[30,'Skeleton'],[31,'Human'],[32,'Shreth'],[38,'FireElemental'],[39,'Snowman'],[44,'Grievver'],[46,'Ursuin'],[48,'HollowMinion'],[60,'AcidElemental'],[61,'FrostElemental'],[75,'Burun'],[99,'GearKnight'],[100,'Gurog'],[101,'Anekshay']];
 const DMG_TYPES=[[0,'None'],[1,'Slash'],[2,'Pierce'],[4,'Bludgeon'],[8,'Cold'],[16,'Fire'],[32,'Acid'],[64,'Electric'],[1024,'Nether']];
 const WEP_SKILLS=[[44,'HeavyWeapons'],[45,'LightWeapons'],[46,'FinesseWeapons'],[41,'TwoHandedCombat'],[47,'MissileWeapons'],[34,'WarMagic'],[33,'LifeMagic'],[43,'VoidMagic']];
-const COMBAT_STYLES=[[2,'OneHanded'],[4,'OneHanded+Shield'],[8,'TwoHanded'],[512,'Magic'],[16,'Bow'],[32,'Crossbow'],[128,'ThrownWeapon']];
-const ATTACK_TYPES=[[0,'None'],[1,'Punch'],[2,'Thrust'],[4,'Slash'],[6,'Thrust+Slash'],[8,'Kick'],[32,'DoubleSlash'],[64,'TripleSlash']];
-const ARMOR_SLOTS=[[1,'Head'],[2,'Chest'],[4,'Abdomen'],[8,'UpperArm'],[16,'LowerArm'],[32,'Hand'],[64,'UpperLeg'],[128,'LowerLeg'],[256,'Foot'],[512,'ChestArmor'],[1024,'AbdomenArmor'],[2048,'UpperArmArmor'],[4096,'LowerArmArmor'],[8192,'UpperLegArmor'],[16384,'LowerLegArmor'],[32768,'NeckWear'],[65536,'Cloak'],[1048576,'Necklace'],[134217728,'RingL'],[268435456,'RingR']];
 const ARMOR_TYPES=[[0,'None'],[1,'Cloth'],[2,'Leather'],[3,'StuddedLeather'],[4,'Scale'],[5,'Chainmail'],[6,'DiffusingWeave'],[7,'Amuli'],[8,'Celdon'],[9,'Haebrean'],[10,'Yoroi'],[11,'Platemail'],[12,'Lorica'],[13,'Nariyid'],[14,'Alduressa'],[15,'Covenant'],[17,'Koveras'],[18,'Olthoi']];
-const ITEM_USE=[[1,'No'],[2,'Self'],[4,'Wielded'],[8,'Contained'],[16,'Viewed'],[32,'Remote']];
-const BONDED=[[-2,'Destroy on Death'],[-1,'Slippery'],[0,'Normal'],[1,'Bonded (kept)'],[2,'Sticky']];
-const ATTUNED=[[0,'Normal'],[1,'Attuned'],[2,'Sticky']];
-const PALETTES=[[0,'None'],[1,'AquaBlue'],[2,'Blue'],[4,'Brown'],[8,'Green'],[9,'Grey'],[14,'Red'],[17,'Yellow'],[19,'Copper'],[20,'Silver'],[21,'Gold'],[39,'Black'],[40,'Bronze'],[41,'SandyYellow'],[46,'Tan'],[47,'PastyYellow'],[48,'White']];
 const ALL_SKILLS=[
   [1,'Axe'],[2,'Bow'],[3,'Crossbow'],[4,'Dagger'],[5,'Mace'],
   [6,'MeleeDefense'],[7,'MissileDefense'],[8,'Sling'],[9,'Spear'],[10,'Staff'],
@@ -1202,7 +1178,6 @@ const ALL_SKILLS=[
   [52,'DirtyFighting'],[53,'Challenge'],[54,'Summoning'],
 ];
 const SKILL_SAC=[[1,'Untrained'],[2,'Trained'],[3,'Specialized']];
-const RADAR_COLORS=[[1,'Blue'],[2,'Gold'],[3,'White'],[4,'Purple'],[5,'Red'],[7,'Green'],[8,'Yellow (NPC)']];
 const WEENIE_TYPES=[[1,'Generic'],[2,'Clothing/Armor'],[3,'MissileLauncher'],[4,'Missile'],[6,'MeleeWeapon'],[7,'Portal'],[8,'Book'],[9,'Coin'],[10,'Creature'],[12,'Vendor'],[18,'Food'],[19,'Door'],[20,'Chest'],[21,'Container'],[22,'Key'],[24,'PressurePlate'],[25,'LifeStone'],[26,'Switch'],[28,'Healer'],[29,'LightSource'],[32,'SpellComponent'],[34,'Scroll'],[35,'Caster'],[37,'ManaStone'],[38,'Gem'],[51,'Stackable']];
 const PROP_INT={
   1:'ItemType',
@@ -2114,7 +2089,6 @@ const MOTIONS_STATE=[
   [1124073724,'WoahState'],[1124073725,'WindedState'],[1124073752,'SnowAngelState'],
   [1124073754,'CurtseyState'],[1124073755,'AFKState'],[1124073756,'MeditateState'],
 ];
-const MOTIONS_ALL=[...MOTIONS_IDLE,...MOTIONS_MONSTER,...MOTIONS_VENDOR];
 const MOTIONS_FORCE=[...MOTIONS_PLAYER,...MOTIONS_IDLE,...MOTIONS_MONSTER,...MOTIONS_VENDOR,...MOTIONS_STATE];
 
 // Searchable stat dropdowns
@@ -2632,28 +2606,7 @@ const PROP_DROPDOWNS={
   PROP_DROPDOWNS['70']=rows;   // HomesickTargetingTactic (same enum)
 })();
 
-const BODY_PARTS_BIPED=[
-  {k:0,name:'Head'},{k:1,name:'Chest'},{k:2,name:'Abdomen'},
-  {k:3,name:'UpperArm'},{k:4,name:'LowerArm'},{k:5,name:'Hand'},
-  {k:6,name:'UpperLeg'},{k:7,name:'LowerLeg'},{k:8,name:'Foot'}
-];
 
-const BODY_PARTS_QUADRUPED=[
-  {k:0,name:'Head'},{k:1,name:'Front (Chest)'},{k:2,name:'Abdomen'},
-  {k:3,name:'Upper Front Leg'},{k:4,name:'Lower Front Leg'},{k:5,name:'Front Foot'},
-  {k:6,name:'Upper Hind Leg'},{k:7,name:'Lower Hind Leg'},{k:8,name:'Hind Foot'}
-];
-const BODY_PARTS_INSECT=[
-  {k:0,name:'Head'},{k:1,name:'Thorax'},{k:2,name:'Abdomen'},
-  {k:3,name:'Front Left Leg'},{k:4,name:'Front Right Leg'},
-  {k:5,name:'Mid Left Leg'},{k:6,name:'Mid Right Leg'},
-  {k:7,name:'Rear Left Leg'},{k:8,name:'Rear Right Leg'}
-];
-const BODY_PARTS_FLOATING=[
-  {k:0,name:'Body (Upper)'},{k:1,name:'Body (Lower)'},{k:2,name:'Appendage 1'},
-  {k:3,name:'Appendage 2'},{k:4,name:'Appendage 3'},{k:5,name:'Appendage 4'},
-  {k:6,name:'Tendril 1'},{k:7,name:'Tendril 2'},{k:8,name:'Core'}
-];
 
 // PALETTE_ENTRY_INT lookup table (PaletteTemplate, PROP_INT id 3). Third field is the swatch hex
 // pulled from the sheet's actual cell fill color where the sheet author filled one in — many rows
@@ -2670,256 +2623,9 @@ function buildProps(){
   if(t==='event') return buildEventProps();
   if(t==='recipe') return buildRecipeProps();
   return buildAdvanced();
-  // Legacy form code below kept for reference but no longer rendered:
-  if(false&&t==='jewelry') return buildJewelryProps();
-  const isCreature=t==='creature'||t==='npc';
-  let h='';
-  if(isCreature){
-    h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Identity</div><div class=\"sl\"></div></div>
-    <div class=\"grid g3\">
-      <div class=\"fg\"><div class=\"fl\">Creature Type <span class=\"fc\">I-2</span></div><select id=\"cType\" onchange=\"onCTypeChange()\" style=\"max-width:200px\">${CREATURE_TYPES.map(([v,l])=>`<option value=\"${v}\"${v===31?' selected':''}>${v}  ${l}</option>`).join('')}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Default Scale <span class=\"fc\">F-39</span></div><input type=\"text\" id=\"fScale\" value=\"1.0\"></div>
-      <div class=\"fg\"><div class=\"fl\">Palette <span class=\"fc\">I-3</span></div><select id=\"fPalette\">${opt(PALETTES,9)}</select></div>
-    </div></div>`;
-    if(t==='creature'){
-      h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Combat</div><div class=\"sl\"></div></div>
-      <div class=\"grid g3\">
-        <div class=\"fg\"><div class=\"fl\">Damage <span class=\"fc\">I-44</span></div><input type=\"number\" id=\"fDmg\" value=\"80\"></div>
-        <div class=\"fg\"><div class=\"fl\">Damage Type <span class=\"fc\">I-45</span></div><select id=\"fDmgType\">${opt(DMG_TYPES,1)}</select></div>
-        <div class=\"fg\"><div class=\"fl\">Weapon Skill <span class=\"fc\">I-48</span></div><select id=\"fWepSkill\">${opt(WEP_SKILLS,44)}</select></div>
-        <div class=\"fg\"><div class=\"fl\">Combat Style <span class=\"fc\">I-101</span></div><select id=\"fCombatStyle\">${opt(COMBAT_STYLES,2)}</select></div>
-        <div class=\"fg\"><div class=\"fl\">Attack Type <span class=\"fc\">I-47</span></div><select id=\"fAttackType\">${opt(ATTACK_TYPES,4)}</select></div>
-        <div class=\"fg\"><div class=\"fl\">Death Treasure <span class=\"fc\">DID-35</span></div><input type=\"number\" id=\"fTreasureTier\" value=\"3100\"></div>
-      </div></div>
-      <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Resistances</div><div class=\"sl\"></div></div>
-      <div class=\"rg\">${[['Slash','rSlash'],['Pierce','rPierce'],['Bludge','rBludge'],['Cold','rCold'],['Fire','rFire'],['Acid','rAcid'],['Elec','rElec'],['Nether','rNether']].map(([l,id])=>`<div class=\"fg\"><div class=\"fl\">${l} <span class=\"fc\">F</span></div><input type=\"text\" id=\"${id}\" value=\"1.0\"></div>`).join('')}</div></div>
-      <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Vitals &amp; Rewards</div><div class=\"sl\"></div></div>
-      <div class=\"grid g3\">
-        <div class=\"fg\"><div class=\"fl\">Max Health <span class=\"fc\">V-1</span></div><input type=\"number\" id=\"fHP\" value=\"2000\"></div>
-        <div class=\"fg\"><div class=\"fl\">Max Stamina <span class=\"fc\">V-3</span></div><input type=\"number\" id=\"fStam\" value=\"2000\"></div>
-        <div class=\"fg\"><div class=\"fl\">Max Mana <span class=\"fc\">V-5</span></div><input type=\"number\" id=\"fMana\" value=\"800\"></div>
-        <div class=\"fg\"><div class=\"fl\">Luminance Award <span class=\"fc\">I-332</span></div><input type=\"number\" id=\"fLum\" value=\"5000\"></div>
-        <div class=\"fg\"><div class=\"fl\">Aggro Range <span class=\"fc\">F-31</span></div><input type=\"text\" id=\"fAggroRange\" value=\"16.0\"></div>
-        <div class=\"fg\"><div class=\"fl\">Casts Magic <span class=\"fc\">B-6</span></div><select id=\"fUsesMana\"><option value=\"0\">No</option><option value=\"1\">Yes</option></select></div>
-      </div></div>
-    <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Contains Treasure</div><div class=\"sl\"></div></div>
-      <p class=\"note\" style=\"margin-bottom:8px\">Items that drop on death (CorpseDrop) or are contained/wielded. Use existing WCIDs for in-game items (Pyreals=273, MMD=20634)  do NOT create new weenies for them.</p>
-      <div id=\"createListRows\">${buildCreateListRows()}</div>
-      <button class=\"add-btn\" onclick=\"addCreateListRow()\">+ Add Item</button>
-    </div>
-    <div class=\"sec\"><div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Creature Ratings</div><div class=\"sl\"></div></div>
-    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323']].map(([l,id,fc])=>`
-      <div style=\"display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)\">
-        <div style=\"flex:1;font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)\">${l} <span class=\"fc\">${fc}</span></div>
-        <input type=\"number\" id=\"${id}\" value=\"0\" style=\"width:100px;text-align:right;border-bottom:1px solid var(--border)\">
-      </div>`).join('')}
-        </div>`;
-    }
-    if(t==='npc'){
-      const isVendor=gi('fWType',10)===12;
-      h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">NPC Settings</div><div class=\"sl\"></div></div>
-      <div class=\"grid g3\">
-        <div class=\"fg\"><div class=\"fl\">Use Radius <span class=\"fc\">F-54</span></div><input type=\"text\" id=\"fUseRadius\" value=\"3.0\"></div>
-        <div class=\"fg\"><div class=\"fl\">Radar Color <span class=\"fc\">I-95</span></div><select id=\"fRadarColor\">${opt(RADAR_COLORS,8)}</select></div>
-        <div class=\"fg\"><div class=\"fl\">Max Health <span class=\"fc\">V-1</span></div><input type=\"number\" id=\"fHP\" value=\"500\"></div>
-        <div class=\"fg\" style=\"grid-column:span 3\"><div class=\"fl\">Short Description <span class=\"fc\">S-15</span></div><input type=\"text\" id=\"fShortDesc\" value=\"\"></div>
-        <div class=\"fg\" style=\"grid-column:span 3\"><div class=\"fl\">Long Description <span class=\"fc\">S-16</span></div><input type=\"text\" id=\"fLongDesc\" value=\"\"></div>
-      </div></div>`;
-      if(isVendor){
-        h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Vendor Settings</div><div class=\"sl\"></div></div>
-        <div class=\"grid g3\">
-          <div class=\"fg\"><div class=\"fl\">Buy Price Multiplier <span class=\"fc\">F-37</span></div><input type=\"text\" id=\"fBuyRate\" value=\"1.0\"></div>
-          <div class=\"fg\"><div class=\"fl\">Sell Price Multiplier <span class=\"fc\">F-38</span></div><input type=\"text\" id=\"fSellRate\" value=\"1.1\"></div>
-          <div class=\"fg\"><div class=\"fl\">Min Value Buys <span class=\"fc\">I-75</span></div><input type=\"number\" id=\"fMerchMinVal\" value=\"0\"></div>
-          <div class=\"fg\"><div class=\"fl\">Max Value Buys <span class=\"fc\">I-76</span></div><input type=\"number\" id=\"fMerchMaxVal\" value=\"0\"></div>
-          <div class=\"fg\"><div class=\"fl\">Item Types Buys <span class=\"fc\">I-74</span></div><input type=\"number\" id=\"fMerchItemTypes\" value=\"0\"></div>
-          <div class=\"fg\"><div class=\"fl\">Happy Mean <span class=\"fc\">I-126</span></div><input type=\"number\" id=\"fVendorHappy\" value=\"0\"></div>
-        </div></div>`;
-      }
-    h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Contains Treasure</div><div class=\"sl\"></div></div>
-      <p class=\"note\" style=\"margin-bottom:8px\">Items the NPC contains, wields, or sells. Use existing WCIDs (273=Pyreals, 20634=MMD). Destination: Contain=0, Wield=1, Shop=5.</p>
-      <div id=\"createListRows\">${buildCreateListRows()}</div>
-      <button class=\"add-btn\" onclick=\"addCreateListRow()\">+ Add Item</button>
-    </div>
-    <div class=\"sec\"><div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Creature Ratings</div><div class=\"sl\"></div></div>
-    ${[['Dmg Rating','fDmgRating','I-307'],['Dmg Resist','fDmgResist','I-308'],['Crit Rating','fCritRating','I-313'],['CritDmg Rating','fCritDmgRating','I-314'],['CritRes Rating','fCritResRating','I-315'],['Heal Resist','fHealResist','I-317'],['Heal Boost','fHealBoost','I-323']].map(([l,id,fc])=>`
-      <div style=\"display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)\">
-        <div style=\"flex:1;font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)\">${l} <span class=\"fc\">${fc}</span></div>
-        <input type=\"number\" id=\"${id}\" value=\"0\" style=\"width:100px;text-align:right;border-bottom:1px solid var(--border)\">
-      </div>`).join('')}
-    </div>`;
-    }
-  }
-  if(t==='item'){
-
-    h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Quick Preset</div><div class=\"sl\"></div></div>
-    <div style=\"display:flex;gap:8px;align-items:center;margin-bottom:4px\">
-      <select id=\"itemPresetSel\" style=\"flex:1;font-family:var(--ui-font);font-size:11px;padding:6px 8px;border:1px solid var(--border);background:var(--parch);color:var(--ink);\" onchange=\"applyItemPreset(this.value)\">
-        <option value=\"\">— Select a preset —</option>
-        <optgroup label=\"Common Items\">
-          <option value=\"questtoken\">Quest Token</option>
-          <option value=\"stackabletoken\">Stackable Token</option>
-          <option value=\"healingkit\">Healing Kit</option>
-          <option value=\"potion\">Potion (Food)</option>
-          <option value=\"key\">Key</option>
-          <option value=\"lockpick\">Lockpick</option>
-          <option value=\"gem\">Gem</option>
-          <option value=\"manastone\">Mana Stone</option>
-        </optgroup>
-        <optgroup label=\"Ammunition & Combat\">
-          <option value=\"arrow\">Arrow (Ammunition)</option>
-          <option value=\"bolt\">Bolt (Ammunition)</option>
-          <option value=\"atlatl\">Atlatl Dart (Ammunition)</option>
-        </optgroup>
-        <optgroup label=\"Containers & Storage\">
-          <option value=\"chest\">Chest / Loot Box</option>
-          <option value=\"container\">Backpack / Container</option>
-        </optgroup>
-        <optgroup label=\"Crafting\">
-          <option value=\"spellcomp\">Spell Component</option>
-          <option value=\"tinkmaterial\">Tinkering Material</option>
-          <option value=\"salvage\">Salvage Bag</option>
-          <option value=\"alchemybase\">Alchemy Base</option>
-          <option value=\"cookingbase\">Cooking Base</option>
-        </optgroup>
-        <optgroup label=\"Readable\">
-          <option value=\"book\">Book</option>
-          <option value=\"scroll\">Scroll</option>
-          <option value=\"note\">Promissory Note</option>
-        </optgroup>
-        <optgroup label=\"Misc\">
-          <option value=\"coin\">Coin / Pyreals</option>
-          <option value=\"lightsource\">Light Source</option>
-          <option value=\"thrownweapon\">Thrown Weapon (Misc)</option>
-          <option value=\"petdoll\">Pet Doll</option>
-          <option value=\"augstone\">Augmentation Stone</option>
-        </optgroup>
-      </select>
-    </div></div>`;
-    h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Item Database Lookup</div><div class=\"sl\"></div></div>
-    <div class=\"fg sdrop-wrap\"><div class=\"fl\">Search by name to pre-fill values</div>
-      <input type=\"text\" id=\"itemSearch\" placeholder=\"Type item name\" autocomplete=\"off\" onfocus=\"openItemSearch(this.value)\" oninput=\"searchItemFn(this.value)\">
-      <div class=\"sdrop-box\" id=\"itemSearch_drop\"><div class=\"sdrop-none\">Type to search items</div></div>
-    </div></div>
-    <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Item Properties</div><div class=\"sl\"></div></div>
-    <div class=\"grid g3\">
-      <div class=\"fg\"><div class=\"fl\">Value <span class=\"fc\">I-19</span></div><input type=\"number\" id=\"fValue\" value=\"100\"></div>
-      <div class=\"fg\"><div class=\"fl\">Encumbrance <span class=\"fc\">I-5</span></div><input type=\"number\" id=\"fEncumb\" value=\"10\"></div>
-      <div class=\"fg\"><div class=\"fl\">Max Stack Size <span class=\"fc\">I-11</span></div><input type=\"number\" id=\"fMaxStack\" value=\"1\"></div>
-      <div class=\"fg\"><div class=\"fl\">Item Useable <span class=\"fc\">I-16</span></div><select id=\"fItemUse\">${opt(ITEM_USE,1)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Bonded <span class=\"fc\">I-33</span></div><select id=\"fBonded\">${opt(BONDED,1)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Attuned <span class=\"fc\">I-114</span></div><select id=\"fAttuned\">${opt(ATTUNED,1)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Default Scale <span class=\"fc\">F-39</span></div><input type=\"text\" id=\"fScale\" value=\"1.0\"></div>
-      <div class=\"fg\"><div class=\"fl\">Palette <span class=\"fc\">I-3</span></div><select id=\"fPalette\">${opt(PALETTES,39)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Spellcraft <span class=\"fc\">I-106</span></div><input type=\"number\" id=\"fSpellcraft\" value=\"0\"></div>
-      <div class=\"fg span2\"><div class=\"fl\">Short Description <span class=\"fc\">S-15</span></div><input type=\"text\" id=\"fShortDesc\" value=\"\"></div>
-      <div class=\"fg span3\"><div class=\"fl\">Use Message <span class=\"fc\">S-14</span></div><input type=\"text\" id=\"fUseMsg\" value=\"\"></div>
-    </div>
-    <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Gear Ratings</div><div class=\"sl\"></div></div>
-    ${[['Dmg Rating','fDmgRating','I-370'],['Dmg Resist','fDmgResist','I-371'],['Crit Rating','fCritRating','I-372'],['CritDmg Rating','fCritDmgRating','I-373'],['CritRes Rating','fCritResRating','I-374'],['Heal Resist','fHealResist','I-375'],['Heal Boost','fHealBoost','I-376']].map(([l,id,fc])=>`
-      <div style=\"display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)\">
-        <div style=\"flex:1;font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)\">${l} <span class=\"fc\">${fc}</span></div>
-        <input type=\"number\" id=\"${id}\" value=\"0\" style=\"width:100px;text-align:right;border-bottom:1px solid var(--border)\">
-      </div>`).join('')}    </div>`;
-  }
-  if(t==='weapon'){
-    h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Weapon Database Lookup</div><div class=\"sl\"></div></div>
-    <div class=\"fg sdrop-wrap\"><div class=\"fl\">Search by name to pre-fill values</div>
-      <input type=\"text\" id=\"wepSearch\" placeholder=\"Type weapon name\" autocomplete=\"off\" onfocus=\"openWeaponSearch(this.value)\" oninput=\"searchWeaponFn(this.value)\">
-      <div class=\"sdrop-box\" id=\"wepSearch_drop\"><div class=\"sdrop-none\">Type to search</div></div>
-    </div></div>
-    <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Weapon Properties</div><div class=\"sl\"></div></div>
-    <div class=\"grid g3\">
-      <div class=\"fg\"><div class=\"fl\">Damage <span class=\"fc\">I-44</span></div><input type=\"number\" id=\"fDmg\" value=\"80\"></div>
-      <div class=\"fg\"><div class=\"fl\">Damage Type <span class=\"fc\">I-45</span></div><select id=\"fDmgType\">${opt(DMG_TYPES,1)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Weapon Skill <span class=\"fc\">I-48</span></div><select id=\"fWepSkill\">${opt(WEP_SKILLS,44)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Weapon Time <span class=\"fc\">I-49</span></div><input type=\"number\" id=\"fWepTime\" value=\"45\"></div>
-      <div class=\"fg\"><div class=\"fl\">Damage Variance <span class=\"fc\">F-22</span></div><input type=\"text\" id=\"fDmgVar\" value=\"0.4\"></div>
-      <div class=\"fg\"><div class=\"fl\">Attack Type <span class=\"fc\">I-47</span></div><select id=\"fAttackType\">${opt(ATTACK_TYPES,4)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Defense Mod <span class=\"fc\">F-29</span></div><input type=\"text\" id=\"fWepDef\" value=\"1.0\"></div>
-      <div class=\"fg\"><div class=\"fl\">Offense Mod <span class=\"fc\">F-62</span></div><input type=\"text\" id=\"fWepOff\" value=\"1.0\"></div>
-      <div class=\"fg\"><div class=\"fl\">Wield Difficulty <span class=\"fc\">I-160</span></div><input type=\"number\" id=\"fWieldDiff\" value=\"290\"></div>
-      <div class=\"fg\"><div class=\"fl\">Value <span class=\"fc\">I-19</span></div><input type=\"number\" id=\"fValue\" value=\"5000\"></div>
-      <div class=\"fg\"><div class=\"fl\">Encumbrance <span class=\"fc\">I-5</span></div><input type=\"number\" id=\"fEncumb\" value=\"400\"></div>
-      <div class=\"fg\"><div class=\"fl\">Default Scale <span class=\"fc\">F-39</span></div><input type=\"text\" id=\"fScale\" value=\"1.0\"></div>
-      <div class=\"fg\"><div class=\"fl\">Missile Defense Mod <span class=\"fc\">F-149</span></div><input type=\"text\" id=\"fMissileDef\" value=\"0\"></div>
-      <div class=\"fg\"><div class=\"fl\">Magic Defense Mod <span class=\"fc\">F-150</span></div><input type=\"text\" id=\"fMagicDef\" value=\"0\"></div>
-      <div class=\"fg\"><div class=\"fl\">Elemental Dmg Bonus <span class=\"fc\">I-204</span></div><input type=\"number\" id=\"fElemBonus\" value=\"0\"></div>
-      <div class=\"fg\"><div class=\"fl\">Crit Multiplier <span class=\"fc\">F-136</span></div><input type=\"text\" id=\"fCritMult\" value=\"1.0\"></div>
-      <div class=\"fg\"><div class=\"fl\">Palette <span class=\"fc\">I-3</span></div><select id=\"fPalette\">${opt(PALETTES,20)}</select></div>
-    </div></div>
-    <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Gear Ratings</div><div class=\"sl\"></div></div>
-    ${[['Dmg Rating','fDmgRating','I-370'],['Dmg Resist','fDmgResist','I-371'],['Crit Rating','fCritRating','I-372'],['CritDmg Rating','fCritDmgRating','I-373'],['CritRes Rating','fCritResRating','I-374'],['Heal Resist','fHealResist','I-375'],['Heal Boost','fHealBoost','I-376']].map(([l,id,fc])=>`
-      <div style=\"display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)\">
-        <div style=\"flex:1;font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)\">${l} <span class=\"fc\">${fc}</span></div>
-        <input type=\"number\" id=\"${id}\" value=\"0\" style=\"width:100px;text-align:right;border-bottom:1px solid var(--border)\">
-      </div>`).join('')}    `;
-  }
-  if(t==='armor'){
-    h+=`<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Armor/Clothing Database Lookup</div><div class=\"sl\"></div></div>
-    <div class=\"fg sdrop-wrap\"><div class=\"fl\">Search by name to pre-fill values</div>
-      <input type=\"text\" id=\"armorSearch\" placeholder=\"Type armor or clothing name\" autocomplete=\"off\" oninput=\"searchArmorFn(this.value)\">
-      <div class=\"sdrop-box\" id=\"armorSearch_drop\"><div class=\"sdrop-none\">Type to search</div></div>
-    </div></div>
-    <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Armor Properties</div><div class=\"sl\"></div></div>
-    <div class=\"grid g3\">
-      <div class=\"fg\"><div class=\"fl\">Armor Level <span class=\"fc\">I-28</span></div><input type=\"number\" id=\"fArmorLevel\" value=\"100\"></div>
-      <div class=\"fg\"><div class=\"fl\">Armor Type <span class=\"fc\">I-27</span></div><select id=\"fArmorType\" onchange=\"onArmorTypeChange()\">${opt(ARMOR_TYPES,11)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Slot (Valid Location) <span class=\"fc\">I-9</span></div><select id=\"fValidLoc\">${opt(ARMOR_SLOTS,512)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Value <span class=\"fc\">I-19</span></div><input type=\"number\" id=\"fValue\" value=\"3000\"></div>
-      <div class=\"fg\"><div class=\"fl\">Encumbrance <span class=\"fc\">I-5</span></div><input type=\"number\" id=\"fEncumb\" value=\"300\"></div>
-      <div class=\"fg\"><div class=\"fl\">Default Scale <span class=\"fc\">F-39</span></div><input type=\"text\" id=\"fScale\" value=\"1.0\"></div>
-      <div class=\"fg\"><div class=\"fl\">Palette <span class=\"fc\">I-3</span></div><select id=\"fPalette\">${opt(PALETTES,9)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Spellcraft <span class=\"fc\">I-106</span></div><input type=\"number\" id=\"fSpellcraft\" value=\"0\"></div>
-    </div>
-    <div class=\"sh\" style=\"margin-top:12px\"><div class=\"st\">Elemental Modifiers</div><div class=\"sl\"></div>
-      <span id=\"clothNote\" style=\"font-family:var(--ui-font);font-size:9px;font-weight:700;color:var(--ink-dim);display:none\">(Cloth  disabled)</span>
-    </div>
-    <div class=\"rg\" id=\"elemMods\">
-      ${[['Slash','mSlash'],['Pierce','mPierce'],['Bludge','mBludge'],['Cold','mCold'],['Fire','mFire'],['Acid','mAcid'],['Elec','mElec'],['Nether','mNether']].map(([l,id])=>`<div class=\"fg\"><div class=\"fl\">${l} <span class=\"fc\">F</span></div><input type=\"text\" id=\"${id}\" value=\"1.0\"></div>`).join('')}
-    </div>
-    <div class=\"sh\" style=\"margin-top:12px\"><div class=\"st\">Resistances (Armor AL Overrides)</div><div class=\"sl\"></div></div>
-    <div class=\"rg\">
-      ${[['Slash AL','alSlash'],['Pierce AL','alPierce'],['Bludge AL','alBludge'],['Cold AL','alCold'],['Fire AL','alFire'],['Acid AL','alAcid'],['Elec AL','alElec'],['Nether AL','alNether']].map(([l,id])=>`<div class=\"fg\"><div class=\"fl\">${l} <span class=\"fc\">I</span></div><input type=\"number\" id=\"${id}\" value=\"0\"></div>`).join('')}
-    </div>
-    <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Gear Ratings</div><div class=\"sl\"></div></div>
-    ${[['Dmg Rating','fDmgRating','I-370'],['Dmg Resist','fDmgResist','I-371'],['Crit Rating','fCritRating','I-372'],['CritDmg Rating','fCritDmgRating','I-373'],['CritRes Rating','fCritResRating','I-374'],['Heal Resist','fHealResist','I-375'],['Heal Boost','fHealBoost','I-376']].map(([l,id,fc])=>`
-      <div style=\"display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)\">
-        <div style=\"flex:1;font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)\">${l} <span class=\"fc\">${fc}</span></div>
-        <input type=\"number\" id=\"${id}\" value=\"0\" style=\"width:100px;text-align:right;border-bottom:1px solid var(--border)\">
-      </div>`).join('')}    </div>`;
-  }
-  // Sub-sub tabs: Int/Bool/Float/String/DID
-  if(curType!=='recipe'&&curType!=='quest') h+=buildAdvanced();
-  return h;
 }
 
-function buildCreateListRows(){
-  return createList.map((r,i)=>`
-    <div style=\"display:grid;grid-template-columns:130px 1fr 80px 70px 28px;gap:8px;align-items:end;margin-bottom:8px\">
-      <div class=\"fg\"><div class=\"fl\">Destination</div>
-        <select id=\"cl_dest_${i}\" onchange=\"createList[${i}].dest=parseInt(this.value);regen()\">
-          <option value=\"2\"${r.dest===2?' selected':''}>2  CorpseDrop</option>
-          <option value=\"1\"${r.dest===1?' selected':''}>1  Wield</option>
-          <option value=\"0\"${r.dest===0?' selected':''}>0  Contain</option>
-          <option value=\"5\"${r.dest===5?' selected':''}>5  Shop</option>
-        </select></div>
-      <div class=\"fg\">
-        <div class=\"fl\">Item WCID <span style=\"color:var(--ink-faint);font-size:9px\">(273=Pyreal, 20634=MMD)</span></div>
-        <input type=\"number\" id=\"cl_wcid_${i}\" value=\"${r.wcid||0}\" oninput=\"createList[${i}].wcid=parseInt(this.value);regen()\">
-      </div>
-      <div class=\"fg\"><div class=\"fl\">Stack</div>
-        <input type=\"number\" id=\"cl_stack_${i}\" value=\"${r.stack||1}\" oninput=\"createList[${i}].stack=parseInt(this.value);regen()\"></div>
-      <div class=\"fg\"><div class=\"fl\">Probability</div>
-        <input type=\"text\" id=\"cl_prob_${i}\" value=\"${r.prob!==undefined?r.prob:1}\" oninput=\"createList[${i}].prob=parseFloat(this.value)||1;regen()\" placeholder=\"1.0\"></div>
-      <button class=\"del\" onclick=\"createList.splice(${i},1);rebuildPanel('properties')\"></button>
-    </div>`).join('');
-}
 
-function addCreateListRow(){
-  createList.push({dest:2,wcid:0,stack:1,prob:1});
-  rebuildPanel('properties');
-}
 
 function buildEventProps(){
   function row(lbl,id,tp,def,fc){
@@ -2957,55 +2663,6 @@ function buildQuestProps(){
   </div>`;
 }
 
-function buildJewelryProps(){
-  // Slot quick-fill buttons with correct ValidLocations from reference files
-  const SLOTS=[
-    [32768,'Necklace'],[786432,'Ring (Finger)'],[196608,'Bracelet (Wrist)'],
-    [67108864,'Trinket'],[1048576,'NeckWear Alt'],[524288,'WristWear Alt'],
-  ];
-  return `<div class=\"sec\"><div class=\"sh\"><div class=\"st\">Jewelry Database Lookup</div><div class=\"sl\"></div></div>
-  <div class=\"fg sdrop-wrap\"><div class=\"fl\">Search by name to pre-fill values</div>
-    <input type=\"text\" id=\"jewSearch\" placeholder=\"Type jewelry name\" autocomplete=\"off\" onfocus=\"openJewelrySearch(this.value)\" oninput=\"searchJewelryFn(this.value)\">
-    <div class=\"sdrop-box\" id=\"jewSearch_drop\"><div class=\"sdrop-none\">Type to search</div></div>
-  </div></div>
-  <div class=\"sec\"><div class=\"sh\"><div class=\"st\">Jewelry Slot</div><div class=\"sl\"></div></div>
-  <div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px\">
-    ${SLOTS.map(([v,l])=>`<button class=\"pill\" onclick=\"setQField('fValidLoc',${v})\">${l}</button>`).join('')}
-  </div>
-  <div style=\"display:flex;flex-direction:column;gap:10px\">
-    <div style=\"display:flex;gap:12px\">
-      <div class=\"fg\"><div class=\"fl\">Valid Location <span class=\"fc\">I-9</span></div><input type=\"number\" id=\"fValidLoc\" value=\"32768\"></div>
-      <div class=\"fg\"><div class=\"fl\">Value (pyreals) <span class=\"fc\">I-19</span></div><input type=\"number\" id=\"fValue\" value=\"50000\"></div>
-      <div class=\"fg\"><div class=\"fl\">Encumbrance <span class=\"fc\">I-5</span></div><input type=\"number\" id=\"fEncumb\" value=\"60\"></div>
-      <div class=\"fg\"><div class=\"fl\">Mass <span class=\"fc\">I-8</span></div><input type=\"number\" id=\"fMass\" value=\"90\"></div>
-    </div>
-    <div style=\"display:flex;gap:12px\">
-      <div class=\"fg\"><div class=\"fl\">Spellcraft <span class=\"fc\">I-106</span></div><input type=\"number\" id=\"fSpellcraft\" value=\"350\"></div>
-      <div class=\"fg\"><div class=\"fl\">Item Cur Mana <span class=\"fc\">I-107</span></div><input type=\"number\" id=\"fItemCurMana\" value=\"3000\"></div>
-      <div class=\"fg\"><div class=\"fl\">Item Max Mana <span class=\"fc\">I-108</span></div><input type=\"number\" id=\"fItemMaxMana\" value=\"3000\"></div>
-      <div class=\"fg\"><div class=\"fl\">Item Difficulty <span class=\"fc\">I-109</span></div><input type=\"number\" id=\"fItemDiff\" value=\"0\"></div>
-    </div>
-    <div style=\"display:flex;gap:12px\">
-      <div class=\"fg\"><div class=\"fl\">Palette Template <span class=\"fc\">I-3</span></div><select id=\"fPalette\">${opt(PALETTES,1)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Default Scale <span class=\"fc\">F-39</span></div><input type=\"text\" id=\"fScale\" value=\"0.5\"></div>
-      <div class=\"fg\"><div class=\"fl\">Mana Rate <span class=\"fc\">F-5</span></div><input type=\"text\" id=\"fManaRate\" value=\"-0.033\"></div>
-      <div class=\"fg\"><div class=\"fl\">Shade <span class=\"fc\">F-12</span></div><input type=\"text\" id=\"fShade\" value=\"0.66\"></div>
-    </div>
-    <div style=\"display:flex;gap:12px\">
-      <div class=\"fg\"><div class=\"fl\">Bonded <span class=\"fc\">I-33</span></div><select id=\"fBonded\">${opt(BONDED,0)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Attuned <span class=\"fc\">I-114</span></div><select id=\"fAttuned\">${opt(ATTUNED,0)}</select></div>
-      <div class=\"fg\"><div class=\"fl\">Inscribable <span class=\"fc\">B-22</span></div><select id=\"fInscribable\"><option value=\"1\">True</option><option value=\"0\">False</option></select></div>
-      <div class=\"fg\"><div class=\"fl\">Short Description <span class=\"fc\">S-15</span></div><input type=\"text\" id=\"fShortDesc\" value=\"\"></div>
-    </div>
-  </div>
-  <div class=\"sh\" style=\"margin-top:14px\"><div class=\"st\">Gear Ratings</div><div class=\"sl\"></div></div>
-    ${[['Dmg Rating','fDmgRating','I-370'],['Dmg Resist','fDmgResist','I-371'],['Crit Rating','fCritRating','I-372'],['CritDmg Rating','fCritDmgRating','I-373'],['CritRes Rating','fCritResRating','I-374'],['Heal Resist','fHealResist','I-375'],['Heal Boost','fHealBoost','I-376']].map(([l,id,fc])=>`
-      <div style=\"display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-lt)\">
-        <div style=\"flex:1;font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mid)\">${l} <span class=\"fc\">${fc}</span></div>
-        <input type=\"number\" id=\"${id}\" value=\"0\" style=\"width:100px;text-align:right;border-bottom:1px solid var(--border)\">
-      </div>`).join('')}  </div>`;
-}
-
 function setQField(id,v){const e=$(id);if(e){e.value=v;regen();}}
 function onCTypeChange(){
   // Read CreatureType from extraInt (type 2) — form fields no longer exist
@@ -3029,11 +2686,6 @@ function onCTypeChange(){
   // Rebuild the full Properties panel so DID / Int / Bool sub-tabs all refresh
   rebuildPanel('properties');
   regen();
-}
-function onArmorTypeChange(){
-  const isCloth=gi('fArmorType',11)===1;
-  ['mSlash','mPierce','mBludge','mCold','mFire','mAcid','mElec','mNether'].forEach(id=>{const e=$(id);if(e)e.disabled=isCloth;});
-  const note=$('clothNote');if(note)note.style.display=isCloth?'block':'none';
 }
 
 //  RECIPE PROPS 
@@ -3979,68 +3631,6 @@ function switchType(type,btn){
   }
 }
 
-function resetAll(){
-  // ── State reset ────────────────────────────────────────────────────────
-  curType='weenie'; curSub='properties';
-  window._weenieSavedState=null;
-  window._recipeSavedState=null; window._questSavedState=null; window._eventSavedState=null;
-  window._importedClassName=null; window._importedTimestamp=null; window._importedWcid=null;
-  _weenieHasContent=false;
-  spells=[];emotes=[];extraInt=[];extraInt64=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];generatorRows=[];
-  recipeReqs=[];recipeReqsBool=[];recipeReqsFloat=[];recipeReqsStr=[];recipeMods=[];cookbookEntries=[];createList=[];extraSkills=[];
-  positions=[];importedAttribs=[];importedAttribs2nd=[];importedBodyParts=[];
-  _importedBookSQL='';_importedEmoteSQL='';_importedCreateListSQL='';
-  bookPages=[];bookMeta={maxPages:2,maxChars:1000};window._weenieTabType=0;
-  window._importedEmoteSQL='';window._importedCreateListSQL='';window._importedBookSQL='';
-  window._importedBodyParts=null;window._importedCoreSkills=null;
-  while(CORE_SKILL_IDS.length) CORE_SKILL_IDS.pop();
-  [6,7,15,44].forEach(function(id){CORE_SKILL_IDS.push(id);});
-  // Reset cookbook checkbox state
-  var _cbCats=['melee','missile','caster','armor','clothing','jewelry'];
-  _cbCats.forEach(function(c){ _rcpCbState[c]=false; });
-  bodyParts=getBodyParts(31);
-
-  // ── DOM reset: wipe all panels and fields directly ────────────────────
-  // Do NOT call buildForm() — it rebuilds idRow/subTabs which then need
-  // to be hidden again, creating a flash. Instead wipe and hide directly.
-  var _fc  = document.getElementById('formContent');
-  var _st  = document.getElementById('subTabs');
-  var _id  = document.getElementById('idRow');
-  var _hdr = document.getElementById('wbHeader');
-  var _pre = document.getElementById('presetsRow');
-  if(_fc)  { _fc.innerHTML=''; _fc.style.display='none'; }
-  if(_st)  { _st.innerHTML=''; _st.style.display='none'; }
-  if(_id)  { _id.innerHTML=''; _id.style.display='none'; }
-  if(_hdr) { _hdr.style.display='none'; }
-  if(_pre) { _pre.innerHTML=''; _pre.style.display='none'; }
-
-  // ── Clear live preview ─────────────────────────────────────────────────
-  var sqlOut=document.getElementById('sqlOut');
-  if(sqlOut) sqlOut.value='';
-  renderSQLHighlight();
-
-  // ── Tab state: activate Weenie tab button ──────────────────────────────
-  document.querySelectorAll('.itab').forEach(function(b){
-    b.classList.toggle('active', b.dataset && b.dataset.type==='weenie');
-  });
-
-  // ── Show welcome splash ────────────────────────────────────────────────
-  var welcome = document.getElementById('weenieWelcome');
-  if(welcome) welcome.style.display='flex';
-
-  // ── Update title bar labels ────────────────────────────────────────────
-  var c = TYPE_CFG['weenie'];
-  if(c){
-    var wbTitle=document.getElementById('wbTitle');
-    var wbDesc=document.getElementById('wbDesc');
-    var topType=document.getElementById('topType');
-    var topRange=document.getElementById('topRange');
-    if(wbTitle) wbTitle.innerHTML=c.icon+' <span style="font-weight:700">'+c.label+'</span><span style="font-weight:400"> · Workbench</span>';
-    if(wbDesc)  wbDesc.textContent=c.desc;
-    if(topType) topType.textContent=c.label;
-    if(topRange)topRange.textContent=c.wcidRange||'';
-  }
-}
 
 // ── Emote tab state ────────────────────────────────────────────────────────
 let emoteSubTab = 'script'; // 'builder' | 'script'
@@ -4479,16 +4069,6 @@ function _yamlTabKey(e){
 
 // ── Icon Picker (DID types: Icon=8, IconOverlay=36, IconOverlay2=37, IconUnderlay=38) ──
 // Persistent favorites & recents via localStorage
-var _ipFavKey='aceforge_icon_favs', _ipRecKey='aceforge_icon_rec';
-function _ipFavs(){ try{ return new Set(JSON.parse(localStorage.getItem(_ipFavKey)||'[]')); }catch(e){ return new Set(); } }
-function _ipSaveFavs(s){ localStorage.setItem(_ipFavKey, JSON.stringify([...s])); }
-function _ipRecs(){ try{ return JSON.parse(localStorage.getItem(_ipRecKey)||'[]'); }catch(e){ return []; } }
-function _ipAddRec(wcid){
-  var r=_ipRecs().filter(function(x){ return x!==wcid; });
-  r.unshift(wcid);
-  if(r.length>48) r=r.slice(0,48);
-  localStorage.setItem(_ipRecKey, JSON.stringify(r));
-}
 
 const ICON_CATEGORY_MAP = {"Armor/Rare/Dusk":["06005C36","06005C39"],"Armor/Rare/Gelidite":["06005BED","06005C0F","06005C16","06005C18","06005C1C","06005C20","06005C26","06005C2A","06005C2E"],"Armor/Rare/Misc":["06005BEF","06005BF1","06005C3F"],"Armor/Standard/Alduressa":["060058B1","060058D8","06005986","060059FE","06005D29"],"Armor/Standard/Amuli":["06001BE3","06001BEB"],"Armor/Standard/Celdon":["06001BC3","06001BCB","06001BD3","06001BDB"],"Armor/Standard/Chainmail":["06000FC6","06000FC7","06000FCA","06000FCB","06000FCF","060012EB","060012EE","0600130A","06001582","06001584","06001B37","06002730"],"Armor/Standard/Chiran":["0600316C","06003180","06003193","060031A6","060031B9"],"Armor/Standard/Covenant":["06000FAD","06000FC3","06000FCD","06000FCF","06000FDA","060012F0","06001307","0600130C","0600275C"],"Armor/Standard/Diforsa":["060058C5","060058EA","06005912","06005937","0600594E","0600595C","06005972","06005995","060059BC","060059D4","060059DF","06005A9F","06005AF9"],"Armor/Standard/Koujia":["06001BF3","06001BFB","06001C03"],"Armor/Standard/Leather":["06000FAE","06000FBB","06000FC4","06000FCC","06000FCE","06000FD6","06000FD7","06000FD8","06000FD9","06000FE4","0600121A","0600121B","060012DA","060012DB","060012EF","060012F1","0600130B","0600130E","06001311","06001351","06001353","060013FC","060013FD","060013FE","06001400","06002737","06002748","06002E19","06002E33","06002E38","06002E61","06002E79","06002E91","06002E96","06002EC0","06002EF0","06002F0D","06002F38","06002F68","06002F80","06006F00","06006F0F","06006F11","06006F22","06006F28"],"Armor/Standard/Lorica":["060031CB","060031DF","060031F2","06003205","06003218","0600322B"],"Armor/Standard/Nariyad":["0600323C","06003250","06003263","06003276","06003289","0600329C","060032AF"],"Armor/Standard/O-Yoroi":["0600318C","060031B9","0600733A","0600734E","06007358"],"Armor/Standard/Platemail":["06000FC3","06000FCD","06000FDA","06000FDB","06000FDC","06000FDD","060012F0","06001307","0600130C","060013FA","0600275B"],"Armor/Standard/Scalemail":["06000FC6","06000FCA","060012EC","06001309","0600130D","06001315","06001316","06001352","06001583","060018FA","060018FB","060018FC","06002745"],"Armor/Standard/Yoroi":["06000FDE","060012F2","060012F3","06001308","06001309","060013FB","0600275C"],"Armor/Themed/Darkness":["060059FB","06005D19","060068BA","060068C7","060068D4"],"Armor/Themed/Empowered of the Perfect Light":["0600673E","0600673F","06006740","06006780","06006799","0600679A","0600679B"],"Armor/Themed/Explorer":["06000FF0","06005D18","06006C79","06006C7D","06006C82","06006C8B","06006C94","06006C9D","06006CA6","06006CAF","06006CB8"],"Armor/Themed/Faction":["060061E0","060061E1","060061E3","060068F3","060068F4","060068F5","060068F6","060068F7","060068F8","060068F9","060068FA","0600692E","0600692F","06006930","06006931","06006932","06006933","06006934","06006935","06006944","06006945","06006946","06006947","06006948","06006949","0600694A","0600694B"],"Armor/Themed/Haebrean":["06005D19","06006C78","06006C82","06006C91","06006C9B","06006CA4","06006CA6","06006CB0","06006CBA"],"Armor/Themed/Knorr Academy":["06000FB7","0600170A","06006DB1","06006DB6","06006DC0","06006DCD","06006DDA","06006DE2","06006DED"],"Armor/Themed/Noble":["06000FAD","06002B2D","06002D88","06002DE2","06002DE3"],"Armor/Themed/Olthoi":["06002BDF","06002BED","06002BEE","06002BF8","06002C1B","06002C20","06002C31","06002C3C","06002C3D","06002C45","06002C4B","06002C5A","06002C5E","06002C60","06002C62","06002C65","06002C68","06002C75","06002C80","06005D20","06006861","06006872","06006880","0600688A","06006896","060068A0","060068B5","060068BD","060068CA","060068D7","060068E3","06006F25"],"Armor/Themed/Pathwarden":["06000FAD","06000FCD","06000FCF","06000FDC","060012F6","06001309","060018FA","06001B92","06001B9F","06001BAE","060058EF","06005AA3","06005E4A"],"Armor/Themed/Prismatic":["060062E8","060062E9","060062F8","060062F9","060062FA","060062FB","06007465","06007466","06007467","06007468","06007469","0600746A","0600746B","0600746C","0600746D"],"Armor/Themed/Relic":["060027AD","060058B4","060058DB","06005986","06005A00","06005D1E","060061CD","060061D7","060061E1"],"Armor/Themed/Shadow":["06006F00","06006F03","06006F04","06006F0A","06006F0D","06006F0E","06006F12","06006F15","06006F16","06006F22","06006F25","06006F26","0600743F","06007442","06007443","06007447","0600744A","0600744B","0600744F","06007452","06007453","06007457","0600745A","0600745B","0600745F","06007462","06007463"],"Armor/Themed/Shou-Jen":["06002E7D","0600308B","060064E1","060064E2"],"Armor/Themed/Soldier":["06006E98","06006E9C","06006E9E","06006E9F","06006EA0","06006EA1","06006EA2","06006EA3","06006EA4"],"Armor/Themed/Splitter":["06006E98","06006E9C","06006E9E","06006E9F","06006EA0","06006EA1","06006EA2","06006EA3","06006EA4"],"Armor/Themed/Squalid":["06005F8F","06005F9A"],"Armor/Themed/Tenessa":["06005902","06005929","060059AD"],"Books/Book":["0600106F","060012D5","06001310","06001B13","06001EEE","06001EEF","06001EF0","06001EF1","06001FBA","060023AF","060023C3","060029D7","060029D8","06002AE8","06002B14","06002B67","06002D1F","060030A2","060030A3","060030A4","060030A7","060030C8","060035A5","060035CC","06005A35","06005A84","06005A99","06005AF4","06005AF6","06006012","06006013","060060FC","06006275","060062BD","060063E0","060063E1","06006467","06006577","06006583","060067EB","060067EC","060067ED","060067EE","060067EF","060067F0","0600691F","06006920","060072D6"],"Clothing/Clothing":["06000FAA","06000FB8","06000FBC","06000FBD","06000FE6","06000FE7","06000FE8","06000FEA","06000FF0","06000FF3","06000FF5","06001357","06001492","060014C3","060014F6","06001701","06001B76","06001B7A","06001B88","06001B91","06001B92","06001B95","06001B96","06001B9E","06001B9F","06001BA2","06001BA3","06001BA7","06001BAB","06001BAC","06001BAE","06001D0E","06001D1B","060020AD","060020AE","060022E6","0600237A","06002389","060023BC","060023C2","060025D9","060027BE","060027BF","060028D0","06002926","06002B5C","06002DFE","06002FA2","0600305D","0600333E","0600339F","0600346C","060035DC","060035DD","060035DE","06004A41","06004A66","06004A68","06004A6A","06004A71","06004A7B","06004A85","06004A89","06004AAC","06004AB2","060057F4","060057F7","060057F9","06005802","06005817","06005830","0600585E","0600587A","06005884","0600588C","0600589D","06005E4A","06005F58","06005F69","06006254","0600626E","0600626F","06006271","0600651E","0600668D","0600679C","0600679D","0600679E","06006818","06006BBB","06006EA6","06006EA7","06007090","06007099","0600709B","0600709C","0600709D","0600709E","0600709F","060070A0","060070A1","060070A2","060070A3","060070A4","060070A6","060070E9","0600712D","060072AE","060074E8","060074E9","060074F6"],"Clothing/Jewelry":["06001498","060014D1","060014D4","060014D7","06001D06","06001DA0","060027D9","060027DA","060027DB","06002AED","06002BB5","06002F88","06002F89","06002F8A","06002F8B","06002F8C","06002F8D","06002F8E","06002F8F","06002F90","06002F91","06002FBE","06003471","06005A63","06005AB2","06005BDE","06005BDF","06005BE1","06005BE2","06005BE3","06005BE4","06005BE5","06005BE6","06005BE7","06005BE8","06005BE9","06005BEA","06005BEB","06005BEC","0600602B","06006276","060062A8","060062EA","060063DA","060063DB","060063DC","06006419","0600657E","060065DD","060065DE","060065DF","060065E0","060065ED","06006638","06006AA0","06006AA4","06006AA7","06006AAC","06006AF5","06006B13","06007180","06007181","06007182","06007183","06007184","06007185","060074DC","060074DD","060074DE","060074DF","06007540","06007541","06007542","06007543","06007544","06007545","06007563"],"Containers/Chest":["06001020","06001022","060012C7","06001FE7","06001FE8","06001FF8","0600218D","060023E5","06002959","06002AD0","06002AE4","06002B6A","06002CEF","06002CF8","06003331","0600344A","06003561","06003774","060063E4"],"Containers/Container":["06001070","0600147D","06001A31","06001BAF","06001BB0","06001BB3","06001BB4","06001BB5","06001E2B","06001F05","0600295A","0600361F","06003621","06005A6D","06005D15","0600653C","06006544","06006547","060066D4","060066DC","06006A6A","06006A6B","06006BB9","06006BCA","06006E0E","06006F4E","06006F4F","06006F50","06006F51","06006F52","06006F53","06006F54","06006F55","06006FE0","060072E9","060072EB","060073D7","060073D8","06007520","06007522"],"Crafting/Cooking":["06001027","060010D8","06001A09","06001ADE","06001E27","0600234D","060029D2","060029D3","06005A61","06005A69","06005A6B","06005A6C","06005A6E","06005A6F","06005A70","06005A71","06005A72","06005A73","06005A74","06005A79","06005A7B","06005A7D","06005A7E","06005A7F","06005A80","06005B0D","06005B0E","06005B0F","06005B10","06005B11","06005B12","06005B13","06005B14","06005B15","06005B16","060061B8","060061B9","060061BA","060061BB","060061BC","060061BD","060061BE","060061BF","060061C0","060061C1","06006222","06006223","06006262","06006274","0600658B","060065AA","060065AB","060065AD","060065AE","060065AF","060065B0","0600668C","060066AC"],"Crafting/Fletching":["06001A26","06001A3E","06001A3F","06001AD9","06001ADA","06001ADD","06001AE9","06001AEC","06001AED","06001AEE","06001AEF","06001AF0","06001AF9","06001AFA","06001AFB","06001AFC","06001B01","06001B02","06001B03","06001B04","06001C09","06001C0A","06001CDA","06001CDC","06001CE7","06001EFD","06001EFE","06001FA7","06001FA8","06001FA9","06002067","06002068","06002069","0600206A","0600206B","0600206C","0600206D","0600206E","0600206F","06002070","06002071","06002072","06002073","06002074","06002075","06002076","06002077","06002078","06002079","0600207B","060021CC","060021CD","060021CE","060021CF","060021D0","060021D1","06002457","06002462","06002463","0600249C","0600249D","0600249E","0600249F","060024A0","060024A1","060024A2","060024A3","060024A4","060024AF","060024B0","060024B1","060024B2","060024B3","060024B4","060024B5","060024B6","060024B7","06002527","06002568","060029FC","060029FD","06002B52","06002B57","06002B58","06002B59","06005A82","06005A83","06005A85","06005A86","06005A87","0600624B","060064CE","060064CF","060064D0","060066FA","06006FC1","06006FC2","06006FC3","06006FC4","06006FC5","06006FC6"],"Crafting/Tinkering":["06000FBE","0600102C","060012F8","06001C0B","06001C18","06001C19","06001C1C","06001C1E","06001C1F","06001C25","06001C28","06001C2B","06001CA2","06001CA9","06001CAD","06001D2F","06001D59","06001D60","06001E56","06001EEB","06001EEC","06001EF8","06001EFF","06001F01","06001F02","06001F03","06001F5E","06001FBB","060020D7","060022C3","060023FD","060023FE","060023FF","06002404","06002563","06002567","0600256B","0600256F","06002570","060025CC","060026BA","060026BC","060026BE","060026BF","060026C0","060026C2","060026C6","06002705","06002710","0600282F","06002AEE","06002BC0","060030C0","06003568","0600357D","06003619","0600361A","0600361B","0600361C","0600361E","06003622","06003623","06003707","06005A14","06005A1B","06005A8B","06005B18","06005B19","06005B1A","06005C41","06005F9D","06005F9E","06005F9F","06005FA0","06005FA8","06005FA9","06005FE7","060062BC","060062C9","060062D9","060062DB","060062EC","060062ED","06006320","06006321","06006322","06006323","060063D4","060063D7","060063D8","060063D9","060063DD","060063DE","060063DF","060063E2","060063E5","060063E6","06006418","06006460","06006466","060064AD","060064AE","060064AF","060064B9","060064DE","060064F6","06006598","06006599","0600659A","0600659B","060065C4","060065C5","060065C6","060065C7","06006632","0600665B","0600665F","06006660","060066B0","060066F1","060066F2","060066F3","060066F4","060066F7","060066F9","06006702","0600678C","060067B6","060067B7","060067E9","06006814","06006815","06006816","06006817","06006834","06006904","06006906","06006907","0600690A","0600690B","0600690C","0600690D","0600690E","0600697A","06006985","06006986","06006987","06006988","06006989","0600698A","060069AC","060069AD","060069CC","060069FB","060069FC","06006A74","06006A87","06006AE7","06006AE9","06006BCB","06006BD3","06006BD4","06006BD5","06006C0E","06006E0D","06006E1C","06006E7C","06006EF0","06006FF4","06006FFA","06007023","06007024","06007025","0600703A","0600703B","0600703C","0600703D","0600703E","0600703F","06007040","06007041","06007042","06007043","06007044","06007045","06007046","06007047","06007048","06007053","06007054","06007055","06007056","06007057","06007058","06007059","0600705A","0600705B","06007065","060070A5","060070A7","060070A8","0600713C","0600713D","0600713E","060072B4","060072B5","060072D7","06007327","060073F7","0600742C","0600746E","0600746F","060074D4","060074D5","060074F9","060074FA","060074FB","060074FC","060074FD","060074FE","0600754E","0600754F","06007550"],"Creatures/Animal":["06001033","06001034","06001038","0600103A","0600103B","0600121F","06001220","06001221","06001222","06001223","060016BB","060016BC","060016BD","060016C1","060016C3","06001DEF","06001DF1","06001ED2","06002107","0600210A","06002C41","06003448","060036F6","060036F7"],"Creatures/Boss":["060036F5"],"Creatures/Elemental":["0600141A","06001B4B","06001BBA","06001BBB","06001BBC","06001C75","06001F64","06001F97","0600207C","060020C3","06002401","06002402","060027CB","06003344","06006E2B"],"Creatures/Golem":["06001224"],"Creatures/Human":["06000FE5","06000FED","06000FEF","06000FF1","06001036","060010E8","06001B8C","06002ABF","06002FB9","06003703"],"Creatures/Humanoid":["06001035","06001037","06001039","0600103C","0600103D","06001227","0600141B","060016C0","06001B42","06001F11","060020D6","0600210C","0600240A","06002631","06002632","06002B13","06002B2E","0600304D","060030B1","060033C5","060036F9","060036FA","060036FB","060036FC","060036FD","06003711","06005D14","0600629E","06006A75","06006E2C","06006E2D","06006E2E"],"Creatures/Misc":["06000FFA","0600101E","06001032","06001044","0600104E","06001055","0600105F","06001061","060012C9","060012CB","060012E1","0600134F","06001918","06001A82","06001B4D","06001C20","06001D4F","06001DF4","06001E29","06001EE9","06001F5C","06001F88","06001FBF","06001FE9","0600211D","06002150","060021F0","060022A8","060022C4","060022C7","060023D4","06002482","060024DE","060027E3","06002975","060029A3","06002A24","06002ACC","06002CEE","06002CF7","06002D3F","06002D40","06002D41","06002D42","06002FE0","06002FE2","0600303D","060030C4","060030CC","06003324","06003333","0600333B","060033CB","06003540","0600355C","060035CD","060036E0","0600371A","06005A0C","06005A39","06005A3B","06005FE9","06006021","0600604B","060061B7","0600620A","06006212","06006245","060062EF","060064B0","060064B1","060064B2","060064B6","060064B7","060064B8","06006580","06006584","060065A3","0600663A","060066C6","060066E9","06006708","06006710","06006712","06006713","06006714","06006715","06006724","06006734","0600675B","060067DD","060067E3","060067E4","060067F5","0600698C","060069B4","060069B5","060069B6","060069E8","060069E9","060069EA","060069EB","060069EC","060069ED","060069EE","060069EF","060069F0","060069F1","060069F2","060069F3","060069F4","060069F5","060069F6","060069F7","060069F8","060069FE","06006D9A","060073EA"],"Creatures/Moarsman":["06001ED1"],"Creatures/Olthoi":["060010E7","060016BF","06002114","06002AFA","06002B02","06002C42","06002D3E"],"Creatures/Pet":["06001DF0","06001E11","0600260F","0600654B","06006585","0600659C","060065CA","060065CB","060065CC","060065CD","060070FA","060070FB","060070FC","060070FD","0600741F","0600742A","0600742B","0600742F","06007430","06007431","06007432"],"Creatures/Undead":["06001226","060016C2","060016C4","06001BBD","06001BBE","06001EA4","06001F5B","06002B17","06002CF5","0600306B","0600341F","06003447","060036FE","060065D1","06006F6D"],"Currency/Coin":["06001DD2","0600229F","06006573"],"Currency/Promissory":["060016C9","060016CA","060016CB","060016CC","060016CD","060016CE","060016CF","060023B8","060023B9","060023BA","060023BB","0600275F","06002760","06002761"],"Food/Consumable":["06001D75","06001D77","060022CB","060022CC","060032C8","060032D5","060032D6","060032D7","060032D8","060032D9","060032DA","060032DB","060032DC","060032DD","060032DE","060032DF","060032E1","060032E2","060032E3","060032E4","060032E5","060032E6","060033A7","060033B2","060033B3","060033B4","060033B8","060033B9","060033BA","060033BB","060033BC","06005A3C","06005B1B","06005B1C","06005B1D","06005B6B","06005B6C","06005B6D","06005B6E","06005B6F","06005B70","06006EA8","06006EA9","06006EAA","06006EB6","06006EF2","06007091","06007092","06007093","06007094","0600753B","0600753C","0600753D"],"Food/Food":["06001012","06001028","06001042","06001048","060012D7","060012DC","0600153C","06001A2B","060021E9","060021EA","060021EB","060021EC","060024C7","060029D4","06002CEC","06003562","06003564","0600356C","06005A36","06005A38","06005A3D","06005A65","06005A67","06005A81","06005A88","06005EBA","06005EC3","0600621D","06006224","06006225","06006246","06006273","060063BA","0600657D","06006587","060065B1","060065B2","060065B3","060065E2","060065EF","060066B6","06006704","06006706","06006707"],"Gems/Augmentation":["0600256E","060028FC","060028FD","060029A5","06005A8A","060061B6","0600690F","06006F5D","06006F5E","06006F5F","06006F60","06006F61","06006F62","06006F63","060072E7"],"Gems/Gem":["0600107E","060010BE","0600130F","06001375","060013CA","060013CC","060013CD","060013CE","060013D0","060013D1","060013D2","060013D4","060013D5","060013D6","060013D7","060013DA","060014BA","060014BC","06001515","0600151C","0600151D","06001538","060017E3","06001A79","06001A7F","06001A80","06001BD8","06001CA8","06001CAA","06001D0B","06001D0F","06001D24","06001DF5","06001F07","06001F0C","06001F65","06001F80","06001FA3","06001FAD","06001FBE","0600201A","060020FC","06002157","06002296","06002370","06002373","060023D0","060023E2","060024E0","060025BC","060027DC","06002923","06002969","0600296D","0600296E","06002971","06002AF0","06002B7A","06002B7B","06002B7C","06002B89","06002B8A","06002B8B","06002B8C","06002B99","06002B9A","06002B9B","06002B9C","06002BB8","06002C95","06002C9B","06002CB0","06002D1A","06002D28","06002D29","06002D2A","06002D2B","06002D2C","06002D2D","06002D2E","06002D2F","06002D30","06002D31","06002D32","06002D33","06002D34","06002D35","06002DCB","06002DF4","06002E1F","06002FEB","06003031","060030B0","060032D4","060032E0","06003332","06003346","0600335D","06003418","06003419","0600341A","0600341B","0600341C","060034E1","0600373A","06003771","06003772","06003773","06003775","06003776","06003777","06003778","06003779","0600377A","06004D8D","06004D8E","06005A56","06005A60","06005AF8","06005B1E","06005B20","06005B22","06005B30","06005B67","06005B68","06005B69","06005B6A","06006011","06006033","06006034","06006035","0600604F","06006050","06006051","06006052","06006053","06006208","06006220","06006221","06006247","06006248","06006277","0600629F","060062A9","060062AA","060062AB","060062BE","060062D8","060062DA","060062DC","060062DD","060062DE","060062DF","060062EE","06006314","06006315","06006444","06006445","06006446","06006447","06006448","06006449","0600644A","0600644B","0600644C","0600644D","0600644E","060064B5","060064DC","0600650E","06006548","06006581","06006582","06006590","06006591","060065AC","060065D3","060066F5","06006735","06006736","06006737","06006762","060067C3","060067C5","06006819","060068B0","0600691C","060069B1","060069B2","060069B3","060069C6","06006A52","06006A88","06006A8D","06006A8F","06006A97","06006A98","06006B08","06006B2E","06006B2F","06006B33","06006B34","06006B35","06006B36","06006B37","06006B38","06006B39","06006B3B","06006BBC","06006C0A","06006C0B","06006C0C","06006C3D","06006C3E","06006E1A","06006E33","06006E34","06006E88","06006F65","06006FD6","06006FD8","06006FD9","06006FDA","06006FDC","06006FF1","06006FF5","06006FF6","06006FF7","06006FF8","06007004","06007005","0600704F","06007050","06007052","06007095","06007096","060070F0","060070F1","060070F2","060073EB","060073EE","06007478","060074DB","060074E1","060074EA","0600753F","06007571"],"Housing/Decoration":["0600642B","060064BA","060067D9"],"Keys/Key":["0600104D","0600105B","0600105D","0600105E","06001413","06001415","06001416","06001417","06001418","06001419","06001C9D","06001C9F","06001CA1","06001CA5","06001D64","06001E03","06001F0D","06001FE1","06001FE2","06001FE3","06001FE5","06001FE6","06001FF3","0600201F","06002020","0600221D","060023D5","06002539","0600305C","060033AA","0600344B","0600355D","06003715","06005A2B","06005A2E","06005B71","06005B73","06005B76","06006112","0600625D","0600642A","060064DF","060064E0","060065D6","060065E8","060065FE","060067B8","06006919","0600691A","0600691B","06006BAD","06006BB0","06006BC0","06006FF2","06007187","06007188","06007384","06007385","06007386","060073F8","06007409","0600740A","0600740E","0600741E","060074F3","060074F8","06007500","06007547","06007548"],"ManaStones/ManaStone":["060032C9","060032CA","060032CB","060032CC","060032CD","060032D2","06005B72"],"Misc/Generator":["06001066"],"Misc/Plant":["06001534","06001535","06005D2A","06006037","06006038","06006039","060065BB","060065BC","060065BD","060065BE","060065BF","060072B1"],"Misc/Service":["06000FFC","06001383","06001384","06001385","060013B8","060013B9","060013BA","060013BB","060013BC","0600218C","0600236F","060023AA","060023AD","060025BA","060025BD","0600261A","060026C4","06002B00","060033E1","060033E2","060033E3","06005A59","06005A5A","06005A5C","06005A5D","06005A5E","06005A5F","06006279","060065C0","060065C1","060065C2","060065C3","060065C8","060065C9","0600674B","0600674E","0600678E","060069FF","06007051","06007470","06007538"],"Quest/EventObject":["06001B00","06001CFB","06002974","0600624F","06006588","0600658E","0600659F","0600675F","060067BF","060067C0","060067C1","060067EA","0600752D","06007531","0600753A"],"Quest/Portal":["0600106B","06001356","06002A68","060035CE","06005A64","06006563"],"Quest/QuestItem":["06001026","06001056","060012D3","060013C9","06001489","060014E5","060014FF","06001501","0600153A","0600159E","060015CC","06001622","06001658","06001668","060016A0","060016B2","060016B8","06001A63","06001A68","06001B3B","06001B6F","06001C10","06001CD9","06001D83","06001DAA","06001E37","06001E38","06001ECF","06001ED0","06001EF3","06001F06","06001FB8","06001FC1","06001FF4","06001FF5","06001FF6","06002125","0600212C","0600212E","0600217E","06002206","06002225","0600223D","060022A9","060022AB","060022AC","060022BE","06002376","060025B9","06002620","0600262C","060028AD","060028AE","060028AF","06002924","06002AD6","06002AD7","06002AD8","06002ADA","06002ADB","06002ADD","06002ADE","06002AE0","06002AF1","06002AF4","06002BC3","06002BD5","06002C40","06002C97","06002CF9","06002D22","06002D25","06002D82","06002D85","0600302C","060030AF","0600314F","0600340E","06003449","0600346F","06003487","06003497","06005A0E","06005A0F","06005A10","06005A11","06005A12","06005A13","06005A15","06005A17","06005A18","06005A19","06005A1A","06005A1C","06005A1D","06005A1E","06005A1F","06005A20","06005A22","06005A23","06005A24","06005A53","06005A98","06005AB1","06005D2E","06005F4B","06005F4C","06005F4D","06005F4E","06005F4F","06005F50","06005F51","06005F52","06005F53","06005F54","06005F55","06005F56","06005F57","06005F59","06005F5A","06005F5D","06005F5F","06005F63","06005FA1","06005FF8","06005FFA","06005FFB","06005FFC","06005FFD","06005FFF","06006000","06006002","06006003","06006005","06006006","06006008","0600600A","0600600B","0600600D","0600600E","06006010","06006023","06006024","0600609F","0600620B","0600620C","0600620D","06006229","0600622A","0600622B","0600622C","0600622D","0600622E","0600624C","06006255","06006256","06006257","06006258","06006259","0600625B","0600625C","0600625E","06006278","0600627E","060062E4","060062FD","060063E3","06006406","06006450","06006451","06006452","06006487","06006495","060064AA","060064AB","060064AC","060064B3","060064B4","060064C5","060064D1","060064D2","060064D3","060064DD","060064E9","060064EA","060064F8","06006519","06006545","0600654C","06006578","06006579","0600657A","0600657B","0600657C","06006586","0600658C","0600658D","060065D4","060065D5","060065D7","060065DB","060065DC","060065E3","060065E4","060065E5","060065E6","060065E7","060065FF","0600662A","06006635","06006646","06006647","06006648","06006649","0600664A","0600664B","0600664C","0600664D","0600664E","0600664F","06006650","06006651","06006652","06006653","06006654","06006655","06006656","06006657","06006658","06006694","0600669C","0600669D","060066B1","060066B2","060066B4","060066B7","060066D8","060066DE","060066DF","060066E2","0600671D","06006738","06006750","06006763","0600678F","060067B5","060067BC","060067BD","060067C2","060067C4","060067C9","060067DA","060067DB","060067F1","060068FE","060068FF","06006900","06006908","06006909","0600691D","0600691E","0600694D","0600694E","0600694F","06006956","06006957","06006971","06006972","06006977","06006978","06006979","0600698D","06006995","06006996","060069B8","060069FA","06006A47","06006A70","06006B9D","06006B9E","06006B9F","06006BA5","06006BA9","06006BB8","06006BBA","06006BC1","06006D9B","06006D9C","06006D9D","06006D9E","06006E0A","06006EAB","06006F64","06006FF0","06006FF9","06007049","0600704A","060070C2","060070C3","060070C4","060070C5","060070C6","060070C7","060070C8","06007130","06007132","06007133","06007189","0600718A","0600718B","0600718C","0600718D","0600718E","0600718F","06007190","06007191","06007192","06007193","06007194","06007195","06007196","06007197","06007198","06007199","06007268","06007288","06007292","06007293","06007294","06007295","06007296","06007297","06007298","060072B0","060072D8","060072D9","060072DA","060072E8","06007347","06007382","06007383","060073D9","060073DA","060073DB","060073DC","060073E1","060073EC","060073ED","0600740B","0600740D","060074D6","060074DA","060074F4","060074FF","06007535","06007546","06007549","0600754A","0600754B"],"Spells/Components":["060013DF","060013E1","06001905","06001A27","06001A28","06001A2C","06001A2D","06001A2E","06001A2F","06001A30","06001A32","06001A33","06001A36","06001A37","06001A38","06001A39","06001A3A","06001A3B","06001A3C","06001B38","06001B39","06001B3A","06001B45","06001CF0","06001D11","06001D1A","06001F61","06002054","06002055","06002056","06002057","06002058","06002059","0600205A","0600205B","0600205C","0600205D","0600205E","0600205F","06002060","06002061","06002062","06002063","06002064","06002065","06002066","0600221C","060022AE","06002371","060023FC","06002484","06002485","06002486","06002487","060025C9","06002911","06002917","06002B71","06002B9D","06002B9E","06002B9F","06002BA0","06002BA1","06002BA2","06002BA3","06002BA4","06002BA5","06002BA6","06002BA7","060065FA","0600667A","06006682","06006683","06006684","06006685","06006686","06006687","060066AD","060066AE","060066AF","0600670F","06006726","06006727","06006728","06006729","0600672A","0600672C","0600672D","0600672F","06006730","06006731","06006732","06006744","060067A3","060067A5","060067B1","060067CA","06006914","06006915","06006916","06006917","0600698F","060069AB","060069CB","06006A79","06006A7A","06006A7B","06006A7D","06006A7E","06006A7F","06006A80","06006A81","06006A82","06006A83","06006A89","06006A8A","06006A8B","06006A8C","06006A90","06006A91","06006A92","06006A93","06006A94","06006A95","06006A96","06006A9B","06006A9E","06006B05","06006B14","06006B15","06006B16","06006B17","06006B19","06006B1A","06006B1B","06006B1C","06006B21","06006B22","06006B23","06006B24","06006B25","06006B26","06006B27","06006B28","06006B29","06006B2A","06006B2B","06006B2C","06006B2D","06006B30","06006B31","06006B32","06006B3A","06006C0D","06006E30","06006E31","06006E32","06007527","06007528"],"Spells/Scrolls":["0600335E","0600335F","06003360","06003361","06003362","06003363","06003364","06003365","06003368","06003369","0600336A","0600336B","0600336C","0600336D","0600336E","0600336F","06003371","06003372","06003373","06003374","06003375","06003376","06003377","0600337A","0600337D","0600337F","06003380","06003427","06003428","06003429","0600342A","0600342B","0600342C","0600342D","0600342E","0600342F","06003430","06003431","06003432","06003434","06003435","06003436","06003437","06003438","06003439","0600343A","0600343C","0600343D","0600343E","0600343F","06003440","06003441","06003442","06003443","06003444","06003445","06003446","0600346E","06003542","06003543","06003544","06003545","06003546","0600354B","0600354C","0600354D","06003554","06003555","06003556","06003557","06003558","06003559","0600355A","06003590","06003592","06003594","06003595","06003597","06003598","0600359A","0600359B","0600359D","0600359E","060035A0","060035A2","060035A3","060035A4","060063E8","060066FB","060069B7","060069B9","06006AD4","06006E5C","06006E71","06006E72","06006E73","06006E74","06006E75","06006E76","06007119","0600711A","0600711B","0600711C","0600711D","0600711E","0600711F","06007410","06007554"],"Spells/Spell":["0600172C","0600172D","0600172E","0600172F","06001730","06001731","06001732","06001733","06001734","06001735","06001736","06001737","06001738","06001739","0600173A","0600173B","0600173C","0600173D","0600173E","0600173F","06001740","06001741","06001742","06001743","06001744","06001745","06001746","06001747","06001748","06001749","0600174A","0600174B","0600174C","0600174D","0600174E","0600174F","06001750","06001751","06001752","06001753","06001754","06001755","06001756","06001757","06001758","06001759","0600175A","0600175B","0600175C","0600175D","0600175E","0600175F","06001760","06001761","06001762","06001763","06001764","06001765","06001766","06001767","06001768","06001769","0600176A","0600176B","0600176C","0600176D","0600176E","0600176F","06001770","06001771","06001772","06001773","06001774","06001775","06001776","06001777","06001778","06001779","0600177A","0600177B","0600177C","0600177D","0600177E","0600177F","06001780","06001781","06001782","06001783","06001784","06001785","06001786","06001787","06001788","06001789","0600178A","0600178B","0600178C","0600178D","0600178E","0600178F","06001790","06001791","06001792","06001793","06001794","06001795","06001796","06001797","06001798","06001799","0600179A","0600179B","0600179C","0600179D","0600179E","0600179F","060017A0","060017A1","060017A2","060017A3","060017A4","060017A5","060017A6","060017A7","060017A8","060017A9","060017AA","060017AB","060017AC","060017AD","060017AE","060017AF","060017B0","060017B1","060017B2","060017B3","060017B4","060017B5","060017B6","060017B7","060017B8","060017B9","060017BA","060017BB","060017BC","060017BD","060017BE","060017BF","060017C0","060017C1","060017C2","060017C3","060017C4","060017C5","060017C6","060017C7","060017C8","060017C9","060017CA","060017CB","060017CC","060017CD","060017CE","060017CF","060017D0","060017D1","060017D2","060017D3","060017D4","060017D5","060017D6","060017D7","060017D8","060017D9","060017DA","060017DB","060017DC","060017DD","060017DE","060017DF","060017E0","060017E1","060017E2","060017E4","060017E5","060017E6","060017E7","060017E8","060017E9","060017EA","060017EB","060017EC","060017ED","060017EE","060017EF","060017F0","060017F1","060017F2","060017F3","060017F4","060017F5","060017F6","060017F7","060017F8","060017F9","060017FA","060017FB","060017FC","060017FD","060017FE","060017FF","06001800","06001801","06001802","06001803","06001804","06001805","06001806","06001807","06001808","06001809","0600180A","0600180B","0600180C","0600180D","0600180E","0600180F","06001810","06001811","06001812","06001813","06001814","06001815","06001816","06001817","06001818","06001819","0600181A","0600181B","0600181C","0600181D","0600181E","0600181F","06001820","06001821","06001822","06001823","06001824","06001825","06001826","06001827","06001828","06001829","0600182A","0600182B","0600182C","0600182D","0600182E","0600182F","06001830","06001831","06001832","06001833","06001834","06001835","06001836","06001837","06001838","06001839","0600183A","0600183B","0600183C","0600183D","0600183E","0600183F","06001840","06001841","06001842","06001843","06001844","06001845","06001846","06001847","06001848","06001849","0600184A","0600184B","0600184C","0600184D","0600184E","0600184F","06001850","06001851","06001852","06001853","06001854","06001855","06001856","06001857","06001858","06001859","0600185A","0600185B","0600185C","0600185D","0600185E","0600185F","06001860","06001861","06001862","06001863","06001864","06001865","06001866","06001867","06001868","06001869","0600186A","0600186B","0600186C","0600186D","0600186E","0600186F","06001870","06001871","06001872","06001873","06001874","06001875","06001876","06001877","06001878","06001879","0600187A","0600187B","0600187C","0600187D","0600187E","0600187F","06001880","06001881","06001882","06001883","06001884","06001885","06001886","06001887","06001888","06001889","0600188A","0600188B","0600188C","0600188D","0600188E","0600188F","06001890","06001891","06001892","06001893","06001894","06001895","06001896","06001897","06001898","06001899","0600189A","0600189B","0600189C","0600189D","0600189F","060018A0","060018A1","060018A2","060018A3","060018A4","060018A5","060018A6","060018A7","060018A8","060018A9","060018AA","060018AB","060018AC","060018AD","060018AE","060018AF","060018B0","060018B1","060018B2","060018B3","060018B4","060018B5","060018B6","060018B7","060018B8","060018B9","060018BA","060018BB","060018BC","060018BD","060018BE","060018BF","060018C0","060018C1","060018C2","060018C3","060018C4","060018C5","060018C6","060018C7","060018C8","060018C9","060018CA","060018CB","060018CC","060018CD","060018CE","060018CF","060018D0","060018D1","060018D2","060018D3","060018D4","060018D5","060018D6","060018D7","060018D8","060018D9","060018DB","060018DC","060018DD","060018DE","060018DF","060018E0","060018E1","060018E2","060018E3","060018E4","060018E5","060018E6","060018E7","060018E8","060018E9","060018EA","060018EB","060018EC","060018ED","060018EE","060018EF","060018F0","060018F1","060018F2","060018F3","060018F4","060018F5","060018F6","060018F7","060018F8","060018F9","060018FD","060018FE","060018FF","06001900","06001901","06001902","06001903","06001904","06001906","06001907","06001908","06001909","0600190A","0600190B","0600190C","0600190D","0600190E","0600190F","06001910","06001911","06001912"],"Structures/Decoration":["06001072","060012CF","060016C5","06001D63","06001EA5","06001EE4","06001FBC","06001FBD","060023A2","06002409","060025D4","060025D5","060027C8","06002927","0600303F","060030A1","060030C3","060030D6","06003120","06003341","0600334B","060036DD","060036DE","060036DF","060036E1","06005F5E","06005F60","06005F62","06005F64","0600602A","06006031","06006032","0600603A","06006532","06006533","0600659E","060065A2","0600674F","0600675E","06006761","06006782","06006783","060067E1","0600680B","060068EF","06006921","06006BE6","06007006","0600752E"],"Structures/Door":["06001317","06001412","06005D16"],"Structures/Hotspot":["06001049","060012D2","0600192F","060062EB","0600666C"],"Structures/Lifestone":["06001355","060067E0","060067E2"],"Structures/Sign":["06000FC2","060023DA","060060FD","06006253"],"Weapons/Elemental/Acid":["060010C3","060010C5","060010CC","060010CF","060010D2","060010D4","060010D9","060010DD","0600121E","0600158F","060015A3","060015B7","060015F4","060015FE","0600161C","0600254C","060026E2","06003603","06003742","06006855"],"Weapons/Elemental/Blunt":["0600158F","060015A3","060026E2","06006854"],"Weapons/Elemental/Bone":["060030B5","060030B6","060065A4","060065A5"],"Weapons/Elemental/Channeling Bone":["060030B5","060030B6","060065A4","060065A5"],"Weapons/Elemental/Electric":["0600158F","060015A3","060026E2","06003603","06003742","06006855"],"Weapons/Elemental/Fire":["060010D9","0600121E","0600158F","060015A3","060026E2","06003603","06006855"],"Weapons/Elemental/Flaming":["060010C3","060010C5","060010CC","060010CF","060010D2","060010D4","060010D9","060010DD","0600121E","060015B7","060015F4","060015FE","0600161C"],"Weapons/Elemental/Frost":["060010C3","060010C5","060010CC","060010CF","060010D2","060010D4","060010D9","060010DD","0600121E","0600158F","060015A3","060015B7","060015F4","060026E2","06006854"],"Weapons/Elemental/Lightning":["060010C3","060010C5","060010CC","060010CF","060010D2","060010D4","060010D9","060010DD","0600121E","060015B7","060015F4","060015FE","0600164E"],"Weapons/Elemental/Piercing":["0600158F","060015A3","060026E2","06003603","06006852"],"Weapons/Elemental/Slashing":["0600158F","060015A3","060026E2","06006853"],"Weapons/Rare":["06005B7B","06005B7F","06005B81","06005B83","06005B85","06005B8B","06005B8D","06005B8F","06005B91","06005B93","06005B95","06005B97","06005B9F","06005BA5","06005BA7","06005BAB","06005BAD","06005BAF","06005BB1","06005BB5","06005BB7","06005BBB","06005BBF","06005BC1","06005BC3","06005BC5","06005BC7","06005BC9","06005BCD","06005BCE","06005BD0","06005BD4","06005BD8","06005BDC","06005BFF","06005C01","06005C03","06005C05","06005C07","06006F30","06006F34","06006F47"],"Weapons/Themed/Academy":["060015B7","060015CD","0600161D","0600164F","060016B3","06002374"],"Weapons/Themed/Acidic Weeping":["06002D4B","06002D4D","06002D50","06002D54","06002D58","06002D5C"],"Weapons/Themed/Arena":["060069EB","060069EC","060069ED","060069EF","060069F0","060069F1","060069F2","060069F3","060069F7","060069F8"],"Weapons/Themed/Assault":["060020FD","060020FE","060020FF","06002102","06002103","06002104","06002105","06002106","06002A21"],"Weapons/Themed/Atlan":["06001C2D","06001C4B","06001C69","060025DD","060025F2"],"Weapons/Themed/Banished":["06003765","06003766","06003767","06003768","06003769","0600376A","0600376D","0600376E","0600376F"],"Weapons/Themed/Battered Old":["06005FF7","06005FF9","06005FFE","06006001","06006007","06006009","0600600C","0600600F","06006030"],"Weapons/Themed/Blackfire Chilling Isparian":["0600259C","060025A6","060025DD","060025FB","06002605"],"Weapons/Themed/Blackfire Coruscating Isparian":["0600259F","060025A9","060025E0","060025FE","06002608"],"Weapons/Themed/Blackfire Dissolving Isparian":["060025A2","060025AC","060025E3","06002601","0600260B"],"Weapons/Themed/Blackfire Flaming Isparian":["060025A3","060025AD","060025E4","06002602","0600260C"],"Weapons/Themed/Blackfire Shimmering Isparian":["060026B2","060026B3","060026B6","060026B8","060026D9"],"Weapons/Themed/Blackfire Shivering Atlan":["06001C2C","06001C4A","06001C68","060025DD","060025F1"],"Weapons/Themed/Blackfire Smoldering Atlan":["06001C33","06001C51","06001C6F","060025E4","060025F8"],"Weapons/Themed/Blackfire Sparking Atlan":["06001C2F","06001C4D","06001C6B","060025E0","060025F4"],"Weapons/Themed/Blackfire Stinging Atlan":["06001C32","06001C50","06001C6E","060025E3","060025F7"],"Weapons/Themed/Blighted":["06006963","06006964","06006965","06006967","06006968","06006969","0600696A","0600696B","0600696C","0600696D"],"Weapons/Themed/Bound Singularity":["060033E4","060033E5","060033E6","060033E7","060033E8","060033E9","060033EA","060033EB","060033EC","060033EE","060033F0"],"Weapons/Themed/Chimeric of the Quiddity":["060035BD","060035BE","060035BF","060035C0","060035C1","060035C2","060035C3","060035C4","060035C5","060035C6","060035C7"],"Weapons/Themed/Deadly Hollow":["060015CB","060015F3","060015FD","0600161B","06001639","0600164D","060016B1"],"Weapons/Themed/Electric Weeping":["06002D44","06002D4C","06002D53","06002D57","06002D5B","06002D5E"],"Weapons/Themed/Enhanced Assault":["060020FD","060020FE","060020FF","06002102","06002103","06002104","06002105","06002106","06002A21"],"Weapons/Themed/Enhanced Chilling Isparian":["0600259C","060025A6","060025DD","060025FB","06002605"],"Weapons/Themed/Enhanced Coruscating Isparian":["0600259F","060025A9","060025E0","060025FE","06002608"],"Weapons/Themed/Enhanced Dissolving Isparian":["060025A2","060025AC","060025E3","06002601","0600260B"],"Weapons/Themed/Enhanced Flaming Isparian":["060025A3","060025AD","060025E4","06002602","0600260C"],"Weapons/Themed/Enhanced Shimmering Isparian":["060026B2","060026B3","060026B6","060026B8","060026D9"],"Weapons/Themed/Enhanced Shivering Atlan":["06001C2C","06001C4A","06001C68","060025DD","060025F1"],"Weapons/Themed/Enhanced Smoldering Atlan":["06001C33","06001C51","06001C6F","060025E4","060025F8"],"Weapons/Themed/Enhanced Sparking Atlan":["06001C2F","06001C4D","06001C6B","060025E0","060025F4"],"Weapons/Themed/Enhanced Stinging Atlan":["06001C32","06001C50","06001C6E","060025E3","060025F7"],"Weapons/Themed/Enhanced of the Quiddity":["060020CC","060020CD","060020CE","060020CF","060020D0","060020D1","060020D2","060020D3","060020D4","060020D5","060029EB","06006B95"],"Weapons/Themed/Ensorcelled":["06006965","06006968","06006969","0600696C"],"Weapons/Themed/Flaming Weeping":["06002D46","06002D4E","06002D51","06002D55","06002D59","06002D5A"],"Weapons/Themed/Frozen Weeping":["06002D43","06002D45","06002D4F","06002D52","06002D56","06002D5D"],"Weapons/Themed/Hollow":["0600158F","060015A3","060015CB","060015F3","060015FD","0600161B","06001639","0600164D","060016B1","06002374"],"Weapons/Themed/Isparian":["0600259D","060025A7","060025DE","060025FC","06002606"],"Weapons/Themed/Major Chilling Isparian":["0600259C","060025A6","060025DD","060025FB","06002605"],"Weapons/Themed/Major Coruscating Isparian":["0600259F","060025A9","060025E0","060025FE","06002608"],"Weapons/Themed/Major Dissolving Isparian":["060025A2","060025AC","060025E3","06002601","0600260B"],"Weapons/Themed/Major Flaming Isparian":["060025A3","060025AD","060025E4","06002602","0600260C"],"Weapons/Themed/Major Shivering Atlan":["06001C2C","06001C4A","06001C68","060025DD","060025F1"],"Weapons/Themed/Major Smoldering Atlan":["06001C33","06001C51","06001C6F","060025E4","060025F8"],"Weapons/Themed/Major Sparking Atlan":["06001C2F","06001C4D","06001C6B","060025E0","060025F4"],"Weapons/Themed/Major Stinging Atlan":["06001C32","06001C50","06001C6E","060025E3","060025F7"],"Weapons/Themed/Minor Shivering Atlan":["06001C2C","06001C4A","06001C68","060025DD","060025F1"],"Weapons/Themed/Minor Smoldering Atlan":["06001C33","06001C51","06001C6F","060025E4","060025F8"],"Weapons/Themed/Minor Sparking Atlan":["06001C2F","06001C4D","06001C6B","060025E0","060025F4"],"Weapons/Themed/Minor Stinging Atlan":["06001C32","06001C50","06001C6E","060025E3","060025F7"],"Weapons/Themed/Paradox-touched Olthoi":["06001CCA","06006698","06006699","0600669A","0600669B","06006D91","06006D93","06006D94","06006D95","06006D96","06006D97"],"Weapons/Themed/Phantom":["0600158F","060015A3","060015CB","060015F3","060015FD","0600161B","06001639","0600164D","060016B1","06002374"],"Weapons/Themed/Ravenous":["060015CB","060015F3","060015FD","0600161B","06001639","0600164D","060016B1"],"Weapons/Themed/Red Rune Silveran":["060063EC","06006400","06006403","06006405","0600640A","0600640C","0600640E","06006420","06006425","06006428"],"Weapons/Themed/Rynthid Tentacle":["060074ED","060074EE","060074EF","060074F0","060074F2"],"Weapons/Themed/Shadowfire Isparian":["060062A5","060062AF","060062B3","060062B4","060062B5","060062B6","060062B7","060062B8"],"Weapons/Themed/Shimmering Isparian":["060026B2","060026B3","060026B6","060026B8","060026D9"],"Weapons/Themed/Singularity":["06001F89","06001F8A","06001F8B","06001F8C","0600222A","06002231","06002458","06002459","0600245A","0600245B","0600245C","060029EA","060029EC","060033EF"],"Weapons/Themed/Soul Bound":["060026B1","060026B2","060026B4","060026B5","060026B6","060026B7","060026B8","060026B9","060026D9","06003037"],"Weapons/Themed/Spectral":["0600121E","060015FB","060026B1","060026B2","060026B4","060026B5","060026B6","060026B7","060026B8","060026B9","060026D9","06003037"],"Weapons/Themed/Stormwood":["06007555","06007556","06007557","06007558","06007559","0600755A","0600755B","0600755C","0600755E","06007560"],"Weapons/Themed/T'thuun":["06006965","06006968","06006969","0600696A","0600696C","0600696D"],"Weapons/Themed/Training":["060015B7","060015D4","06001624","0600164D","060016B1","06002374","06002A3C"],"Weapons/Themed/Ultimate Singularity":["06002229","0600222A","0600222B","0600222C","0600222D","0600222E","0600222F","06002230","06002231","060029EA","060033ED"],"Weapons/Themed/Weeping":["06002AD6","06002AD7","06002AD8","06002AD9","06002ADA","06002ADB","06002ADD","06002ADE","06002ADF","06002AE0"],"Weapons/Themed/Worn Old":["06005FF7","06005FF9","06005FFE","06006001","06006007","06006009","0600600C","0600600F","06006030"],"Weapons/Themed/of Winter Flame":["0600628C","0600628D","0600628E"],"Weapons/Themed/of the Fallen":["0600377D","0600377F","06003780","06003783","06003784","06003785","06003786","06003787"],"Weapons/Themed/of the Quiddity":["060020CC","060020CD","060020CE","060020CF","060020D0","060020D1","060020D2","060020D3","060020D4","060020D5","060029EB","06006B95"],"_Overlays/IconOverlay":["06002F86","06002F87","06005EBC","06005EBE","06005EBF","06005EC0","06005EC2","060063D6","06006411","06006412","06006413","06006486","060064F7","0600665D","0600665E","06006BAF","06006C34","06006C35","06006C36","06006C37","06006C38","06007066","06007422","06007423","06007424","06007425","06007426","06007427","06007428","0600742D","0600742E","06007551"],"_Underlays/IconUnderlay":["060011CB","060011CC","060011CD","060011CE","060011CF","060011D0","060011D1","060011D2","060011D3","060011D4","060011D5","060011F3","060011F4","06003353","06003354","06003355","06003356","06003357","06003358","06003359","0600335A","0600335B","0600335C","06005B0C","06005E23","060065FB","060065FC","060067E8"]};
 function openIconPicker(onSelect){
@@ -5531,40 +5111,8 @@ function _importSQLPayload(sql, path, filename, force){
 
 // ── AI Mode SQL Import ──────────────────────────────────────────────────────
 var _aiImportedSQL = '';
-var _aiImportedFilename = '';
 
-function importSQLToAI(){
-  if(!window.pywebview){ toast('File import requires the desktop app.'); return; }
-  window.pywebview.api.import_sql().then(function(r){
-    if(!r||r.cancelled) return;
-    if(r.error){ toast('Import failed: '+r.error); return; }
-    _aiImportedSQL = r.content;
-    _aiImportedFilename = r.filename;
-    // Show badge
-    var badge = document.getElementById('aiImportBadge');
-    var nameEl = document.getElementById('aiImportName');
-    if(badge) badge.style.display='inline-flex';
-    if(nameEl) nameEl.textContent = r.filename;
-    // Update mode description
-    var desc = document.getElementById('aiModeDesc');
-    if(desc) desc.innerHTML='<span style="color:var(--gold)">Edit mode</span> \u2014 AI will modify your imported SQL based on your prompt.';
-    // Pre-fill the prompt placeholder hint
-    var prompt = document.getElementById('aiPrompt');
-    if(prompt && !prompt.value) prompt.placeholder = 'e.g. Make this mob stronger for level 250+, scale all stats, add more abilities.';
-    toast('\u2713 SQL imported for AI editing: '+r.filename);
-  }).catch(function(e){ toast('Import error: '+e); });
-}
 
-function clearAIImport(){
-  _aiImportedSQL = '';
-  _aiImportedFilename = '';
-  var badge = document.getElementById('aiImportBadge');
-  if(badge) badge.style.display='none';
-  var desc = document.getElementById('aiModeDesc');
-  if(desc) desc.textContent='Describe what you want \u2014 or import existing SQL to edit it.';
-  var prompt = document.getElementById('aiPrompt');
-  if(prompt) prompt.placeholder='e.g. A level 180 ice drudge \u2014 or import existing SQL above and describe changes.';
-}
 
 
 // ── Post-import: promote extraInt/extraFloat values back into form fields ──
@@ -5726,12 +5274,6 @@ const LEVEL_SCALE_TIERS = [
 ];
 
 // Skill ID → category: 'defense'|'melee'|'missile'|'magic'
-var _SKILL_CAT = {
-  6:'defense',7:'defense',15:'defense',              // MeleeDefense, MissileDefense, MagicDefense
-  44:'melee',45:'melee',46:'melee',54:'melee',       // Heavy, Light, Finesse, DualWield
-  35:'missile',                                       // MissileWeapons
-  28:'magic',31:'magic',34:'magic',43:'magic',        // Life, Creature, War, Void Magic
-};
 
 function scaleCreatureStats(){
   // Resolve current level from extraInt type 25
@@ -6302,7 +5844,6 @@ function buildGeneratorProps(){
 }
 
 
-const CREATURE_BODY_MAP={31:'biped',2:'biped',3:'biped',4:'biped',5:'biped',6:'biped',7:'biped',13:'biped',14:'biped',18:'biped',28:'biped',30:'biped',39:'biped',44:'biped',48:'biped',75:'biped',99:'biped',100:'biped',101:'biped',8:'quadruped',15:'quadruped',16:'quadruped',17:'quadruped',23:'quadruped',32:'quadruped',46:'quadruped',1:'insect',38:'biped',60:'biped',61:'biped',19:'floating',20:'floating',22:'floating',29:'floating'};
 
 
 
@@ -6996,247 +6537,6 @@ function _jcConvertAndSave(){
   }
 }
 
-// ── Create Item Panel ─────────────────────────────────────────────────────────
-var _ciPreset = 'wieldable';
-function buildCreateItemPanel(){
-  var S = _FIELD_STYLES && _FIELD_STYLES.input ? _FIELD_STYLES.input : 'width:100%;padding:6px 8px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink);font-family:var(--ui-font);font-size:11px;box-sizing:border-box';
-  var LB = 'font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim);display:block;margin-bottom:3px';
-  function fld(id, label, type, ph, opts){
-    var inp;
-    if(type==='select'){
-      inp='<select id="ci_'+id+'" style="'+S+'">'+(opts||[]).map(function(o){return '<option value="'+o[0]+'">'+o[1]+'</option>';}).join('')+'</select>';
-    } else {
-      inp='<input type="'+(type||'text')+'" id="ci_'+id+'" placeholder="'+(ph||'')+'" style="'+S+'">';
-    }
-    return '<div style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px"><label style="'+LB+'">'+label+'</label>'+inp+'</div>';
-  }
-  var presets = [
-    ['wieldable','Wieldable (Weapon/Armor)'],
-    ['sellable','Sellable (Vendor Item)'],
-    ['droppable','Droppable (Loot/Container)'],
-  ];
-  var presetBar = '<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'
-    +presets.map(function(p){
-      var active=_ciPreset===p[0]?';background:var(--crimson);color:#fff;border-color:var(--crimson)':'';
-      return '<button onclick="_ciSetPreset(\''+p[0]+'\')" style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;padding:5px 14px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:2px'+active+'">'+p[1]+'</button>';
-    }).join('')+'</div>';
-
-  var ITEM_TYPES = [[0,'Generic (0)'],[1,'Misc (1)'],[2,'Armor (2)'],[4,'Clothing (4)'],[8,'Jewelry (8)'],[16,'Creature (16)'],[32,'Food (32)'],[64,'Money (64)'],[128,'Misc Item (128)'],[256,'Key (256)'],[512,'Container (512)'],[1024,'Foci (1024)'],[2048,'Gem (2048)'],[4096,'Spell Component (4096)'],[16384,'Caster (16384)'],[32768,'Portal (32768)'],[65536,'Lockpick (65536)'],[131072,'ManaStone (131072)'],[262144,'Promissory Note (262144)'],[524288,'Writable (524288)'],[1048576,'Food (1048576)'],[2097152,'Weapon (2097152)'],[4194304,'MeleeWeapon (4194304)'],[8388608,'Missile Weapon (8388608)']];
-  var VALID_LOCATIONS = [[0,'None'],[1,'Head'],[2,'Chest'],[4,'Abdomen'],[8,'UA'],[16,'LA'],[32,'Hands'],[64,'UpperLeg'],[128,'LowerLeg'],[256,'Foot'],[512,'LeftHand'],[1024,'Shield'],[2048,'RightHand'],[4096,'Two-Handed'],[8192,'Back'],[16384,'MeleeWeapon'],[32768,'MissileWeapon'],[65536,'Ammunition'],[131072,'Held']];
-  var DAMAGE_TYPES = [[0,'Undef'],[1,'Slash'],[2,'Pierce'],[4,'Bludge'],[8,'Fire'],[16,'Cold'],[32,'Acid'],[64,'Electric'],[128,'Nether']];
-  var SKILL_IDS = [[1,'Axe'],[2,'Bow'],[3,'Crossbow'],[4,'Dagger'],[5,'Mace'],[6,'Melee Defense'],[7,'Missile Defense'],[10,'Spear'],[11,'Staff'],[12,'Sword'],[13,'Thrown'],[14,'Unarmed Combat'],[15,'Arcane Lore'],[16,'Magic Defense'],[17,'Mana Conversion'],[19,'Assess Person'],[20,'Deception'],[21,'Healing'],[22,'Jump'],[23,'Lockpick'],[24,'Run'],[26,'Assess Creature'],[27,'Weapon Tinkering'],[28,'Item Tinkering'],[29,'Magic Item Tinkering'],[30,'Armor Tinkering'],[31,'Create Item'],[32,'Salvaging'],[33,'Two-Handed Combat'],[34,'Gearcraft'],[35,'Void Magic'],[36,'Heavy Weapons'],[37,'Light Weapons'],[38,'Finesse Weapons'],[39,'Missile Weapons'],[40,'Shield'],[41,'Dual Wield'],[42,'Recklessness'],[43,'Sneak Attack'],[44,'Dirty Fighting'],[45,'Challenge'],[46,'Summoning']];
-
-  var commonFields =
-    fld('name','Item Name','text','e.g. Iron Sword of Doom') +
-    fld('wcid','WCID (blank = auto)','number','e.g. 810000') +
-    fld('item_type','Item Type','select','',ITEM_TYPES) +
-    fld('icon','Icon DID','text','e.g. 0x06003655') +
-    fld('value','Value (pyreals)','number','0') +
-    fld('encumb','Encumbrance','number','100');
-
-  var wieldableFields = _ciPreset==='wieldable' ? (
-    '<div style="margin:8px 0 4px;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)">WEAPON / ARMOR PROPERTIES</div>' +
-    fld('damage','Base Damage','number','20') +
-    fld('damage_type','Damage Type','select','',DAMAGE_TYPES) +
-    fld('damage_variance','Damage Variance','text','0.25') +
-    fld('weapon_skill','Weapon Skill','select','',SKILL_IDS) +
-    fld('weapon_time','Weapon Time (ms)','number','50') +
-    fld('valid_locations','Valid Locations','select','',VALID_LOCATIONS) +
-    fld('max_stack','Max Stack Size','number','1') +
-    fld('palette','Palette DID','text','e.g. 0x04000000')
-  ) : '';
-
-  var sellableFields = _ciPreset==='sellable' ? (
-    '<div style="margin:8px 0 4px;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)">VENDOR PROPERTIES</div>' +
-    fld('burden','Burden Units','number','100') +
-    fld('max_stack','Stack Size','number','1') +
-    fld('buy_price','Buy Price Multiplier','text','1.0') +
-    fld('sell_price','Sell Price Multiplier','text','0.75')
-  ) : '';
-
-  var droppableFields = _ciPreset==='droppable' ? (
-    '<div style="margin:8px 0 4px;font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)">DROP PROPERTIES</div>' +
-    fld('max_stack','Max Stack','number','1') +
-    fld('stackable','Stackable','select','',[['0','No'],['1','Yes']]) +
-    fld('burden','Burden','number','100') +
-    fld('drop_rate','Drop Rate (0-1)','text','0.1')
-  ) : '';
-
-  var descField = fld('description','Short Description','text','e.g. A finely crafted blade.');
-  var longDescField = fld('long_desc','Long Description','text','Leave blank to auto-generate');
-
-  var genBtn = '<div style="margin-top:16px">'
-    +'<button onclick="_ciGenerate()" style="font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.08em;padding:9px 24px;background:var(--crimson);color:#fff;border:none;cursor:pointer;border-radius:2px;width:100%">⚒ Generate SQL</button>'
-    +'</div>';
-
-  var outArea = '<div id="ci_output" style="margin-top:14px;display:none">'
-    +'<div style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:6px">GENERATED SQL</div>'
-    +'<textarea id="ci_sql_out" readonly style="width:100%;height:240px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink);font-family:JetBrains Mono,monospace;font-size:11px;padding:8px;box-sizing:border-box;resize:vertical"></textarea>'
-    +'<div style="display:flex;gap:8px;margin-top:8px">'
-    +'<button onclick="_ciCopySql()" style="font-family:var(--ui-font);font-size:9px;font-weight:700;padding:6px 16px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer">Copy SQL</button>'
-    +'<button onclick="_ciSaveSql()" style="font-family:var(--ui-font);font-size:9px;font-weight:700;padding:6px 16px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer">Save .sql File</button>'
-    +'</div></div>';
-
-  return '<div style="padding:16px;max-width:560px">'
-    +presetBar
-    +'<div style="background:var(--parch-dk);border:1px solid var(--border);border-radius:3px;padding:14px">'
-    +commonFields+wieldableFields+sellableFields+droppableFields
-    +descField+longDescField
-    +'</div>'
-    +genBtn+outArea
-    +'</div>';
-}
-
-function _ciSetPreset(p){
-  _ciPreset=p;
-  buildSubContent();
-}
-
-function _ciG(id){ var e=document.getElementById('ci_'+id); return e?e.value.trim():''; }
-
-function _ciGenerate(){
-  if(!window.pywebview){ alert('pywebview not available in dev mode'); return; }
-  var params = {
-    preset:        _ciPreset,
-    name:          _ciG('name'),
-    wcid:          _ciG('wcid'),
-    item_type:     _ciG('item_type'),
-    icon:          _ciG('icon'),
-    value:         _ciG('value'),
-    encumb:        _ciG('encumb'),
-    description:   _ciG('description'),
-    long_desc:     _ciG('long_desc'),
-    // wieldable
-    damage:        _ciG('damage'),
-    damage_type:   _ciG('damage_type'),
-    damage_variance:_ciG('damage_variance'),
-    weapon_skill:  _ciG('weapon_skill'),
-    weapon_time:   _ciG('weapon_time'),
-    valid_locations:_ciG('valid_locations'),
-    max_stack:     _ciG('max_stack'),
-    palette:       _ciG('palette'),
-    // sellable / droppable
-    burden:        _ciG('burden'),
-    buy_price:     _ciG('buy_price'),
-    sell_price:    _ciG('sell_price'),
-    stackable:     _ciG('stackable'),
-    drop_rate:     _ciG('drop_rate'),
-  };
-  window.pywebview.api.generate_item_sql(params).then(function(r){
-    if(r.error){ alert('Error: '+r.error); return; }
-    var out = document.getElementById('ci_output');
-    var ta  = document.getElementById('ci_sql_out');
-    if(out) out.style.display='block';
-    if(ta)  ta.value = r.sql;
-  });
-}
-
-function _ciCopySql(){
-  var ta=document.getElementById('ci_sql_out'); if(!ta) return;
-  ta.select(); document.execCommand('copy');
-}
-
-function _ciSaveSql(){
-  var ta=document.getElementById('ci_sql_out'); if(!ta||!ta.value) return;
-  var name=_ciG('name')||'new_item';
-  var slug=name.toLowerCase().replace(/[^a-z0-9]+/g,'_');
-  var blob=new Blob([ta.value],{type:'text/plain'});
-  var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download=slug+'.sql'; a.click(); URL.revokeObjectURL(a.href);
-}
-
-
-// ── JSON ↔ SQL Converter Panel ────────────────────────────────────────────────
-var _jcDir = 'json_to_sql'; // or 'sql_to_json'
-function buildJsonConverterPanel(){
-  var S = _FIELD_STYLES && _FIELD_STYLES.input ? _FIELD_STYLES.input : 'width:100%;padding:6px 8px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink);font-family:var(--ui-font);font-size:11px;box-sizing:border-box';
-  var LB = 'font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim)';
-  var TA = 'width:100%;height:300px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink);font-family:JetBrains Mono,monospace;font-size:11px;padding:8px;box-sizing:border-box;resize:vertical';
-
-  var dirBar = '<div style="display:flex;gap:0;margin-bottom:14px">'
-    +[['json_to_sql','JSON → SQL'],['sql_to_json','SQL → JSON']].map(function(d){
-      var a=_jcDir===d[0]?';background:var(--crimson);color:#fff;border-color:var(--crimson)':'';
-      return '<button onclick="_jcSetDir(\''+d[0]+'\')" style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;padding:6px 20px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer'+a+'">'+d[1]+'</button>';
-    }).join('')+'</div>';
-
-  var inLabel  = _jcDir==='json_to_sql' ? 'ACE JSON INPUT' : 'SQL INPUT';
-  var outLabel = _jcDir==='json_to_sql' ? 'SQL OUTPUT' : 'JSON OUTPUT';
-  var inPH     = _jcDir==='json_to_sql'
-    ? '{\n  "wcid": 810000,\n  "weenieType": 6,\n  "stringStats": { "1": "My Item" },\n  "intStats": {},\n  ...\n}'
-    : 'Paste ACE-World INSERT SQL here...';
-
-  return '<div style="padding:16px">'
-    +dirBar
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'
-    +'<div><div style="'+LB+';margin-bottom:6px">'+inLabel+'</div>'
-    +'<textarea id="jc_input" placeholder="'+inPH.replace(/"/g,'&quot;').replace(/\n/g,'&#10;')+'" style="'+TA+'"></textarea>'
-    +'<div style="display:flex;gap:8px;margin-top:8px">'
-    +'<button onclick="_jcConvert()" style="font-family:var(--ui-font);font-size:9px;font-weight:700;padding:6px 20px;background:var(--crimson);color:#fff;border:none;cursor:pointer;border-radius:2px">Convert &#x21C4;</button>'
-    +'<button onclick="_jcLoadFile()" style="font-family:var(--ui-font);font-size:9px;font-weight:700;padding:6px 16px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer">Load File…</button>'
-    +'</div></div>'
-    +'<div><div style="'+LB+';margin-bottom:6px">'+outLabel+'</div>'
-    +'<textarea id="jc_output" readonly placeholder="Output appears here after conversion." style="'+TA+'"></textarea>'
-    +'<div style="display:flex;gap:8px;margin-top:8px">'
-    +'<button onclick="_jcCopy()" style="font-family:var(--ui-font);font-size:9px;font-weight:700;padding:6px 16px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer">Copy</button>'
-    +'<button onclick="_jcSave()" style="font-family:var(--ui-font);font-size:9px;font-weight:700;padding:6px 16px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer">Save File…</button>'
-    +'</div></div>'
-    +'</div>'
-    +'<div id="jc_status" style="margin-top:10px;font-family:var(--ui-font);font-style:italic;font-size:12px;color:var(--ink-faint)"></div>'
-    +'</div>';
-}
-
-function _jcSetDir(d){ _jcDir=d; buildSubContent(); }
-
-function _jcConvert(){
-  var inp=document.getElementById('jc_input');
-  var out=document.getElementById('jc_output');
-  var sta=document.getElementById('jc_status');
-  if(!inp||!inp.value.trim()){ if(sta) sta.textContent='No input provided.'; return; }
-  if(sta) sta.textContent='Converting…';
-  if(!window.pywebview){ if(sta) sta.textContent='pywebview not available.'; return; }
-  if(_jcDir==='json_to_sql'){
-    window.pywebview.api.convert_json_to_sql(inp.value,'converter').then(function(r){
-      if(r.error){ if(sta) sta.textContent='Error: '+r.error; return; }
-      if(out) out.value=r.sql;
-      if(sta) sta.textContent='Converted successfully.';
-    });
-  } else {
-    window.pywebview.api.convert_sql_to_json(inp.value).then(function(r){
-      if(r.error){ if(sta) sta.textContent='Error: '+r.error; return; }
-      if(out) out.value=r.json;
-      if(sta) sta.textContent='Converted successfully.';
-    });
-  }
-}
-
-function _jcLoadFile(){
-  var inp=document.createElement('input'); inp.type='file';
-  inp.accept=_jcDir==='json_to_sql'?'.json':'.sql';
-  inp.onchange=function(e){
-    var f=e.target.files[0]; if(!f) return;
-    var fr=new FileReader();
-    fr.onload=function(ev){
-      var el=document.getElementById('jc_input');
-      if(el) el.value=ev.target.result;
-    };
-    fr.readAsText(f);
-  };
-  inp.click();
-}
-
-function _jcCopy(){
-  var ta=document.getElementById('jc_output'); if(!ta) return;
-  ta.select(); document.execCommand('copy');
-}
-
-function _jcSave(){
-  var ta=document.getElementById('jc_output'); if(!ta||!ta.value) return;
-  var ext=_jcDir==='json_to_sql'?'.sql':'.json';
-  var blob=new Blob([ta.value],{type:'text/plain'});
-  var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download='converted'+ext; a.click(); URL.revokeObjectURL(a.href);
-}
-
 
 function buildSubContent(){
   const fc=document.getElementById('formContent');
@@ -7504,104 +6804,6 @@ function buildInnerTabs(){
 // PropertyInt: 1=ItemType,5=EncumbranceVal,6=ItemsCapacity,7=ContainersCapacity,
 //   9=ValidLocations,16=ItemUseable,19=Value,25=MaxStackSize,33=Bonded,35=Attuned,93=PhysicsState
 // PropertyBool: 1=Stuck,13=Ethereal,14=GravityStatus
-function applyItemPreset(key){
-  if(!key) return;
-  var P={
-    questtoken:   {wt:1, name:'Quest Token',
-      ints:[[1,128,'ItemType - Misc'],[5,5,'EncumbranceVal'],[16,1,'ItemUseable - Cannot'],[19,0,'Value'],[25,1,'MaxStackSize'],[33,1,'Bonded'],[35,1,'Attuned'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    stackabletoken:{wt:51,name:'Stackable Token',
-      ints:[[1,128,'ItemType - Misc'],[5,5,'EncumbranceVal'],[16,1,'ItemUseable - Cannot'],[19,0,'Value'],[25,100,'MaxStackSize'],[33,1,'Bonded'],[35,1,'Attuned'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    healingkit:   {wt:28,name:'Healing Kit',
-      ints:[[1,128,'ItemType - Misc'],[5,100,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,1000,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    potion:       {wt:18,name:'Potion',
-      ints:[[1,32,'ItemType - Food'],[5,10,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,250,'Value'],[25,10,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    key:          {wt:22,name:'Key',
-      ints:[[1,128,'ItemType - Misc'],[5,25,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,500,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    lockpick:     {wt:15,name:'Lockpick',
-      ints:[[1,128,'ItemType - Misc'],[5,10,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,100,'Value'],[25,25,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    gem:          {wt:38,name:'Gem',
-      ints:[[1,128,'ItemType - Misc'],[5,30,'EncumbranceVal'],[16,1,'ItemUseable - Cannot'],[19,5000,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    manastone:    {wt:37,name:'Mana Stone',
-      ints:[[1,128,'ItemType - Misc'],[5,50,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,500,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    arrow:        {wt:4, name:'Arrow',
-      ints:[[1,4,'ItemType - Ammunition'],[5,1,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,10,'Value'],[25,500,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    bolt:         {wt:4, name:'Bolt',
-      ints:[[1,4,'ItemType - Ammunition'],[5,1,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,10,'Value'],[25,500,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    atlatl:       {wt:4, name:'Atlatl Dart',
-      ints:[[1,4,'ItemType - Ammunition'],[5,2,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,15,'Value'],[25,200,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    chest:        {wt:20,name:'Chest',
-      ints:[[1,128,'ItemType - Misc'],[5,1000,'EncumbranceVal'],[6,-1,'ItemsCapacity'],[7,-1,'ContainersCapacity'],[16,4,'ItemUseable - UsedBy'],[19,0,'Value'],[93,4660,'PhysicsState']],
-      bools:[[1,true,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    container:    {wt:21,name:'Container',
-      ints:[[1,128,'ItemType - Misc'],[5,200,'EncumbranceVal'],[6,-1,'ItemsCapacity'],[7,-1,'ContainersCapacity'],[16,1,'ItemUseable - Cannot'],[19,500,'Value'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    spellcomp:    {wt:32,name:'Spell Component',
-      ints:[[1,128,'ItemType - Misc'],[5,1,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,50,'Value'],[25,999,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    tinkmaterial: {wt:39,name:'Tinkering Material',
-      ints:[[1,128,'ItemType - Misc'],[5,50,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,1000,'Value'],[25,25,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    salvage:      {wt:40,name:'Salvage Bag',
-      ints:[[1,128,'ItemType - Misc'],[5,100,'EncumbranceVal'],[16,1,'ItemUseable - Cannot'],[19,500,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    alchemybase:  {wt:9, name:'Alchemy Base',
-      ints:[[1,128,'ItemType - Misc'],[5,10,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,100,'Value'],[25,50,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    cookingbase:  {wt:9, name:'Cooking Base',
-      ints:[[1,32,'ItemType - Food'],[5,10,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,100,'Value'],[25,50,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    book:         {wt:8, name:'Book',
-      ints:[[1,64,'ItemType - Writable'],[5,100,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,50,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    scroll:       {wt:34,name:'Scroll',
-      ints:[[1,64,'ItemType - Writable'],[5,50,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,200,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    note:         {wt:1, name:'Promissory Note',
-      ints:[[1,128,'ItemType - Misc'],[5,10,'EncumbranceVal'],[16,1,'ItemUseable - Cannot'],[19,0,'Value'],[25,1,'MaxStackSize'],[33,1,'Bonded'],[35,1,'Attuned'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    coin:         {wt:9, name:'Pyreals',
-      ints:[[1,128,'ItemType - Misc'],[5,1,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,1,'Value'],[25,25000,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    lightsource:  {wt:29,name:'Light Source',
-      ints:[[1,128,'ItemType - Misc'],[5,50,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,100,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    thrownweapon: {wt:1, name:'Thrown Weapon',
-      ints:[[1,128,'ItemType - Misc'],[5,40,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,200,'Value'],[25,25,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    petdoll:      {wt:1, name:'Pet Doll',
-      ints:[[1,128,'ItemType - Misc'],[5,50,'EncumbranceVal'],[16,4,'ItemUseable - UsedBy'],[19,5000,'Value'],[25,1,'MaxStackSize'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-    augstone:     {wt:38,name:'Augmentation Stone',
-      ints:[[1,128,'ItemType - Misc'],[5,5,'EncumbranceVal'],[16,2,'ItemUseable - Self'],[19,10000,'Value'],[25,1,'MaxStackSize'],[35,1,'Attuned'],[93,4660,'PhysicsState']],
-      bools:[[1,false,'Stuck'],[13,false,'Ethereal'],[14,true,'GravityStatus']]},
-  };
-  var p=P[key]; if(!p) return;
-  // Set weenie type
-  var wtEl=document.getElementById('fWeenieType'); if(wtEl) wtEl.value=p.wt;
-  // Seed name if not already set
-  var hasName=extraStr.some(function(r){return parseInt(r.type)===1&&r.value;});
-  if(!hasName) extraStr.push({type:'1',value:p.name});
-  // Replace extraInt and extraBool entirely with preset values
-  extraInt.length=0;
-  extraBool.length=0;
-  p.ints.forEach(function(row){ extraInt.push({type:String(row[0]),value:String(row[1]),label:row[2]}); });
-  p.bools.forEach(function(row){ extraBool.push({type:String(row[0]),value:row[1],label:row[2]}); });
-  rebuildPanel('properties');
-  regen();
-  // Reset dropdown
-  var sel=document.getElementById('itemPresetSel'); if(sel) sel.value='';
-}
 
 
 function switchMode(mode,btn){
@@ -8868,18 +8070,6 @@ var _rcpCbState = {melee:false, missile:false, caster:false, armor:false, clothi
 // Collapse state for Recipe Core sections — persisted across panel rebuilds
 var _rcpCollapseState = {rcpIdentBody: false, rcpSuccessBody: false, rcpFailBody: false};
 
-function _rcpCbSyncStateFromEntries(){
-  // After importing a recipe, detect which categories are present in cookbookEntries
-  // and set _rcpCbState so the checkboxes redraw as checked.
-  if(!cookbookEntries || !cookbookEntries.length) return;
-  var CATS = ['melee','missile','caster','armor','clothing','jewelry'];
-  var wcidSet = new Set(cookbookEntries.map(function(e){ return parseInt(e.tgt); }));
-  CATS.forEach(function(cat){
-    var list = (typeof RECIPE_CB_TARGETS !== 'undefined' && RECIPE_CB_TARGETS[cat]) || [];
-    var anyMatch = list.some(function(pair){ return wcidSet.has(pair[0]); });
-    if(anyMatch) _rcpCbState[cat] = true;
-  });
-}
 
 function _rcpCbSaveState(){
   var CATS = ['melee','missile','caster','armor','clothing','jewelry'];
@@ -9219,18 +8409,6 @@ function buildAdvanced(){
   const SKIP_DID=new Set([1,2,3,4,6,7,8,22,28,32,35,36,38,46,50,52,55]);
 
   // Read-only rows for properties managed by form fields (shown grayed-out)
-  function managedRows(arr, propNames, skipSet){
-    // arr may be an object {id:{type,value}} from extractInsertValues, or null/undefined
-    const rows=Array.isArray(arr)?arr:(arr&&typeof arr==='object'?Object.values(arr):[]);
-    return rows.filter(r=>skipSet.has(parseInt(r.type))).map(r=>{
-      const name=propNames[r.type]||'custom';
-      return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;opacity:0.55">
-        <div style="min-width:220px;font-family:var(--ui-font);font-size:10px;font-weight:700;color:var(--ink-dim)">${r.type} · ${name}</div>
-        <div style="flex:1;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-dim);padding:4px 3px">${r.value}</div>
-        <div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);white-space:nowrap">Form Field</div>
-      </div>`;
-    }).join('');
-  }
 
   // Editable rows from the extra arrays
   function extraRows(arrRef, propNames){
@@ -9515,90 +8693,11 @@ function syncAdvancedFromSQL(silent=false){
 }
 
 // ── SEARCH FUNCTIONS ──────────────────────────────────────────────────────────
-function searchWeaponFn(q){
-  const drop=$('wepSearch_drop');if(!drop)return;
-  if(!q||q.length<1){openWeaponSearch('');return;}
-  const matches=WEAPONS.filter(w=>w[1].toLowerCase().includes(q.toLowerCase())).slice(0,50);
-  const wepItems=matches.map(w=>`<div class="sdrop-item" onmousedown="event.preventDefault();fillWeapon(${JSON.stringify(w)})">${w[1]}<small>Dmg:${w[2]} ${w[3]} Time:${w[4]}</small></div>`).join('');
-  drop.innerHTML=matches.length?`<div class="sdrop-list">${wepItems}</div>`:'<div class="sdrop-none">No results</div>';
-  drop.classList.add('open');
-}
-function fillWeapon(w){
-  const DT={'Slash':1,'Pierce':2,'Bludgeon':4,'Cold':8,'Fire':16,'Acid':32,'Electric':64,'Nether':1024};
-  const SK={'OneHanded':44,'TwoHanded':41,'Unarmed':44,'Bow':47,'Crossbow':47,'Sling':47,'ThrownWeapon':47,'Caster':34};
-  const si=id=>{const e=$(id);if(e)e.value=id;};
-  setV('fName',w[1]);setV('fDmg',w[2]);setV('fWepTime',w[4]);setV('fDmgVar',w[5]);setV('fWepDef',w[6]);setV('fWepOff',w[7]);
-  const dtEl=$('fDmgType');if(dtEl)dtEl.value=DT[w[3]]??0;
-  const wsEl=$('fWepSkill');if(wsEl)wsEl.value=SK[w[9]]||44;
-  $('wepSearch_drop')?.classList.remove('open');regen();
-}
-function searchArmorFn(q){
-  const drop=$('armorSearch_drop');if(!drop)return;
-  if(!q||q.length<1){openArmorSearch('');return;}
-  const matches=ARMOR.filter(a=>a[1].toLowerCase().includes(q.toLowerCase())).slice(0,50);
-  const armItems=matches.map(a=>`<div class="sdrop-item" onmousedown="event.preventDefault();fillArmor(${JSON.stringify(a)})">${a[1]}<small>${a[2]} AL:${a[3]}</small></div>`).join('');
-  drop.innerHTML=matches.length?`<div class="sdrop-list">${armItems}</div>`:'<div class="sdrop-none">No results</div>';
-  drop.classList.add('open');
-}
-function fillArmor(a){
-  const TM={'Cloth':1,'Leather':2,'StuddedLeather':3,'Scale':4,'Chainmail':5,'DiffusingWeave':6,'Amuli':7,'Celdon':8,'Haebrean':9,'Yoroi':10,'Platemail':11,'Lorica':12,'Nariyid':13,'Alduressa':14,'Covenant':15,'Koveras':17,'Olthoi':18};
-  setV('fName',a[1]);setV('fArmorLevel',a[3]);setV('mSlash',a[4]);setV('mPierce',a[5]);setV('mBludge',a[6]);setV('mCold',a[7]);setV('mFire',a[8]);setV('mAcid',a[9]);setV('mElec',a[10]);
-  const atEl=$('fArmorType');if(atEl)atEl.value=TM[a[2]]??11;
-  $('armorSearch_drop')?.classList.remove('open');onArmorTypeChange();regen();
-}
 function setV(id,v){const e=$(id);if(e)e.value=v;}
 
 // ── OPEN-ON-FOCUS search helpers ──────────────────────────────────────────────
-function openDropSearch(dropId, items, mapFn, minItems=8){
-  const drop=$(dropId);if(!drop)return;
-  const first=items.slice(0,minItems);
-  drop.innerHTML=first.length
-    ?`<div class="sdrop-list">${first.map(mapFn).join('')}</div>`
-    :'<div class="sdrop-none">No items</div>';
-  drop.classList.add('open');
-}
-function openWeaponSearch(q){
-  if(!q) openDropSearch('wepSearch_drop',WEAPONS,
-    w=>`<div class="sdrop-item" onmousedown="event.preventDefault();fillWeapon(${JSON.stringify(w)})">${w[1]}<small>Dmg:${w[2]} ${w[3]} Time:${w[4]}</small></div>`);
-}
-function openArmorSearch(q){
-  if(!q) openDropSearch('armorSearch_drop',ARMOR,
-    a=>`<div class="sdrop-item" onmousedown="event.preventDefault();fillArmor(${JSON.stringify(a)})">${a[1]}<small>${a[2]} AL:${a[3]}</small></div>`);
-}
-function openItemSearch(q){
-  const src=typeof ITEMS!=='undefined'?ITEMS.slice(0,8):[...WEAPONS.slice(0,4),...ARMOR.slice(0,4)];
-  if(!q) openDropSearch('itemSearch_drop',src,
-    x=>`<div class="sdrop-item" onmousedown="event.preventDefault();setV('fName',this.dataset.n);$('itemSearch_drop').classList.remove('open');regen()" data-n="${x[1].replace(/"/g,'&quot;')}">${x[1]}<small>${x[2]||''}</small></div>`);
-}
-function openJewelrySearch(q){
-  // Jewelry DB - search from a small curated list of common jewelry names
-  const JEW_NAMES=['Ring of the Dawn','Band of the Dawn','Necklace of the Dawn','Bracelet of the Dawn','Wristband of the Dawn','Trinket of the Dawn','Blood Gem Ring','Empyrean Ring'];
-  if(!q) openDropSearch('jewSearch_drop',JEW_NAMES,
-    n=>`<div class="sdrop-item" onmousedown="event.preventDefault();setV('fName','${n.replace(/'/g,"\'")}');$('jewSearch_drop').classList.remove('open');regen()">${n}</div>`);
-}
 
 // ── Item/Jewelry search functions ──────────────────────────────────────────────
-function searchItemFn(q){
-  const drop=$('itemSearch_drop');if(!drop)return;
-  if(!q||q.length<1){openItemSearch('');return;}
-  const ql=q.toLowerCase();
-  const src=typeof ITEMS!=='undefined'?ITEMS:[...WEAPONS,...ARMOR];
-  const matches=src.filter(x=>x[1].toLowerCase().includes(ql)).slice(0,100);
-  const html2=matches.map(x=>`<div class="sdrop-item" onmousedown="event.preventDefault();setV('fName','${x[1].replace(/'/g,"\'")}');$('itemSearch_drop').classList.remove('open');regen()">${x[1]}<small>${x[2]||''}</small></div>`).join('');
-  drop.innerHTML=matches.length?`<div class="sdrop-list">${html2}</div>`:'<div class="sdrop-none">No results</div>';
-  drop.classList.add('open');
-}
-function searchJewelryFn(q){
-  const drop=$('jewSearch_drop');if(!drop)return;
-  if(!q||q.length<1){openJewelrySearch('');return;}
-  const JEW_NAMES=['Ring of the Dawn','Band of the Dawn','Necklace of the Dawn','Bracelet of the Dawn','Wristband of the Dawn','Trinket of the Dawn','Blood Gem Ring','Empyrean Ring'];
-  const ql=q.toLowerCase();
-  const matches=JEW_NAMES.filter(n=>n.toLowerCase().includes(ql));
-  drop.innerHTML=matches.length
-    ?matches.map(n=>`<div class="sdrop-item" onmousedown="event.preventDefault();setV('fName','${n.replace(/'/g,"\'")}');$('jewSearch_drop').classList.remove('open');regen()">${n}</div>`).join('')
-    :'<div class="sdrop-none">No results</div>';
-  drop.classList.add('open');
-}
 
 // ── PRESETS ───────────────────────────────────────────────────────────────────
 function applyPreset(p){
@@ -9719,15 +8818,6 @@ function markSQLClean(){
   if(banner) banner.style.display='none';
 }
 
-function discardSQLEdit(){
-  // Re-run generation from form fields, discarding manual SQL edits
-  _sqlDirty=false;
-  _userEditingSQL=false;
-  clearTimeout(_sqlEditTimer);
-  const banner=$('sqlDirtyBanner');
-  if(banner) banner.style.display='none';
-  regen();
-}
 
 function onSQLEdit(){
   // User is typing in the SQL textarea
@@ -11495,38 +10585,6 @@ function _startAIPoll(){
 function _stopAIPoll(){
   if(_aiPollTimer){ clearInterval(_aiPollTimer); _aiPollTimer=null; }
 }
-function saveAIFiles(){
-  var el=$('aiFileList');
-  if(el) el.innerHTML='<div style="color:var(--ink-dim);font-style:italic;padding:4px 0">Saving...</div>';
-  if(!window.pywebview){ toast('No bridge available.'); return; }
-  window.pywebview.api.save_ai_files(curAIType||'creature')
-    .then(function(r){
-      if(!r){ // pywebview returned null — Python-side exception
-        if(el) el.innerHTML='<div style="color:#c87137;font-size:11px">Save error: unexpected null response</div>';
-        toast('Save error: null response from Python');
-        return;
-      }
-      if(r.success){
-        toast('Saved '+r.count+' file(s)');
-        if(el) el.innerHTML=
-          '<div style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--gold);margin-bottom:10px;word-break:break-all">'+r.folder+'</div>'
-          +'<div style="margin-bottom:6px;font-size:10px;font-family:var(--ui-font);color:var(--ink-dim);letter-spacing:.05em">'+r.count+' FILE'+(r.count!==1?'S':'')+' SAVED</div>'
-          +r.files.map(function(f){
-            return '<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--border-lt)">'
-              +'<span style="color:var(--gold)">&#x1F4C4;</span>'
-              +'<span style="font-family:JetBrains Mono,monospace;font-size:11px;color:#c9d1d9;word-break:break-all">'+f+'</span>'
-              +'</div>';
-          }).join('');
-      } else {
-        if(el) el.innerHTML='<div style="color:#c87137;font-size:11px">Error: '+(r.error||'unknown')+'</div>';
-        toast('Save error: '+(r.error||'unknown'));
-      }
-    }).catch(function(e){
-      if(el) el.innerHTML='<div style="color:#c87137;font-size:11px">Bridge error — open DEBUG console</div>';
-      toast('Save bridge error: '+String(e));
-    });
-}
-function clearAI(){aiFullText='';aiGenerating=false;$('aiOut').value='';$('aiStatus').textContent='';$('aiStatus').className='ai-status';$('aiSaveBtn').disabled=true;$('aiGenBtn').disabled=false;$('aiStopBtn').style.display='none';$('aiFileList').innerHTML='<div style="color:#6b7280;font-style:italic">Files appear here after saving.</div>';}
 
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
 const MODEL_HINTS={
@@ -11568,7 +10626,6 @@ function detectOllamaModels(){
       note.style.color='var(--gold)';
     });
 }
-function onEndpointPreset(){const v=$('sBaseUrlPreset').value;if(v)setV('sBaseUrl',v);}
 function testOllamaConnection(){
   const result=$('sTestResult'); result.textContent='Testing…'; result.style.color='var(--gold)';
   const model=$('sModel').value.trim() || 'qwen2.5-coder:7b';
@@ -11594,21 +10651,6 @@ function testOllamaConnection(){
     });
 }
 
-function testAPIKey(){
-  const result=$('sTestResult');result.textContent='Testing…';result.style.color='var(--gold)';
-  const provider=$('sProvider').value,apiKey=$('sApiKey').value.trim(),model=$('sModel').value.trim(),baseUrl=($('sBaseUrl').value||'').trim();
-  if(!apiKey&&provider!=='ollama'){result.textContent='✗ Enter an API key first.';result.style.color='var(--crimson-lt)';return;}
-  if(window.pywebview){
-    window.pywebview.api.validate_key_with(provider,apiKey,model,baseUrl).then(r=>{
-      if(r.valid){
-        result.textContent='✓ Connected';result.style.color='var(--green)';
-        // Mark key as provisionally valid so AI Mode becomes usable after save
-        appConfig._testPassed=true;
-      }
-      else{result.textContent='✗ '+r.error;result.style.color='var(--crimson-lt)';}
-    });
-  } else {result.textContent='(browser only)';result.style.color='var(--ink-dim)';}
-}
 
 function refreshLibStatus(){ checkIconCdn(); }
 
@@ -11953,22 +10995,12 @@ var _aiPlan=null;          // parsed plan JSON
 var _aiPlanIndex=0;        // current file being generated
 var _aiOrigPrompt='';
 var _iconsBaseUrl='https://raw.githubusercontent.com/shemtar-90/aceforge-icons/main/icons'; // GitHub raw CDN
-var _aiGenMode='base'; // 'base' = single-shot, 'advanced' = plan+approve+generate      // original user prompt, needed for each file call
+// 'base' = single-shot, 'advanced' = plan+approve+generate      // original user prompt, needed for each file call
 var _aiSavedFiles=[];      // list of {name, folder} already saved
 
 // ── Autocreate toggle ────────────────────────────────────────────────────────
 var _aiAutoCreate=false;
 var _aiAutoTimer=null;
-function toggleAutoCreate(){
-  _aiAutoCreate=!_aiAutoCreate;
-  var btn=document.getElementById('aiAutoBtn');
-  if(btn){
-    btn.textContent='⟳ AUTO: '+(_aiAutoCreate?'ON':'OFF');
-    btn.style.background=_aiAutoCreate?'var(--crimson)':'transparent';
-    btn.style.color=_aiAutoCreate?'#fff':'var(--ink-mid)';
-    btn.style.borderColor=_aiAutoCreate?'var(--crimson)':'var(--border)';
-  }
-}
 function _scheduleAutoNext(nextIdx){
   if(!_aiAutoCreate) return;
   if(_aiAutoTimer) clearTimeout(_aiAutoTimer);
@@ -12003,7 +11035,6 @@ var _questFiles   = [];   // [{filename, sql, type}] after generation
 //   endsection — closes a section (no rendering, just marks end for collector)
 
 var _CT = ['None (0)','Olthoi (1)','Banderling (2)','Drudge (3)','Mosswart (4)','Lugian (5)','Tumerok (6)','Mite (7)','Tusker (8)','Golem (13)','Undead (14)','Gromnie (15)','Reedshark (16)','Armoredillo (17)','Fae (18)','Virindi (19)','Wisp (20)','Shadow (22)','Mattekar (23)','Monouga (28)','Zefir (29)','Skeleton (30)','Human (31)','Shreth (32)','FireElemental (38)','Snowman (39)','Grievver (44)','Ursuin (46)','HollowMinion (48)','AcidElemental (60)','FrostElemental (61)','Burun (75)','GearKnight (99)','Gurog (100)','Anekshay (101)'];
-var _CT_VAL = {'None (0)':0,'Olthoi (1)':1,'Banderling (2)':2,'Drudge (3)':3,'Mosswart (4)':4,'Lugian (5)':5,'Tumerok (6)':6,'Mite (7)':7,'Tusker (8)':8,'Golem (13)':13,'Undead (14)':14,'Gromnie (15)':15,'Reedshark (16)':16,'Armoredillo (17)':17,'Fae (18)':18,'Virindi (19)':19,'Wisp (20)':20,'Shadow (22)':22,'Mattekar (23)':23,'Monouga (28)':28,'Zefir (29)':29,'Skeleton (30)':30,'Human (31)':31,'Shreth (32)':32,'FireElemental (38)':38,'Snowman (39)':39,'Grievver (44)':44,'Ursuin (46)':46,'HollowMinion (48)':48,'AcidElemental (60)':60,'FrostElemental (61)':61,'Burun (75)':75,'GearKnight (99)':99,'Gurog (100)':100,'Anekshay (101)':101};
 var _LT = ['None (0)','T4 (3101)','T5 (3102)','T6 (3103)','T7 (3104)','T8 (3105)'];
 
 var KILL_TASK_FIELDS = [
@@ -12502,11 +11533,8 @@ function _toggleSection(secId){
 
 // ── Multi-Stage Builder ───────────────────────────────────────────────────────
 
-var _msStages = [];   // [{n, name, type, ...fields}]
-var _msNextN  = 1;
+// [{n, name, type, ...fields}]
 
-var _CT2 = ['None (0)','Olthoi (1)','Banderling (2)','Drudge (3)','Mosswart (4)','Lugian (5)','Tumerok (6)','Mite (7)','Tusker (8)','Golem (13)','Undead (14)','Gromnie (15)','Reedshark (16)','Armoredillo (17)','Fae (18)','Virindi (19)','Wisp (20)','Shadow (22)','Mattekar (23)','Monouga (28)','Zefir (29)','Skeleton (30)','Human (31)','Shreth (32)','FireElemental (38)','Snowman (39)','Grievver (44)','Ursuin (46)','HollowMinion (48)','AcidElemental (60)','FrostElemental (61)','Burun (75)','GearKnight (99)','Gurog (100)','Anekshay (101)'];
-var _LT2 = ['None (0)','T4 (3101)','T5 (3102)','T6 (3103)','T7 (3104)','T8 (3105)'];
 
 function renderQuestForm(type){
   var form = document.getElementById('questForm');
@@ -13214,52 +12242,7 @@ function selectQuestType(type, btn){
   renderQuestForm(type);
 }
 
-function setAIGenMode(mode){
-  _aiGenMode = mode;
-  var baseBtn = document.getElementById('aiModeBaseBtn');
-  var advBtn  = document.getElementById('aiModeAdvBtn');
-  var desc    = document.getElementById('aiGenModeDesc');
-  if(mode === 'base'){
-    if(baseBtn){ baseBtn.style.background='var(--crimson)'; baseBtn.style.color='#fff'; }
-    if(advBtn){  advBtn.style.background='transparent';     advBtn.style.color='var(--ink-mid)'; }
-    if(desc) desc.innerHTML='Generates all content in a single API call. Fast and token-efficient &mdash; best for individual monsters, items, or simple NPCs.';
-    if(desc) desc.style.color='var(--ink-dim)';
-  } else {
-    if(advBtn){  advBtn.style.background='var(--crimson)';  advBtn.style.color='#fff'; }
-    if(baseBtn){ baseBtn.style.background='transparent';    baseBtn.style.color='var(--ink-mid)'; }
-    if(desc) desc.innerHTML='<strong style="font-style:normal;color:var(--crimson)">⚠ Higher token usage.</strong> Plans the full file set, presents it for approval, then generates each file in a focused call. Best for quest chains, multi-NPC systems, and complex content.';
-    if(desc) desc.style.color='var(--ink-dim)';
-  }
-}
 
-function startAIGeneration(){
-  if(!window.pywebview) return;
-  var promptEl=$('aiPrompt');
-  var prompt=promptEl?promptEl.value.trim():'';
-  if(!prompt){toast('Describe what you want to create first.');return;}
-  _aiOrigPrompt=prompt;
-  _aiPlan=null; _aiPlanIndex=0; _aiSavedFiles=[];
-  aiFullText=''; $('aiOut').value='';
-  $('aiGenBtn').disabled=true;
-  $('aiStopBtn').style.display='inline-flex';
-  $('aiSaveBtn').disabled=true;
-  aiGenerating=true;
-  _startAIPoll();
-
-  // Plan → approve → generate using AgentLoop
-  var el=$('aiFileList');
-  if(el) el.innerHTML='<div style="color:var(--ink-dim);font-style:italic;font-size:11px">Planning…</div>';
-  $('aiStatus').textContent='⟳ Planning your content…';
-  $('aiStatus').className='ai-status';
-  window.pywebview.api.start_planning(prompt, curAIType||'creature', _aiImportedSQL||'').then(function(r){
-    if(!r||!r.success){
-      _stopAIPoll(); aiGenerating=false;
-      $('aiGenBtn').disabled=false; $('aiStopBtn').style.display='none';
-      $('aiStatus').textContent='✗ Planning failed: '+(r?r.error:'null');
-      $('aiStatus').className='ai-status error';
-    }
-  });
-}
 
 function _showAIPlan(rawText){
   // Parse JSON plan from AI response
@@ -14483,7 +13466,6 @@ function loreNewConvo(){
 }
 
 // ── LoreForge scroll helpers ─────────────────────────────────────────────
-var _loreScrollListenerAttached = false;
 function _loreAttachScrollListener(el){
   if(!el) return;
   el.onscroll = function(){
@@ -14844,25 +13826,8 @@ var _mp = {
   textures: {},
   animFrame: null,
 };
-var _mp2dMode = false;
 var _mp2dListeners = [];  // track canvas listeners for cleanup
 
-function _mp2dFetch(canvas, msg, setup_id_hex){
-  if(!window.pywebview){
-    msg.style.color='rgba(255,150,150,.9)';
-    msg.textContent='3D preview requires the desktop app.'; return;
-  }
-  window.pywebview.api.get_model_glb(setup_id_hex, _mp.cloHex||'', _mp.motHex||'', _mp.palTpl||'', _mp.shade||'').then(function(r){
-    if(!r.success){
-      msg.style.color='rgba(255,150,150,.9)';
-      msg.textContent='Error loading model:\n'+r.error; return;
-    }
-    _mp2dRender(canvas, msg, r.data_b64);
-  }).catch(function(e){
-    msg.style.color='rgba(255,150,150,.9)';
-    msg.textContent='API error: '+e;
-  });
-}
 
 function _mp2dRender(canvas, msg, b64){
   try{

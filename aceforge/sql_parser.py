@@ -203,17 +203,3 @@ def parse_and_save_files(
         written.append(str(fpath))
 
     return written
-
-
-def estimate_file_count(prompt_response: str) -> int:
-    return len(FILE_HEADER_LOOSE_RE.findall(prompt_response))
-
-
-def extract_summary(full_response: str) -> str:
-    match = re.search(r"(?:^|\n)(#+\s*Summary.*?)$", full_response, re.IGNORECASE | re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    match = re.search(r"\*\*Summary[:\*]+\**(.*?)$", full_response, re.IGNORECASE | re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    return ""

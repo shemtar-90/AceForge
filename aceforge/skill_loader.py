@@ -307,6 +307,3 @@ class SkillLoader:
         )
 
         return "\n".join(lines)
-
-    def list_references(self) -> list[str]:
-        return [f.name for f in self._refs_dir.iterdir() if f.is_file()]

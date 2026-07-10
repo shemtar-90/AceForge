@@ -443,17 +443,6 @@ class APIClient:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def list_ollama_models(base_url: str = OLLAMA_BASE_URL) -> list[str]:
-    """Return model names installed in local Ollama instance. Empty list if not running."""
-    import urllib.request, json
-    try:
-        tags_url = base_url.replace("/v1", "").rstrip("/") + "/api/tags"
-        with urllib.request.urlopen(tags_url, timeout=2) as resp:
-            data = json.loads(resp.read())
-            return [m["name"] for m in data.get("models", []) if m.get("name")]
-    except Exception:
-        return []
-
 def _friendly_error(exc: Exception, provider: str) -> str:
     msg = str(exc)
     low = msg.lower()
