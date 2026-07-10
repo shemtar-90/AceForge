@@ -3628,6 +3628,47 @@ function buildBookContentTab(){
 }
 
 //  BODY PARTS 
+// Column Edit helpers — set one value across every body-part row.
+// Weenie mode: mutate importedBodyParts + rebuild (commit on change).
+function _bpColAllW(field, val, isInt){
+  var v=isInt?parseInt(val):parseFloat(val);
+  if(isNaN(v)) return;
+  importedBodyParts.forEach(function(bp){ bp[field]=v; });
+  // The table lives in #pst_bodyparts on the Properties tab (weenie editor)
+  // or in the creature builder's bodyparts sub-panel — refresh whichever hosts it.
+  var p=document.getElementById('pst_bodyparts')
+     || document.querySelector('.sub-panel[data-sub="bodyparts"]');
+  if(p){ p.innerHTML=buildBodyPartsTab();
+         p.querySelectorAll('input,select').forEach(function(e){e.addEventListener('input',onFieldInput);}); }
+  regen();
+}
+// The weenie-mode Column Edit row: type a value, press Enter/blur, and every
+// row's value in that column changes to match.
+function _wBpColEditRow(S,SN){
+  var CE='background:rgba(184,134,11,.10);border:1px solid var(--gold)';
+  function ci(field,w){
+    return '<td><input type="number" step="any" placeholder="all" title="Set every row\'s '+field.toUpperCase()+' to this value" onchange="_bpColAllW(\''+field+'\',this.value)" style="'+(w||S)+';'+CE+'"></td>';
+  }
+  return '<tr style="border-bottom:2px solid var(--gold);height:32px">'
+    +'<td style="font-family:var(--ui-font);font-size:8px;font-weight:700;letter-spacing:.05em;color:var(--gold);white-space:nowrap;padding:4px">COLUMN EDIT</td>'
+    +'<td></td>'
+    +ci('dv',SN)+ci('dvar',SN)
+    +ci('al')+ci('sl')+ci('pi')+ci('bl')+ci('co')+ci('fi')+ci('ac')+ci('el')+ci('nt')
+    +'<td></td>'
+    +ci('hlf')+ci('mlf')+ci('llf')+ci('hrf')+ci('mrf')+ci('lrf')
+    +ci('hlb')+ci('mlb')+ci('llb')+ci('hrb')+ci('mrb')+ci('lrb')
+    +'</tr>';
+}
+
+// Simple mode: write straight into the per-row inputs (ids bp_<col>_<i>).
+function _bpColAllS(col, val){
+  for(var i=0;i<bodyParts.length;i++){
+    var el=document.getElementById('bp_'+col+'_'+i);
+    if(el) el.value=val;
+  }
+  regen();
+}
+
 function buildBodyPartsTab(){
   // Weenie mode: render from importedBodyParts[] with all 27 columns
   if(curType==='weenie' && typeof importedBodyParts!=='undefined' && importedBodyParts.length){
@@ -3682,7 +3723,7 @@ function buildBodyPartsTab(){
       +'<th style="'+TH+'">HRF</th><th style="'+TH+'">MRF</th><th style="'+TH+'">LRF</th>'
       +'<th style="'+TH+'">HLB</th><th style="'+TH+'">MLB</th><th style="'+TH+'">LLB</th>'
       +'<th style="'+TH+'">HRB</th><th style="'+TH+'">MRB</th><th style="'+TH+'">LRB</th>'
-      +'</tr></thead><tbody>'+wBpRows+'</tbody></table></div>';
+      +'</tr></thead><tbody>'+_wBpColEditRow(S,SN)+wBpRows+'</tbody></table></div>';
   }
   const cType=gi('cType',31);
   const setName=CREATURE_LAYOUT_LABEL[cType]||'Humanoid';
@@ -3705,7 +3746,11 @@ function buildBodyPartsTab(){
       <span style=\"font-family:var(--ui-font);font-size:9px;font-weight:700;color:var(--ink-dim)\">Layout: ${setName} (auto from Creature Type)</span>
     </div>
     <table class=\"bp\"><thead><tr><th>Part</th><th>DmgType</th><th>DVal</th><th>Base AL</th><th>Slash</th><th>Pierce</th><th>Bludge</th><th>Cold</th><th>Fire</th><th>Acid</th><th>Elec</th><th>Nether</th></tr></thead>
-    <tbody>${rows}</tbody></table>
+    <tbody><tr style=\"border-bottom:2px solid var(--gold)\">
+      <td style=\"font-family:var(--ui-font);font-size:8px;font-weight:700;letter-spacing:.05em;color:var(--gold);white-space:nowrap\">COLUMN EDIT</td>
+      <td></td>
+      ${['dv','al','sl','pi','bl','co','fi','ac','el','nt'].map(c=>`<td><input type=\"number\" placeholder=\"all\" title=\"Set every row's value in this column\" oninput=\"_bpColAllS('${c}',this.value)\" style=\"background:rgba(184,134,11,.10);border:1px solid var(--gold)\"></td>`).join('')}
+    </tr>${rows}</tbody></table>
   </div>`;
 }
 
@@ -5205,8 +5250,18 @@ function importSQLToBuilder(){ _weenieHasContent=true;
   window.pywebview.api.import_sql().then(function(r){
     if(!r||r.cancelled) return;
     if(r.error){ toast('Import failed: '+r.error); return; }
-    var sql = r.content;
+    _importSQLPayload(r.content, r.path||'', r.filename||'');
+  }).catch(function(e){ toast('Import error: '+e); });
+}
+
+// Shared import pipeline — used by the Import button and drag & drop. Detects
+// the file type (weenie/recipe/quest/event), switches to the right tab, and
+// parses the SQL into the editor.
+function _importSQLPayload(sql, path, filename, force){
+    _weenieHasContent=true;
     var fileType = _detectSQLFileType(sql);
+    // Drag & drop always routes to the file's own tab, even from a strict tab.
+    if(force && fileType !== curType) switchType(fileType);
     // Block mismatched imports — only block when the mismatch is non-trivial
     // Weenie tab accepts any weenie-type file
     // Recipe/Quest/Event tabs are strict — only accept their own type
@@ -5225,7 +5280,7 @@ function importSQLToBuilder(){ _weenieHasContent=true;
         var sqlOut=document.getElementById('sqlOut');
         if(sqlOut) sqlOut.value=sql;
         renderSQLHighlight();
-        if(r.path){ var _fn=r.path.replace(/\\/g,'/').split('/').pop(); _importedFileName=_fn||''; }
+        if(path){ var _fn=path.replace(/\\/g,'/').split('/').pop(); _importedFileName=_fn||''; }
         // 1. Rebuild panel first so form fields exist in DOM with defaults
         if(typeof buildSubContent==='function') buildSubContent();
         // 2. Parse imported SQL into the freshly rendered fields
@@ -5245,7 +5300,7 @@ function importSQLToBuilder(){ _weenieHasContent=true;
         }
         // 4. Rebuild live preview from the correctly populated fields
         regen();
-        toast('✓ Imported: '+(r.path?r.path.split(/[\\/]/).pop():fileType),2500);
+        toast('✓ Imported: '+(path?path.split(/[\\/]/).pop():fileType),2500);
       },150);
       return;
     }
@@ -5305,9 +5360,11 @@ function importSQLToBuilder(){ _weenieHasContent=true;
       window._importedTimestamp = _wHdr ? _wHdr[2] : null;
       window._importedWcid = _iWcid ? parseInt(_iWcid) : null;
       // Preserve original filename
-      if(typeof r.path === 'string'){
-        var _fn=r.path.replace(/\\/g,'/').split('/').pop();
+      if(typeof path === 'string' && path){
+        var _fn=path.replace(/\\/g,'/').split('/').pop();
         _importedFileName = _fn||'';
+      } else if(filename){
+        _importedFileName = filename;
       }
       // Set fClassName from the imported weenie table's class_Name
       var _fcnEl = document.getElementById('fClassName');
@@ -5402,10 +5459,75 @@ function importSQLToBuilder(){ _weenieHasContent=true;
       }, 50);
       regen();
       window._isImported = false;
-      toast('\u2713 Imported: '+r.filename);
+      toast('\u2713 Imported: '+(filename||(path?path.split(/[\\/]/).pop():'file')));
     }, 150);
-  }).catch(function(e){ toast('Import error: '+e); });
 }
+
+// ── Drag & drop SQL import ───────────────────────────────────────────────────
+// Drop a .sql file anywhere in the app: an overlay appears while hovering, and
+// on drop the file is type-detected (weenie/recipe/quest/event), the right
+// WeenieForge tab opens, and the file imports through the normal pipeline.
+(function(){
+  var overlay=null, depth=0;
+  function ensureOverlay(){
+    if(overlay) return overlay;
+    overlay=document.createElement('div');
+    overlay.id='dropOverlay';
+    overlay.style.cssText='display:none;position:fixed;inset:0;z-index:99998;'
+      +'background:rgba(20,18,12,.55);backdrop-filter:blur(2px);'
+      +'align-items:center;justify-content:center;pointer-events:none';
+    overlay.innerHTML='<div style="border:3px dashed var(--gold);border-radius:12px;'
+      +'padding:46px 70px;background:rgba(237,228,206,.96);text-align:center;'
+      +'box-shadow:0 12px 48px rgba(0,0,0,.4)">'
+      +'<div style="font-size:40px;margin-bottom:10px">&#x1F4E5;</div>'
+      +'<div style="font-family:var(--ui-font);font-size:15px;font-weight:700;letter-spacing:.05em;color:var(--ink)">Drop SQL file to import</div>'
+      +'<div style="font-family:var(--ui-font);font-size:11px;font-style:italic;color:var(--ink-dim);margin-top:6px">Weenie &middot; Recipe &middot; Quest &middot; Event &mdash; the right tab opens automatically</div>'
+      +'</div>';
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+  function show(){ ensureOverlay().style.display='flex'; }
+  function hide(){ depth=0; if(overlay) overlay.style.display='none'; }
+  function hasFiles(e){
+    var t=e.dataTransfer;
+    return t && t.types && [].indexOf.call(t.types,'Files')>-1;
+  }
+  document.addEventListener('dragenter',function(e){
+    if(!hasFiles(e)) return;
+    e.preventDefault(); depth++; show();
+  });
+  document.addEventListener('dragover',function(e){
+    if(!hasFiles(e)) return;
+    e.preventDefault(); e.dataTransfer.dropEffect='copy';
+  });
+  document.addEventListener('dragleave',function(e){
+    if(!hasFiles(e)) return;
+    depth=Math.max(0,depth-1);
+    if(depth===0) hide();
+  });
+  document.addEventListener('drop',function(e){
+    if(!hasFiles(e)) return;
+    e.preventDefault(); hide();
+    var files=[].slice.call(e.dataTransfer.files||[]);
+    var f=files.find(function(x){return /\.(sql|txt)$/i.test(x.name);});
+    if(!f){ toast('⚠ Drop a .sql file to import.',3000); return; }
+    if(files.length>1) toast('Importing "'+f.name+'" — one file at a time.',3000);
+    var fr=new FileReader();
+    fr.onload=function(ev){
+      var sql=String(ev.target.result||'');
+      if(!/insert\s+into|delete\s+from/i.test(sql)){ toast('⚠ "'+f.name+'" doesn’t look like ACE SQL.',3500); return; }
+      // Make sure the WeenieForge manual workspace is frontmost, then import —
+      // the pipeline detects the type and opens the matching tab.
+      try{
+        var manBtn=document.querySelector('.mode-tab');
+        var manWS=document.getElementById('manualWS');
+        if(manBtn && manWS && !manWS.classList.contains('active')) switchMode('manual', manBtn);
+      }catch(_e){}
+      setTimeout(function(){ _importSQLPayload(sql, f.name, f.name, true); }, 50);
+    };
+    fr.readAsText(f);
+  });
+})();
 
 // ── AI Mode SQL Import ──────────────────────────────────────────────────────
 var _aiImportedSQL = '';
@@ -9167,7 +9289,7 @@ function buildAdvanced(){
         var _csL=(_CSETUPS&&_ctRow)?_CSETUPS[String(parseInt(_ctRow.value))]:null;
         if(_csL&&_csL.length){
           var _cur=String(r.value||'').toUpperCase();
-          _csDD='<select onchange="_pickCreatureSetup(this.value)" title="Base-game models for this creature type — picking one also sets the matching Motion/Sound/Palette/Clothing tables" style="flex-shrink:0;max-width:190px;font-family:var(--ui-font);font-size:10px;padding:3px 4px;background:var(--parch);border:1px solid var(--border);color:var(--ink)">'
+          _csDD='<select onchange="_pickCreatureSetup(this.value)" title="Base-game models for this creature type — picking one also sets the matching Motion/Sound/Palette/Clothing tables" style="flex:0 1 130px;min-width:70px;max-width:130px;font-family:var(--ui-font);font-size:10px;padding:3px 4px;background:var(--parch);border:1px solid var(--border);color:var(--ink);overflow:hidden;text-overflow:ellipsis">'
             +'<option value="">— '+_csL.length+' model'+(_csL.length!==1?'s':'')+' —</option>'
             +_csL.map(function(ent){return '<option value="'+ent.s+'"'+(ent.s.toUpperCase()===_cur?' selected':'')+'>'+escHtml(ent.n)+'</option>';}).join('')
             +'</select>';
@@ -11950,6 +12072,8 @@ var ITEM_TURNIN_FIELDS = [
   {type:'section', label:'NPC',      icon:'NPC', id:'s_npc',      open:true},
     {id:'npc_name',          label:'NPC Name',            type:'text',   placeholder:'e.g. Ulgrim the Unpleasant',      required:true},
     {id:'npc_description',   label:'Personality',         type:'text',   placeholder:'e.g. Gruff, impatient',           required:false},
+    {id:'npc_creature_type', label:'NPC Creature Type',   type:'select', options:_CT, default:'Human (31)',             required:false, help:'NPCs can be any creature type — Human is the standard.'},
+    {id:'npc_setup_model',   label:'NPC 3D Model',        type:'model3d', ctypeField:'npc_creature_type',               required:false},
   {type:'endsection'},
   {type:'section', label:'Turn-In Item', icon:'I', id:'s_item', open:true},
     {id:'item_name',         label:'Item Name',           type:'text',   placeholder:'e.g. Intact Brood Queen Carapace',required:true,  help:'Name of the item the player must collect.'},
@@ -11958,6 +12082,7 @@ var ITEM_TURNIN_FIELDS = [
     {type:'section', label:'Drop Creature (optional)', icon:'C', id:'s_dropper', open:false},
       {id:'item_drop_creature',     label:'Creature Name',      type:'text',   placeholder:'e.g. Brood Queen',         required:false, help:'Leave blank if item is found in a chest.'},
       {id:'item_drop_creature_type',label:'Creature Type',      type:'select', options:_CT,                            required:false},
+      {id:'drop_setup_model',       label:'3D Model',           type:'model3d', ctypeField:'item_drop_creature_type',  required:false},
       {id:'item_drop_level',        label:'Level',              type:'number', placeholder:'150',                      required:false},
       {id:'item_drop_loot_tier',    label:'Loot Tier',          type:'select', options:_LT,                            required:false},
       {id:'drop_is_boss',           label:'Mob / Boss',         type:'select', options:['Mob (standard)','Boss (named, scaled up)'], required:false, help:'Boss: single spawn, 900s respawn, scaled up.'},
@@ -12002,10 +12127,14 @@ var DELIVERY_FIELDS = [
   {type:'section', label:'NPC A — Quest Giver', icon:'NPC', id:'s_npca', open:true},
     {id:'npc_a_name',        label:'NPC Name',            type:'text',   placeholder:'e.g. Merchant Anton',       required:true,  help:'Gives the item and starts the delivery.'},
     {id:'npc_a_description', label:'Personality',         type:'text',   placeholder:'e.g. Anxious merchant',     required:false},
+    {id:'npc_a_creature_type',label:'NPC Creature Type',  type:'select', options:_CT, default:'Human (31)',       required:false},
+    {id:'npc_a_setup_model', label:'NPC 3D Model',        type:'model3d', ctypeField:'npc_a_creature_type',       required:false},
   {type:'endsection'},
   {type:'section', label:'NPC B — Item Recipient',  icon:'NPC', id:'s_npcb', open:true},
     {id:'npc_b_name',        label:'NPC Name',            type:'text',   placeholder:'e.g. Guildmaster Renald',   required:true},
     {id:'npc_b_description', label:'Personality',         type:'text',   placeholder:'e.g. Stern guildmaster',    required:false},
+    {id:'npc_b_creature_type',label:'NPC Creature Type',  type:'select', options:_CT, default:'Human (31)',       required:false},
+    {id:'npc_b_setup_model', label:'NPC 3D Model',        type:'model3d', ctypeField:'npc_b_creature_type',       required:false},
   {type:'endsection'},
   {type:'section', label:'WCID Overrides (optional)', icon:'#', id:'s_wcids', open:false},
     {id:'wcid_npc_a',label:'NPC A WCID',          type:'number', placeholder:'auto', required:false, help:'Leave blank to auto-assign from your configured WCID ranges.'},
@@ -12121,8 +12250,7 @@ function _buildRewardBuilder(fieldId){
 
     rows += '<input type="number" id="reward_'+i+'_wcid" placeholder="WCID"'
           + ' style="width:76px;'+INP+'" title="Existing WCID — filled automatically by search, or enter manually. Blank = generate new item file"'
-          + ' oninput="_weenieByWcid(this.value,'+i+')"'>
-          + '';
+          + ' oninput="_weenieByWcid(this.value,'+i+')">';
     rows += '<input type="number" id="reward_'+i+'_qty"  placeholder="Qty" value="1"'
           + ' style="width:44px;'+INP.replace('padding:3px 6px','padding:3px 4px')+'" title="Quantity">';
     rows += '</div>';  // end row
@@ -12149,8 +12277,8 @@ var _FIELD_STYLES = {
   input:  "width:100%;font-family:var(--ui-font);font-size:11px;padding:5px 8px;background:var(--parch);border:1px solid var(--border);color:var(--ink)",
   label:  "font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim)",
   help:   "font-family:var(--ui-font);font-style:italic;font-size:11px;color:var(--ink-faint);margin-top:2px",
-  shead:  "display:flex;align-items:center;gap:6px;padding:7px 10px;background:rgba(200,184,152,.1);border:1px solid var(--border);border-radius:2px;cursor:pointer;user-select:none;margin-bottom:0",
-  sbody:  "padding:8px 0 4px 14px;display:flex;flex-direction:column;gap:8px;border-left:2px solid var(--border-lt);margin-left:6px;margin-bottom:6px",
+  shead:  "display:flex;align-items:center;gap:6px;padding:7px 10px;background:rgba(200,184,152,.1);border:1px solid var(--border);border-radius:4px 4px 0 0;cursor:pointer;user-select:none;margin-bottom:0",
+  sbody:  "display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;align-items:start;padding:10px;border:1px solid var(--border-lt);border-top:none;border-radius:0 0 4px 4px;margin-bottom:10px;background:rgba(200,184,152,.04)",
 };
 
 function _renderField(f){
@@ -12182,8 +12310,15 @@ function _renderField(f){
         + '</div>';
   } else if(f.type==='select'){
     inp = '<select id="qf_'+f.id+'" style="'+_FIELD_STYLES.input+'" onchange="_qfConditionalShow()">'
-        + (f.options||[]).map(function(o){return '<option>'+o+'</option>';}).join('')
+        + (f.options||[]).map(function(o){return '<option'+(f.default===o?' selected':'')+'>'+o+'</option>';}).join('')
         + '</select>';
+  } else if(f.type==='model3d'){
+    // Base-game model picker driven by a companion creature-type select
+    // (f.ctypeField), with a 3D preview button.
+    inp = '<div style="display:flex;gap:6px;align-items:center">'
+        + '<select id="qf_'+f.id+'" data-ctype-field="'+(f.ctypeField||'')+'" style="'+_FIELD_STYLES.input+';flex:1"><option value="">— default model —</option></select>'
+        + '<button type="button" onclick="_qfPreviewModel(\''+f.id+'\')" title="Preview this model in 3D" style="padding:4px 10px;font-family:var(--ui-font);font-size:9px;font-weight:700;border:1px solid var(--crimson);background:transparent;color:var(--crimson);cursor:pointer;white-space:nowrap">&#x1F4E6; 3D</button>'
+        + '</div>';
   } else if(f.type==='number'){
     inp = '<input type="number" id="qf_'+f.id+'" placeholder="'+(f.placeholder||'')+'" style="'+_FIELD_STYLES.input+'">';
   } else if(f.type==='reward_builder'){
@@ -12199,6 +12334,8 @@ function _renderField(f){
   var req  = f.required ? '<span style="color:var(--crimson)"> *</span>' : '';
   var help = f.help ? '<div style="'+_FIELD_STYLES.help+'">'+f.help+'</div>' : '';
   var wrapStyle = 'display:'+(initHidden?'none':'flex')+';flex-direction:column;gap:2px';
+  // Wide widgets span both columns of the section grid
+  if(f.type==='reward_builder'||f.type==='toggle') wrapStyle+=';grid-column:1 / -1';
   var wrapAttrs = wrapId ? ' id="'+wrapId+'"' : '';
   return '<div'+wrapAttrs+' style="'+wrapStyle+'">'
        + '<label style="'+_FIELD_STYLES.label+'">'+f.label+req+'</label>'
@@ -12253,6 +12390,33 @@ function _qfToggle(fieldId, val){
   _qfConditionalShow();
 }
 
+// Repopulate every model3d dropdown from its creature-type select's current
+// value (called after render and whenever any form select changes).
+function _qfSyncModelDDs(){
+  document.querySelectorAll('select[data-ctype-field]').forEach(function(sel){
+    var ctF=sel.getAttribute('data-ctype-field');
+    var ctEl=document.getElementById('qf_'+ctF);
+    var ctVal=ctEl?ctEl.value:'';
+    if(sel.getAttribute('data-ctype-cur')===ctVal) return;   // unchanged
+    sel.setAttribute('data-ctype-cur',ctVal);
+    sel.innerHTML=(typeof _bktModelOpts==='function')?_bktModelOpts(ctVal, sel.value):'<option value="">— default model —</option>';
+  });
+}
+
+// 3D preview for a schema model3d field: uses the picked (or default) model's
+// catalog entry so the preview gets the right motion/clothing tables.
+function _qfPreviewModel(fieldId){
+  var sel=document.getElementById('qf_'+fieldId);
+  if(!sel) return;
+  var ctF=sel.getAttribute('data-ctype-field');
+  var ctEl=document.getElementById('qf_'+ctF);
+  var m=((ctEl&&ctEl.value)||'').match(/\((\d+)\)/);
+  var list=(_CSETUPS&&m)?(_CSETUPS[m[1]]||[]):[];
+  var ent=list.find(function(e){return e.s===sel.value;})||list[0];
+  if(!ent){ toast('No base-game models for this creature type.'); return; }
+  openModelPreview(ent.s, ent.n, {creature:true, mot:ent.mt||'', clo:ent.cb||''});
+}
+
 function _qfPickIcon(fieldId){
   openIconPicker(function(iconHex){
     var el = document.getElementById('qf_'+fieldId);
@@ -12261,6 +12425,8 @@ function _qfPickIcon(fieldId){
 }
 
 function _qfConditionalShow(){
+  // Model dropdowns follow their creature-type selects
+  _qfSyncModelDDs();
   // Walk all current template fields and show/hide based on showWhen
   var tFields = (QUEST_FIELDS[_curQuestType]||[]);
   // Flatten nested sections into a single field list
@@ -12314,7 +12480,8 @@ function _renderSectionBlock(fields, startIdx, depth){
                  + '</div>';
       var body   = '<div id="body_'+secId+'" style="'+_FIELD_STYLES.sbody+';'+(isOpen?'':'display:none')+';margin-left:'+indent+'px">'
                  + inner.html + '</div>';
-      html += hdr + body;
+      // Sections span the full width of a parent section's 2-column grid
+      html += '<div style="grid-column:1 / -1">' + hdr + body + '</div>';
       continue;
     }
     html += _renderField(f);
@@ -12328,7 +12495,7 @@ function _toggleSection(secId){
   var arrow = document.getElementById('arr_'+secId);
   if(!body) return;
   var open  = body.style.display !== 'none';
-  body.style.display  = open ? 'none' : 'flex';
+  body.style.display  = open ? 'none' : 'grid';
   if(arrow) arrow.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
 }
 
@@ -12357,10 +12524,35 @@ function renderQuestForm(type){
 var _batchKT = { rows: [], shared: null };
 function _batchKTNewRow(){
   return {prefix:'', giver_type:'item', item_name:'', npc_description:'', item_icon:'',
+          npc_creature_type:'Human (31)', npc_setup_model:'',
           creature_name:'', creature_type:'Tumerok (6)', creature_level:'150',
+          setup_model:'',
           kill_count:'50', loot_tier:'T4 (3101)', spawn_count:'5',
           reward_xp:'5000000', xp_percent:'0.25', reward_luminance:'5000000',
           reward_name:'', reward_wcid:''};
+}
+// 3D preview for a batch-KT model pick (creature or NPC giver).
+function _bktPreviewModel(i, isNpc){
+  var r=_batchKT.rows[i]; if(!r) return;
+  var ctypeStr=isNpc?r.npc_creature_type:r.creature_type;
+  var cur=isNpc?r.npc_setup_model:r.setup_model;
+  var m=(String(ctypeStr||'').match(/\((\d+)\)/)||[])[1];
+  var list=(_CSETUPS&&m)?(_CSETUPS[m]||[]):[];
+  var ent=list.find(function(e){return e.s===cur;})||list[0];
+  if(!ent){ toast('No base-game models for this creature type.'); return; }
+  openModelPreview(ent.s, ent.n, {creature:true, mot:ent.mt||'', clo:ent.cb||''});
+}
+// Model dropdown options for a "Label (int)" creature-type string, from the
+// scraped base-game catalog (_CSETUPS).
+function _bktModelOpts(ctypeStr, cur){
+  var m=(String(ctypeStr||'').match(/\((\d+)\)/)||[])[1];
+  var list=(_CSETUPS&&m)?(_CSETUPS[m]||[]):[];
+  if(!list.length) return '<option value="">— default model —</option>';
+  // Human (31) has a built-in standard body default; other types default to
+  // their first catalog model.
+  var defLabel=(m==='31')?'standard Human':list[0].n;
+  return '<option value="">— default ('+defLabel+') —</option>'
+    +list.map(function(e){return '<option value="'+e.s+'"'+(e.s===cur?' selected':'')+'>'+_esc(e.n)+'</option>';}).join('');
 }
 function _batchKTDefaultShared(){
   return { repeat_hours:'20', use_reward_xp:'no', xp_type:'AwardXP', use_reward_lum:'no' };
@@ -12441,6 +12633,11 @@ function renderBatchKT(){
     var nameField='<div><div style="'+LBL+'">'+(isNpc?'NPC Name':'Giver Item Name')+'</div><input value="'+_esc(r.item_name)+'" oninput="_batchKTSet('+i+',\'item_name\',this.value)" placeholder="'+(isNpc?'e.g. Ulgrim the Unpleasant':'e.g. Archon Contract')+'" style="'+INP+'"></div>';
     var giverExtra = isNpc
       ? '<div><div style="'+LBL+'">Personality</div><input value="'+_esc(r.npc_description)+'" oninput="_batchKTSet('+i+',\'npc_description\',this.value)" placeholder="e.g. Gruff, dismissive" style="'+INP+'"></div>'
+        +'<div><div style="'+LBL+'">NPC Creature Type</div><select onchange="_batchKTSet('+i+',\'npc_creature_type\',this.value);_batchKTSet('+i+',\'npc_setup_model\',\'\');renderBatchKT()" style="'+INP+'">'+optSel(CT, r.npc_creature_type)+'</select></div>'
+        +'<div><div style="'+LBL+'">NPC 3D Model</div><div style="display:flex;gap:6px;align-items:center">'
+          +'<select onchange="_batchKTSet('+i+',\'npc_setup_model\',this.value)" style="'+INP+';flex:1">'+_bktModelOpts(r.npc_creature_type, r.npc_setup_model)+'</select>'
+          +'<button onclick="_bktPreviewModel('+i+',true)" title="Preview this model in 3D" style="padding:5px 10px;font-family:var(--ui-font);font-size:9px;font-weight:700;border:1px solid var(--crimson);background:transparent;color:var(--crimson);cursor:pointer;white-space:nowrap">&#x1F4E6; 3D</button>'
+          +'</div></div>'
       : '<div><div style="'+LBL+'">Item Icon</div><div style="display:flex;gap:6px;align-items:center"><input value="'+_esc(r.item_icon)+'" oninput="_batchKTSet('+i+',\'item_icon\',this.value)" placeholder="0x060030A8" style="'+INP+';flex:1"><button onclick="_batchKTPickIcon('+i+')" style="padding:5px 10px;font-family:var(--ui-font);font-size:9px;font-weight:700;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;white-space:nowrap">🎨 Pick</button></div></div>';
     return '<div style="border:1px solid var(--border-lt);border-radius:4px;padding:9px;margin-bottom:8px">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
@@ -12453,7 +12650,12 @@ function renderBatchKT(){
         +nameField
         +giverExtra
         +'<div><div style="'+LBL+'">Creature Name</div><input value="'+_esc(r.creature_name)+'" oninput="_batchKTSet('+i+',\'creature_name\',this.value)" placeholder="e.g. Archon Warrior" style="'+INP+'"></div>'
-        +'<div><div style="'+LBL+'">Creature Type</div><select onchange="_batchKTSet('+i+',\'creature_type\',this.value)" style="'+INP+'">'+optSel(CT, r.creature_type)+'</select></div>'
+        +'<div><div style="'+LBL+'">Creature Type</div><select onchange="_batchKTSet('+i+',\'creature_type\',this.value);_batchKTSet('+i+',\'setup_model\',\'\');renderBatchKT()" style="'+INP+'">'+optSel(CT, r.creature_type)+'</select></div>'
+        +'<div style="grid-column:1 / -1"><div style="'+LBL+'">3D Model <span style="text-transform:none;font-weight:400;color:var(--ink-faint)">(base-game models for this creature type)</span></div>'
+          +'<div style="display:flex;gap:6px;align-items:center">'
+          +'<select onchange="_batchKTSet('+i+',\'setup_model\',this.value)" style="'+INP+';flex:1">'+_bktModelOpts(r.creature_type, r.setup_model)+'</select>'
+          +'<button onclick="_bktPreviewModel('+i+',false)" title="Preview this model in 3D" style="padding:5px 10px;font-family:var(--ui-font);font-size:9px;font-weight:700;border:1px solid var(--crimson);background:transparent;color:var(--crimson);cursor:pointer;white-space:nowrap">&#x1F4E6; 3D</button>'
+          +'</div></div>'
         +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">'
           +'<div><div style="'+LBL+'">Level</div><input type="number" value="'+_esc(r.creature_level)+'" oninput="_batchKTSet('+i+',\'creature_level\',this.value)" style="'+INP+'"></div>'
           +'<div><div style="'+LBL+'">Kill Count</div><input type="number" value="'+_esc(r.kill_count)+'" oninput="_batchKTSet('+i+',\'kill_count\',this.value)" style="'+INP+'"></div>'
@@ -12515,6 +12717,13 @@ function _collectBatchKT(){
       if(r.item_icon.trim()) row.item_icon=r.item_icon.trim();
     }
     var ctInt=(ctypeRaw.match(/\((\d+)\)/)||[])[1]; if(ctInt) row.creature_type_int=ctInt;
+    if(r.setup_model) row.setup_model=r.setup_model;
+    if(isNpc){
+      var nctInt=((r.npc_creature_type||'').match(/\((\d+)\)/)||[])[1];
+      // Human is the built-in NPC default; only send an override for others
+      if(nctInt && nctInt!=='31'){ row.npc_creature_type_int=nctInt; }
+      if(nctInt && nctInt!=='31' && r.npc_setup_model) row.npc_setup_model=r.npc_setup_model;
+    }
     // Shared Yes/No governs whether each task awards XP / Luminance; amounts stay per-task.
     if(useXp){
       if(prop) row.xp_percent = r.xp_percent.trim()||'0.25';
@@ -14643,7 +14852,7 @@ function _mp2dFetch(canvas, msg, setup_id_hex){
     msg.style.color='rgba(255,150,150,.9)';
     msg.textContent='3D preview requires the desktop app.'; return;
   }
-  window.pywebview.api.get_model_glb(setup_id_hex, _mp.cloHex||'', _mp.motHex||'').then(function(r){
+  window.pywebview.api.get_model_glb(setup_id_hex, _mp.cloHex||'', _mp.motHex||'', _mp.palTpl||'', _mp.shade||'').then(function(r){
     if(!r.success){
       msg.style.color='rgba(255,150,150,.9)';
       msg.textContent='Error loading model:\n'+r.error; return;
@@ -14789,13 +14998,14 @@ var _MP_VERT = [
 var _MP_FRAG = [
   'precision mediump float;',
   'varying vec3 vNorm; varying vec2 vUV;',
-  'uniform sampler2D uTex; uniform int uHasTex;',
+  'uniform sampler2D uTex; uniform int uHasTex; uniform int uBlend;',
   'uniform vec3 uLightDir; uniform vec4 uColor;',
   'void main(){',
   '  vec3 n=normalize(vNorm);',
   '  float diff=abs(dot(n,normalize(uLightDir)))*0.7+0.3;',
   '  vec4 col=uHasTex==1 ? texture2D(uTex,vUV) : uColor;',
-  '  if(col.a < 0.5) discard;',   // ClipMap sprites (wisp glow etc.) use keyed transparency
+  '  if(uBlend==1){ gl_FragColor=vec4(col.rgb,col.a); return; }',  // unlit soft glow
+  '  if(col.a < 0.5) discard;',   // ClipMap keyed transparency (masked sprites)
   '  gl_FragColor=vec4(col.rgb*diff,col.a);',
   '}',
 ].join('\n');
@@ -14960,8 +15170,10 @@ function _mpLoadGLB(glb_data_b64){
 
       var tex=null;
       var color=[0.72,0.72,0.75,1.0];
+      var blend=false;
       var mat=gltf.materials&&gltf.materials[prim.material];
       if(mat){
+        if(mat.alphaMode==='BLEND') blend=true;   // soft glow sprites (wisps)
         var pbr=mat.pbrMetallicRoughness;
         if(pbr){
           if(pbr.baseColorFactor) color=pbr.baseColorFactor;
@@ -14974,7 +15186,7 @@ function _mpLoadGLB(glb_data_b64){
       var idxType=idxData instanceof Uint32Array?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT;
       _mp.meshes.push({vbo:vbo,nbo:nbo,tbo:tbo,ibo:ibo,
                        count:idxData.length,tex:tex,color:color,idxType:idxType,
-                       node:nodeIdx});
+                       node:nodeIdx,blend:blend});
     });
   });
 
@@ -14996,13 +15208,120 @@ function _mpLoadGLB(glb_data_b64){
     if(dur>0){ _mp.animByNode=byNode; _mp.animDuration=dur; _mp.animStart=performance.now(); }
   }
 
+  // ── Particle emitters (baked from the setup's DefaultScript) ─────────────
+  _mp.emitters=null;
+  var _ext=gltf.extras&&gltf.extras.emitters;
+  if(_ext&&_ext.length){
+    _mp.emitters=_ext.map(function(e){
+      return {def:e, parts:[], lastSpawn:0,
+              buf:gl.createBuffer(), data:new Float32Array((e.max||32)*5)};
+    });
+    _mp.lastPartT=performance.now();
+  }
+
   if(_bbMax[0]>=_bbMin[0]){
     _mp.center=[(_bbMin[0]+_bbMax[0])/2,(_bbMin[1]+_bbMax[1])/2,(_bbMin[2]+_bbMax[2])/2];
     _mp.span=Math.max(_bbMax[0]-_bbMin[0],_bbMax[1]-_bbMin[1],_bbMax[2]-_bbMin[2],0.001);
+  } else if(gltf.extras&&gltf.extras.bounds){
+    // Emitter-only model (wisp): frame using the exporter's bounds hint
+    _mp.center=gltf.extras.bounds.center||[0,0,0];
+    _mp.span=gltf.extras.bounds.span||2;
   } else { _mp.center=[0,0,0]; _mp.span=1; }
   console.log('[GLB] done: '+_mp.meshes.length+' meshes, span='+_mp.span.toFixed(3)
-              +(_mp.animByNode?(', anim '+_mp.animDuration.toFixed(2)+'s'):''));
-  return _mp.meshes.length > 0;
+              +(_mp.animByNode?(', anim '+_mp.animDuration.toFixed(2)+'s'):'')
+              +(_mp.emitters?(', '+_mp.emitters.length+' emitters'):''));
+  return _mp.meshes.length > 0 || !!(_mp.emitters&&_mp.emitters.length);
+}
+
+// ── Particle engine: simulates ParticleEmitterInfo (0x32) definitions ───────
+// AC particle motion: p(t) = p0 + A·ra·t + B·rb·t² + C·rc·t³, where each
+// particle draws random scalars ra/rb/rc in [min,max] at birth. Scale and
+// transparency interpolate start→final over the particle's lifespan.
+function _mpPartProgram(gl){
+  if(_mp.partProg) return _mp.partProg;
+  function sh(type,src){ var s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s); return s; }
+  var v=sh(gl.VERTEX_SHADER,[
+    'attribute vec3 aP; attribute float aSize; attribute float aAlpha;',
+    'uniform mat4 uMVP; uniform float uPx; varying float vA;',
+    'void main(){ vec4 cp=uMVP*vec4(aP,1.0); gl_Position=cp;',
+    '  gl_PointSize=clamp(aSize*uPx/max(cp.w,0.05),1.0,256.0); vA=aAlpha; }',
+  ].join('\n'));
+  var f=sh(gl.FRAGMENT_SHADER,[
+    'precision mediump float; uniform vec3 uTint; varying float vA;',
+    'void main(){ vec2 d=gl_PointCoord*2.0-1.0; float r2=dot(d,d);',
+    '  if(r2>1.0) discard;',
+    '  float a=(1.0-r2)*(1.0-r2)*vA;',
+    '  gl_FragColor=vec4(uTint*a,a); }',
+  ].join('\n'));
+  var p=gl.createProgram(); gl.attachShader(p,v); gl.attachShader(p,f); gl.linkProgram(p);
+  _mp.partProg=p;
+  return p;
+}
+
+function _mpRandDir(v){
+  // Zero vectors mean "random direction" — otherwise use the authored one.
+  var len=Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+  if(len>1e-6) return [v[0]/len,v[1]/len,v[2]/len];
+  var t=Math.random()*Math.PI*2, z=Math.random()*2-1, r=Math.sqrt(1-z*z);
+  return [r*Math.cos(t), r*Math.sin(t), z];
+}
+function _mpRR(lo,hi){ return lo+(hi-lo)*Math.random(); }
+
+function _mpUpdateEmitter(em, dt){
+  var d=em.def;
+  // age + cull
+  em.parts=em.parts.filter(function(pt){ pt.age+=dt; return pt.age<pt.life; });
+  // spawn — birthrate is seconds between births
+  em.lastSpawn+=dt;
+  var interval=Math.max(d.birthrate||0.1, 0.016);
+  while(em.lastSpawn>=interval && em.parts.length<(d.max||32)){
+    em.lastSpawn-=interval;
+    var od=_mpRandDir(d.offsetDir), ol=_mpRR(d.minOff,d.maxOff);
+    var da=_mpRandDir(d.a), ra=_mpRR(d.minA,d.maxA);
+    var db=_mpRandDir(d.b), rb=_mpRR(d.minB,d.maxB);
+    var dc=_mpRandDir(d.c), rc=_mpRR(d.minC,d.maxC);
+    var pt0={
+      age:0, life:Math.max(0.05,(d.lifespan||1)+_mpRR(-1,1)*(d.lifespanRand||0)),
+      p0:[d.pos[0]+od[0]*ol, d.pos[1]+od[1]*ol, d.pos[2]+od[2]*ol],
+      va:[da[0]*ra,da[1]*ra,da[2]*ra],
+      vb:[db[0]*rb,db[1]*rb,db[2]*rb],
+      vc:[dc[0]*rc,dc[1]*rc,dc[2]*rc],
+      sRand:_mpRR(-1,1)*(d.scaleRand||0),
+    };
+    if(d.ptype===1){          // Still — no motion, fade in place
+      pt0.va=[0,0,0]; pt0.vb=[0,0,0]; pt0.vc=[0,0,0];
+    } else if(d.ptype===5){   // Swarm — orbit the emitter (Rift Virindi shrouds)
+      pt0.swarm=true;
+      pt0.radius=Math.max(0.05,ol||_mpRR(0.15,0.4));
+      pt0.theta=Math.random()*Math.PI*2;
+      // angular speed from the A scalar range; random handedness
+      pt0.omega=(Math.abs(ra)||1.5)*(Math.random()<0.5?-1:1);
+      pt0.vz=pt0.vb[2]||0;    // vertical drift from B
+      pt0.zJit=_mpRR(-0.15,0.15);
+    }
+    em.parts.push(pt0);
+  }
+  // fill buffer: xyz + size + alpha per particle
+  var n=em.parts.length, buf=em.data;
+  for(var i=0;i<n;i++){
+    var pt=em.parts[i], t=pt.age, u=Math.min(1,t/pt.life);
+    var o=i*5;
+    if(pt.swarm){
+      var th=pt.theta+pt.omega*t;
+      buf[o  ]=d.pos[0]+pt.radius*Math.cos(th);
+      buf[o+1]=d.pos[1]+pt.radius*Math.sin(th);
+      buf[o+2]=d.pos[2]+pt.zJit+pt.vz*t;
+    } else {
+      buf[o  ]=pt.p0[0]+pt.va[0]*t+pt.vb[0]*t*t+pt.vc[0]*t*t*t;
+      buf[o+1]=pt.p0[1]+pt.va[1]*t+pt.vb[1]*t*t+pt.vc[1]*t*t*t;
+      buf[o+2]=pt.p0[2]+pt.va[2]*t+pt.vb[2]*t*t+pt.vc[2]*t*t*t;
+    }
+    // World size = particle gfxobj half-extent × interpolated emitter scale
+    var _sc=Math.max(0.05,(d.startScale+(d.finalScale-d.startScale)*u)+pt.sRand);
+    buf[o+3]=Math.max(0.005,(d.size||0.25)*_sc);
+    buf[o+4]=Math.max(0,Math.min(1,1-(d.startTrans+(d.finalTrans-d.startTrans)*u)));
+  }
+  return n;
 }
 
 // Quaternion [x,y,z,w] → column-major 4x4 rotation matrix
@@ -15056,7 +15375,7 @@ function _mpDraw(){
   gl.viewport(0,0,W,H);
   gl.clearColor(0.08,0.08,0.1,1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
-  if(!_mp.meshes.length) return;
+  if(!_mp.meshes.length && !(_mp.emitters&&_mp.emitters.length)) return;
   var p=_mp.prog;
   var proj=_mpPerspective(0.8,W/H,0.1,200);
   var view=_mpTranslate(0,0,_mp.zoom);
@@ -15104,7 +15423,8 @@ function _mpDraw(){
     var N=_mpMat4Mul(_mpTranslate(trs.t[0],trs.t[1],trs.t[2]),R);
     return (nodeMats[ni]={mvp:_mpMat4Mul(mvp,N), nrm:_mpMat4Mul(rot,R)});
   }
-  _mp.meshes.forEach(function(m){
+  var uBlend=gl.getUniformLocation(p,'uBlend');
+  function drawMesh(m){
     var nm=nodeMat(m.node);
     gl.uniformMatrix4fv(uMVP,false,nm?nm.mvp:mvp);
     gl.uniformMatrix4fv(uModel,false,nm?nm.nrm:rot);   // normals only need rotation
@@ -15131,11 +15451,69 @@ function _mpDraw(){
     }
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.ibo);
     gl.drawElements(gl.TRIANGLES,m.count,m.idxType,0);
-  });
+  }
+  // Opaque meshes first, then glow sprites with additive blending on top
+  // (soft edges, no depth writes so they never punch holes in geometry).
+  gl.uniform1i(uBlend,0);
+  _mp.meshes.forEach(function(m){ if(!m.blend) drawMesh(m); });
+  var glows=_mp.meshes.filter(function(m){return m.blend;});
+  if(glows.length){
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+    gl.depthMask(false);
+    gl.uniform1i(uBlend,1);
+    glows.forEach(drawMesh);
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
+    gl.uniform1i(uBlend,0);
+  }
+
+  // ── Particle pass: simulate + draw each emitter as additive point sprites ──
+  if(_mp.emitters&&_mp.emitters.length){
+    var nowP=performance.now();
+    var dt=Math.min(0.1,(nowP-(_mp.lastPartT||nowP))/1000);
+    _mp.lastPartT=nowP;
+    var pp=_mpPartProgram(gl);
+    gl.useProgram(pp);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+    gl.depthMask(false);
+    var puMVP=gl.getUniformLocation(pp,'uMVP');
+    var puPx=gl.getUniformLocation(pp,'uPx');
+    var puTint=gl.getUniformLocation(pp,'uTint');
+    var paP=gl.getAttribLocation(pp,'aP');
+    var paS=gl.getAttribLocation(pp,'aSize');
+    var paA=gl.getAttribLocation(pp,'aAlpha');
+    // point size: world units → pixels (projection f=1/tan(fov/2), fov=0.8),
+    // including the model's fit-to-view scale
+    var px=(H*0.5)*(1.0/Math.tan(0.4))*(1.8/span);
+    gl.uniform1f(puPx,px);
+    _mp.emitters.forEach(function(em){
+      var n=_mpUpdateEmitter(em,dt);
+      if(!n) return;
+      var nm=nodeMat(em.def.node);
+      gl.uniformMatrix4fv(puMVP,false,nm?nm.mvp:mvp);
+      gl.uniform3fv(puTint,em.def.tint||[0.85,0.9,1.0]);
+      gl.bindBuffer(gl.ARRAY_BUFFER,em.buf);
+      gl.bufferData(gl.ARRAY_BUFFER,em.data.subarray(0,n*5),gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(paP);
+      gl.vertexAttribPointer(paP,3,gl.FLOAT,false,20,0);
+      gl.enableVertexAttribArray(paS);
+      gl.vertexAttribPointer(paS,1,gl.FLOAT,false,20,12);
+      gl.enableVertexAttribArray(paA);
+      gl.vertexAttribPointer(paA,1,gl.FLOAT,false,20,16);
+      gl.drawArrays(gl.POINTS,0,n);
+      gl.disableVertexAttribArray(paS);
+      gl.disableVertexAttribArray(paA);
+    });
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
+    gl.useProgram(p);
+  }
   _mp.animFrame=requestAnimationFrame(_mpDraw);
 }
 
-function openModelPreview(setup_id_hex, label){
+function openModelPreview(setup_id_hex, label, opts){
   var panel=document.getElementById('modelPreviewPanel');
   var canvas=document.getElementById('modelPreviewCanvas');
   var msg=document.getElementById('modelPreviewMsg');
@@ -15150,16 +15528,20 @@ function openModelPreview(setup_id_hex, label){
   if(_mp.animFrame){ cancelAnimationFrame(_mp.animFrame); _mp.animFrame=null; }
   _mp.meshes=[];
 
+  // Callers outside the weenie editor (QuestForge model pickers) pass opts
+  // with explicit pose + companion DIDs instead of scraping editor state.
+  opts = opts || null;
+
   // Creature-type weenies (Creature/Vendor/Pet/CombatPet) are authored upright
   // already; everything else (weapons, items) needs the item base rotation.
   var _wtEl=document.getElementById('fWeenieType');
   var _wt=_wtEl?parseInt(_wtEl.value):NaN;
-  _mp.itemMode = !(_wt===10 || _wt===12 || _wt===51 || _wt===76);
+  _mp.itemMode = opts ? !opts.creature : !(_wt===10 || _wt===12 || _wt===51 || _wt===76);
   // Headgear (ValidLocations Int 9 with the HeadWear 0x1 bit) is authored
   // upright like creatures, not long-axis like weapons — keep the creature
   // pose but yaw 180° so the face opening points at the camera.
   _mp.headMode=false;
-  try{
+  if(!opts) try{
     (typeof extraInt!=='undefined'?extraInt:[]).forEach(function(r){
       if(parseInt(r.type)===9 && (parseInt(r.value)&1)){ _mp.itemMode=false; _mp.headMode=true; }
     });
@@ -15168,16 +15550,28 @@ function openModelPreview(setup_id_hex, label){
   // Armor/clothing weenies point their Setup at base body parts; the
   // ClothingBase DID (type 7, 0x10xxxxxx) swaps in the armor models/textures.
   // The MotionTable DID (type 2, 0x09xxxxxx) bakes the idle animation in.
-  var _cloHex='', _motHex='';
-  try{
+  var _cloHex='', _motHex='', _palTpl='', _shade='';
+  if(opts){
+    _cloHex=opts.clo||''; _motHex=opts.mot||'';
+    _palTpl=opts.palTpl||''; _shade=opts.shade||'';
+  } else try{
     (typeof extraDID!=='undefined'?extraDID:[]).forEach(function(r){
       var v=String(r.value||'');
       if(!v || v==='0x00000000') return;
       if(parseInt(r.type)===7) _cloHex=v;
       if(parseInt(r.type)===2) _motHex=v;
     });
+    // PaletteTemplate (Int 3) + Shade (Float 12) pick the clothing dye —
+    // this is how the shared human body setups become Shadows etc.
+    (typeof extraInt!=='undefined'?extraInt:[]).forEach(function(r){
+      if(parseInt(r.type)===3 && parseInt(r.value)) _palTpl=String(parseInt(r.value));
+    });
+    (typeof extraFloat!=='undefined'?extraFloat:[]).forEach(function(r){
+      if(parseInt(r.type)===12) _shade=String(parseFloat(r.value)||0);
+    });
   }catch(e){}
   _mp.cloHex=_cloHex; _mp.motHex=_motHex;   // also used by the 2D fallback fetch
+  _mp.palTpl=_palTpl; _mp.shade=_shade;
 
   if(!_mp.gl){
     _mp.gl=_mpInitGL(canvas);
@@ -15203,7 +15597,7 @@ function openModelPreview(setup_id_hex, label){
     return;
   }
 
-  window.pywebview.api.get_model_glb(setup_id_hex, _cloHex, _motHex).then(function(r){
+  window.pywebview.api.get_model_glb(setup_id_hex, _cloHex, _motHex, _palTpl, _shade).then(function(r){
     // Always show status in msg first
     if(!r.success){
       msg.style.color='rgba(255,150,150,.9)';
@@ -15251,7 +15645,9 @@ function openModelPreview(setup_id_hex, label){
     msg.style.color='rgba(255,255,200,.9)';
     msg.textContent='GLB OK: '+meshCount+' mesh(es), '+triCount+' triangles\nRendering…';
 
-    if(triCount===0){
+    var _hasEmitters=false;
+    try{ _hasEmitters=!!(gltf.extras&&gltf.extras.emitters&&gltf.extras.emitters.length); }catch(e){}
+    if(triCount===0 && !_hasEmitters){
       msg.style.color='rgba(255,200,100,.9)';
       msg.textContent='GLB parsed OK but contains 0 triangles.\nDAT parser returned empty geometry.\nMeshes: '+meshCount+', file size: '+Math.round(b64len*0.75/1024)+'KB';
       return;
@@ -15266,7 +15662,7 @@ function openModelPreview(setup_id_hex, label){
       var glOk=_mpLoadGLB(r.data_b64);
       console.log('[3D] _mpLoadGLB -> '+glOk+', meshes='+((_mp.meshes||[]).length)+
                   ', span='+(_mp.span||'?'));
-      if(glOk && _mp.meshes && _mp.meshes.length){
+      if(glOk && ((_mp.meshes&&_mp.meshes.length) || (_mp.emitters&&_mp.emitters.length))){
         var _ov=document.getElementById('modelPreview2D');
         if(_ov) _ov.style.display='none';       // hide any stale 2D overlay
         msg.style.display='none';

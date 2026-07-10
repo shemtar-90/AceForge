@@ -2125,7 +2125,8 @@ Start with: /* ===== FILE: {fname} ===== */
         return {"configured": exists, "path": path}
 
     def get_model_glb(self, setup_id_hex: str, clothing_id_hex: str = "",
-                      motion_id_hex: str = "") -> dict:
+                      motion_id_hex: str = "", palette_template: str = "",
+                      shade: str = "") -> dict:
         """
         Return a base64-encoded GLB for the given Setup DID (as hex string).
         Uses the cache — extracts from DAT on first request, cached thereafter.
@@ -2163,13 +2164,23 @@ Start with: /* ===== FILE: {fname} ===== */
             clothing_id = 0
         if motion_id and (motion_id >> 24) != 0x09:
             motion_id = 0
+        # PaletteTemplate int + Shade float drive the clothing dye subpalettes
+        try:
+            pal_tpl = int(str(palette_template).strip() or "0")
+        except (ValueError, TypeError):
+            pal_tpl = 0
+        try:
+            shade_f = float(str(shade).strip() or "0")
+        except (ValueError, TypeError):
+            shade_f = 0.0
+        shade_f = min(max(shade_f, 0.0), 1.0)
 
         from aceforge.dat_loader import (cached_glb_path, DatDatabase,
                                           get_or_export_glb, export_setup_glb,
                                           parse_setup, parse_gfxobj)
         from pathlib import Path
 
-        cached = cached_glb_path(setup_id, clothing_id, motion_id)
+        cached = cached_glb_path(setup_id, clothing_id, motion_id, pal_tpl, shade_f)
         if cached.exists():
             return {"success": True,
                     "data_b64": base64.b64encode(cached.read_bytes()).decode()}
@@ -2244,7 +2255,8 @@ Start with: /* ===== FILE: {fname} ===== */
                         f"{len(gfx.surfaces)} surfaces. ")
             # ── End diagnostics ───────────────────────────────────────────────
 
-            glb_path = get_or_export_glb(db, setup_id, clothing_id, motion_id)
+            glb_path = get_or_export_glb(db, setup_id, clothing_id, motion_id,
+                                         pal_tpl, shade_f)
             db.close()
             if glb_path is None:
                 return {"success": False,

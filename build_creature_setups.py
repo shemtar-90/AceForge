@@ -18,6 +18,7 @@ Run from the repo root: python build_creature_setups.py
 import json
 import re
 from pathlib import Path
+from typing import Optional
 
 REFS = Path("aceforge/references")
 OUT = Path("aceforge/web/creature_setups.json")
@@ -60,10 +61,27 @@ def _i(v: str) -> int:
     return int(v, 16) if v.lower().startswith("0x") else int(v)
 
 
-def _prettify(name: str, ct: int) -> str:
+def _segment(word: str, vocab: set) -> Optional[list]:
+    """Greedy-longest DP segmentation of a compound lowercase name into known
+    vocabulary words ("riftquiddity" → ["rift", "quiddity"])."""
+    n = len(word)
+    best = [None] * (n + 1)
+    best[0] = []
+    for i in range(1, n + 1):
+        # prefer longer words: scan from longest candidate down
+        for j in range(max(0, i - 20), i - 2):   # words are >= 3 chars
+            if best[j] is not None and word[j:i] in vocab:
+                cand = best[j] + [word[j:i]]
+                if best[i] is None or len(cand) < len(best[i]):
+                    best[i] = cand
+    return best[n]
+
+
+def _prettify(name: str, ct: int, vocab: set) -> str:
     """Turn internal class names into readable labels: strip variant suffixes
     ("-nofall-xp"), split off the creature-type prefix ("zefirdusk" →
-    "Zefir Dusk"), and capitalize."""
+    "Zefir Dusk") or segment via the display-name vocabulary
+    ("riftquiddity" → "Rift Quiddity"), and capitalize."""
     n = re.sub(r"-.*$", "", name).strip()
     if not n:
         n = name
@@ -73,15 +91,33 @@ def _prettify(name: str, ct: int) -> str:
     low = n.lower()
     if label and low.startswith(label.lower()) and len(n) > len(label):
         rest = n[len(label):]
+        seg = _segment(rest.lower(), vocab)
+        if seg and all(len(w) >= 3 for w in seg):
+            return label + " " + " ".join(w.capitalize() for w in seg)
         return f"{label} {rest[:1].upper()}{rest[1:]}"
     if label and low == label.lower():
         return label
+    seg = _segment(low, vocab)
+    if seg and len(seg) >= 2 and all(len(w) >= 3 for w in seg):
+        return " ".join(w.capitalize() for w in seg)
     return n[:1].upper() + n[1:]
 
 
 def main():
     idx = json.loads((REFS / "weenie_index.json").read_text(encoding="utf-8"))
     creatures = [e for e in idx if e.get("t") == 10]
+
+    # Vocabulary of words seen in real display names ("Rift Quiddity" ...) —
+    # used to segment compound class names like "riftquiddity".
+    vocab = set()
+    for e in idx:
+        nm = e.get("n") or ""
+        if " " in nm:
+            for w in re.split(r"[^A-Za-z]+", nm):
+                if len(w) >= 3:
+                    vocab.add(w.lower())
+    for lbl in CT_LABELS.values():
+        vocab.add(lbl.lower())
     wd = REFS / "weenies"
 
     out: dict[int, dict[int, dict]] = {}
@@ -125,7 +161,7 @@ def main():
             return s
 
         by_setup = out.setdefault(ct, {})
-        pretty = _prettify(e["n"], ct)
+        pretty = _prettify(e["n"], ct, vocab)
         if setup not in by_setup:
             ent = {"s": f"0x{setup:08X}", "n": pretty}
             for key, did_type in (("mt", 2), ("st", 3), ("ct4", 4), ("pb", 6),

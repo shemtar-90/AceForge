@@ -24,6 +24,65 @@ from aceforge.json_to_sql import (
 TIMESTAMP = "2025-01-01 00:00:00"
 
 
+# ── Creature-setup catalog (scraped from the base-game weenie DB) ─────────────
+# {ctype_int_str: [{s,n,mt,st,ct4,pb,cb,pt,bp}, ...]} — the same file the
+# WeenieForge UI uses (aceforge/web/creature_setups.json). Supplies correct
+# per-creature-type DIDs and body-part keys for generated quest creatures/NPCs.
+_CS_CATALOG = None
+
+def _creature_catalog() -> dict:
+    global _CS_CATALOG
+    if _CS_CATALOG is None:
+        try:
+            p = Path(__file__).parent / "web" / "creature_setups.json"
+            _CS_CATALOG = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            _CS_CATALOG = {}
+    return _CS_CATALOG
+
+
+def _catalog_entry(ctype_int: int, setup_hex: str = "") -> dict | None:
+    """Catalog entry for a creature type — a specific model when setup_hex is
+    given, otherwise the type's first model."""
+    lst = _creature_catalog().get(str(ctype_int)) or []
+    if setup_hex:
+        sh = setup_hex.strip().lower()
+        for e in lst:
+            if e.get("s", "").lower() == sh:
+                return e
+    return lst[0] if lst else None
+
+
+def _npc_ent_from(params: dict, type_key: str, model_key: str) -> dict | None:
+    """Catalog entry for an NPC model choice. type value is 'Label (int)' from
+    the UI select; Human (31) is the built-in default → returns None."""
+    raw = str(params.get(type_key, "") or "")
+    m = re.search(r"\((\d+)\)", raw)
+    ct = int(m.group(1)) if m else 0
+    if not ct or ct == 31:
+        return None
+    return _catalog_entry(ct, str(params.get(model_key, "") or ""))
+
+
+def _catalog_dids(ent: dict | None) -> dict:
+    """Map a catalog entry onto _creature_sql's data keys."""
+    if not ent:
+        return {}
+    def _h(k):
+        v = ent.get(k)
+        return int(v, 16) if v else None
+    out = {}
+    for src, dst in (("s", "setup"), ("mt", "motion_table"), ("st", "sound_table"),
+                     ("ct4", "combat_table"), ("pb", "palette_base"),
+                     ("cb", "clothing_base"), ("pt", "physics_effect")):
+        v = _h(src)
+        if v:
+            out[dst] = v
+    if ent.get("bp"):
+        out["body_parts"] = list(ent["bp"])
+    return out
+
+
 def _quest_sql(quest_id: int, name: str, min_delta: int, max_solves: int,
                message: str = "kill counter") -> str:
     """
@@ -322,7 +381,8 @@ def _generator_sql(gen_wcid: int, creature_wcid: int,
     return "\n".join(sections)
 
 
-def _npc_base_sql(wcid: int, name: str, class_name: str, filename: str) -> str:
+def _npc_base_sql(wcid: int, name: str, class_name: str, filename: str,
+                  cs_ent: dict | None = None) -> str:
     """Generate NPC weenie SQL matching Shattered Dawn reference format.
     Based on Lucius Athenos (850000) and Marson Riftrider (850003) reference files.
     """
@@ -377,13 +437,27 @@ def _npc_base_sql(wcid: int, name: str, class_name: str, filename: str) -> str:
         (125, 1,    "ResistHealthDrain"),
     ]
     str_rows = [(1, name, "Name")]
+    # Default: human. cs_ent (a creature-setup catalog entry) lets the NPC use
+    # any creature type's model with its matching companion tables.
+    _dids = _catalog_dids(cs_ent) if cs_ent else {}
     did_rows = [
-        (1,  0x02000001, "Setup"),
-        (2,  0x09000001, "MotionTable"),
-        (3,  0x20000001, "SoundTable"),
-        (6,  0x0400007E, "PaletteBase"),
+        (1,  _dids.get("setup",         0x02000001), "Setup"),
+        (2,  _dids.get("motion_table",  0x09000001), "MotionTable"),
+        (3,  _dids.get("sound_table",   0x20000001), "SoundTable"),
+        (6,  _dids.get("palette_base",  0x0400007E), "PaletteBase"),
         (8,  0x06001036, "Icon"),
     ]
+    if _dids.get("combat_table"):
+        did_rows.insert(3, (4, _dids["combat_table"], "CombatTable"))
+    if _dids.get("clothing_base"):
+        did_rows.append((7, _dids["clothing_base"], "ClothingBase"))
+    if _dids.get("physics_effect"):
+        did_rows.append((22, _dids["physics_effect"], "PhysicsEffectTable"))
+    # Non-human NPC models use their scraped body-part keys
+    if _dids.get("body_parts"):
+        return_body_keys = _dids["body_parts"]
+    else:
+        return_body_keys = None
     # Body parts: Human 9-part matching reference (base_Armor=250, armor_Vs_*=125)
     body_parts = [
         (0, 4, 0, 0,    250, 125, 125, 125, 125, 125, 125, 125, 0, 1, 0.33, 0,    0,    0.33, 0,    0,    0.33, 0,    0,    0.33, 0,    0   ),  # Head
@@ -423,17 +497,20 @@ def _npc_base_sql(wcid: int, name: str, class_name: str, filename: str) -> str:
     sections.append(""); sections.append(_emit_float_props(wcid, float_rows))
     sections.append(""); sections.append(_emit_str_props(wcid, str_rows))
     sections.append(""); sections.append(_emit_did_props(wcid, did_rows))
-    sections.append(""); sections.append(_emit_body_parts_ref(wcid, body_parts, armor=250))
+    sections.append(""); sections.append(_emit_body_parts_ref(
+        wcid, return_body_keys if return_body_keys else body_parts, armor=250))
     sections.append(""); sections.append(_emit_attributes(wcid, attrs))
     sections.append(""); sections.append(_emit_vitals(wcid, 326, 456, 396))
     sections.append(""); sections.append(_emit_skills(wcid, skill_rows))
-    # Default clothing: Gelidite Robe (wcid 6061) wielded on all NPCs
-    sections.append("")
-    sections.append(
-        "INSERT INTO `weenie_properties_create_list`"
-        " (`object_Id`, `destination_Type`, `weenie_Class_Id`, `stack_Size`, `palette`, `shade`, `try_To_Bond`)\n"
-        f"VALUES ({wcid}, 2, 6061, 1, 0, 0, False) /* Create Gelidite Robe (6061) for Wield */;"
-    )
+    # Default clothing: Gelidite Robe (wcid 6061) wielded on human NPCs only —
+    # non-human models (catalog entry supplied) have no wear slots for it.
+    if not cs_ent:
+        sections.append("")
+        sections.append(
+            "INSERT INTO `weenie_properties_create_list`"
+            " (`object_Id`, `destination_Type`, `weenie_Class_Id`, `stack_Size`, `palette`, `shade`, `try_To_Bond`)\n"
+            f"VALUES ({wcid}, 2, 6061, 1, 0, 0, False) /* Create Gelidite Robe (6061) for Wield */;"
+        )
     sections.append("")
     return "\n".join(s for s in sections)
 
@@ -676,6 +753,9 @@ def generate_kill_task(params: dict, config) -> list[dict]:
             c_type_int = int(_m.group(1))
         else:
             c_type_int = CREATURE_TYPE.get(c_type_label.lower().replace(' ','_').replace('-','_'), 31)
+    # Correct per-type (or user-picked model) DIDs + body parts from the
+    # scraped base-game catalog. params["setup_model"] = chosen Setup hex.
+    _cs_dids = _catalog_dids(_catalog_entry(c_type_int, params.get("setup_model", "")))
     creature_data = {
         "name":               c_name,
         "class_name":         c_slug,
@@ -697,6 +777,7 @@ def generate_kill_task(params: dict, config) -> list[dict]:
         "health":             c_level * (24 if is_boss_mode else 8),
         "stamina":            c_level * (18 if is_boss_mode else 6),
         "mana":               c_level * (6 if is_boss_mode else 2),
+        **_cs_dids,
     }
     fname2 = f"{creature_wcid} {_fnbase(c_slug)}.sql"
     files.append({
@@ -736,6 +817,7 @@ def generate_kill_task(params: dict, config) -> list[dict]:
             "kill_quest":         boss_flag,
             "loot_tier":          min(loot_tier + 1, 3105),
             "scale":              1.5,
+            **_cs_dids,
         }
         fname4 = f"{boss_wcid} {_fnbase(boss_slug)}.sql"
         files.append({
@@ -773,7 +855,12 @@ def generate_kill_task(params: dict, config) -> list[dict]:
         npc_base = _kill_contract_item_sql(giver_wcid, giver_name, use_text, item_icon, fname5)
     else:
         fname5 = f"{npc_wcid} {_fnbase(npc_slug)}.sql"
-        npc_base = _npc_base_sql(npc_wcid, npc_name, npc_slug, fname5)
+        # Optional non-human NPC model: npc_creature_type_int + npc_setup_model
+        _npc_ent = None
+        _nct = _si(params.get("npc_creature_type_int", ""), 0)
+        if _nct:
+            _npc_ent = _catalog_entry(_nct, params.get("npc_setup_model", ""))
+        npc_base = _npc_base_sql(npc_wcid, npc_name, npc_slug, fname5, _npc_ent)
 
     # Build the emote script deterministically — exact quest flags guaranteed
     boss_check = ""
@@ -1341,8 +1428,16 @@ def generate_item_turnin(params: dict, config) -> list[dict]:
     # ── File 3 (optional): Drop Creature ─────────────────────────────────────
     if has_dropper and drop_wcid:
         from aceforge.json_to_sql import CREATURE_TYPE
-        drop_type_int = CREATURE_TYPE.get(drop_type.lower().replace(" ", "_"), 1)
+        _m = re.search(r"\((\d+)\)", drop_type)
+        if _m:
+            drop_type_int = int(_m.group(1))
+        else:
+            drop_type_int = CREATURE_TYPE.get(drop_type.lower().replace(" ", "_"), 1)
+        # Correct DIDs + body parts (or user-picked model) from the catalog
+        _drop_dids = _catalog_dids(_catalog_entry(drop_type_int,
+                                                  params.get("drop_setup_model", "")))
         drop_data = {
+            **_drop_dids,
             "name":               drop_name,
             "class_name":         drop_slug,
             "level":              drop_level,
@@ -1413,7 +1508,8 @@ def generate_item_turnin(params: dict, config) -> list[dict]:
 
     # ── NPC Quest Giver — direct SQL emotes ───────────────────────────────────
     fname_npc = f"{npc_wcid} {_fnbase(npc_slug)}.sql"
-    npc_base  = _npc_base_sql(npc_wcid, npc_name, npc_slug, fname_npc)
+    npc_base  = _npc_base_sql(npc_wcid, npc_name, npc_slug, fname_npc,
+                              _npc_ent_from(params, "npc_creature_type", "npc_setup_model"))
 
     rp = _rp  # reward dict from _parse_reward_params
     qty_check = f"{item_wcid} {multi_count}"
@@ -1796,7 +1892,8 @@ def generate_delivery(params: dict, config) -> list[dict]:
     npc_a_emote_sql = "\n\n".join(npc_a_parts)
 
     fname_a = f"{npc_a_wcid} {_fnbase(npc_a['slug'])}.sql"
-    npc_a_base = _npc_base_sql(npc_a_wcid, npc_a["name"], npc_a["slug"], fname_a)
+    npc_a_base = _npc_base_sql(npc_a_wcid, npc_a["name"], npc_a["slug"], fname_a,
+                               _npc_ent_from(params, "npc_a_creature_type", "npc_a_setup_model"))
     files.append({"filename": fname_a, "sql": npc_a_base + "\n" + npc_a_emote_sql + "\n",
                   "type": "npc", "wcid": npc_a_wcid})
 
@@ -1885,7 +1982,8 @@ def generate_delivery(params: dict, config) -> list[dict]:
     npc_b_emote_sql = "\n\n".join(npc_b_parts)
 
     fname_b = f"{npc_b_wcid} {_fnbase(npc_b['slug'])}.sql"
-    npc_b_base = _npc_base_sql(npc_b_wcid, npc_b["name"], npc_b["slug"], fname_b)
+    npc_b_base = _npc_base_sql(npc_b_wcid, npc_b["name"], npc_b["slug"], fname_b,
+                               _npc_ent_from(params, "npc_b_creature_type", "npc_b_setup_model"))
     files.append({"filename": fname_b, "sql": npc_b_base + "\n" + npc_b_emote_sql + "\n",
                   "type": "npc", "wcid": npc_b_wcid})
 
@@ -2161,7 +2259,8 @@ def generate_flagging(params: dict, config) -> list[dict]:
 
     # ── NPC Quest Giver — direct SQL emotes ─────────────────────────────────
     fname_npc = f"{npc_wcid} {_fnbase(npc_slug)}.sql"
-    npc_base  = _npc_base_sql(npc_wcid, npc_name, npc_slug, fname_npc)
+    npc_base  = _npc_base_sql(npc_wcid, npc_name, npc_slug, fname_npc,
+                              _npc_ent_from(params, "npc_creature_type", "npc_setup_model"))
 
     ACT_COLS = ("`emote_Id`, `order`, `type`, `delay`, `extent`, `motion`, `message`,"
                 " `test_String`, `min`, `max`, `min_64`, `max_64`, `min_Dbl`, `max_Dbl`,"

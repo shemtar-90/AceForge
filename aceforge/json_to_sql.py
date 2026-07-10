@@ -380,9 +380,15 @@ def _emit_body_parts_ref(wcid: int, parts=None, armor: int = 100,
 
     if parts is None:
         parts = creature_type_int if creature_type_int is not None else 31
+    # A plain list of ints = explicit body-part KEYS (e.g. scraped per-model
+    # keys from the creature-setup catalog); an int = creature type lookup.
+    keys = None
     if isinstance(parts, int):
-        creature_type_int = parts
-        keys = CREATURE_BP_MAP.get(creature_type_int, CREATURE_BP_MAP[31])
+        keys = CREATURE_BP_MAP.get(parts, CREATURE_BP_MAP[31])
+    elif (isinstance(parts, (list, tuple)) and parts
+          and all(isinstance(k, int) for k in parts)):
+        keys = list(parts)
+    if keys is not None:
         parts = []
         for key in keys:
             fracs = _BP_FRACS.get(key, _BP_FRACS[0])
