@@ -109,11 +109,67 @@ def _quest_sql(quest_id: int, name: str, min_delta: int, max_solves: int,
 
 # ── WCID allocator ────────────────────────────────────────────────────────────
 
+# Legacy allocation keys → normalized names of the user's Base WCID Ranges
+# (Settings). When a matching base range exists, new WCIDs are drawn from it
+# so range-based folder routing applies to generated files; otherwise
+# allocation falls back to the legacy cursor ranges below. kill_tasks are
+# quest-stamp IDs, not weenies, and always use the legacy 1000000+ range.
+_BASE_RANGE_ALIASES = {
+    "custom_npcs":        ("npcs", "npc"),
+    "campaign_creatures": ("creatures", "creature"),
+    "custom_items":       ("items", "item"),
+    "custom_gear":        ("gear",),
+    "kill_contracts":     ("killcontracts", "killcontract"),
+    "bosses":             ("bosses", "boss"),
+    "structures":         ("structures", "structure"),
+    "custom_portals":     ("portals", "portal"),
+}
+
+
+def _find_base_range(config, legacy_key: str):
+    """Match a legacy allocation key to one of the user's base WCID ranges by
+    key or (normalized) display name. Returns {key,min,max} or None."""
+    aliases = _BASE_RANGE_ALIASES.get(legacy_key)
+    if not aliases or not hasattr(config, "get_base_wcid_ranges"):
+        return None
+    def norm(s):
+        return re.sub(r"[^a-z0-9]", "", str(s or "").lower())
+    for r in config.get_base_wcid_ranges():
+        if norm(r.get("key")) in aliases or norm(r.get("name")) in aliases:
+            try:
+                mn, mx = int(r["min"]), int(r["max"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if mn <= mx:
+                return {"key": str(r.get("key") or norm(r.get("name"))), "min": mn, "max": mx}
+    return None
+
+
+def _alloc_from_base_range(config, base: dict, count: int):
+    """Allocate count WCIDs from a base range, tracking a per-range cursor in
+    config['base_wcid_next']. Returns list of WCIDs, or None if the range
+    doesn't have count slots left (caller falls back to legacy)."""
+    cursors = dict(config.get("base_wcid_next") or {})
+    try:
+        cur = int(cursors.get(base["key"]))
+    except (TypeError, ValueError):
+        cur = None
+    if cur is None or cur < base["min"] or cur > base["max"] + 1:
+        cur = base["min"]  # first use, or the range was re-defined — restart at min
+    if cur + count - 1 > base["max"]:
+        return None
+    cursors[base["key"]] = cur + count
+    config.set("base_wcid_next", cursors)
+    return list(range(cur, cur + count))
+
+
 def alloc_wcids(config, ranges: list[tuple[str, int]]) -> dict[str, list[int]]:
     """
     Allocate WCIDs from config ranges.
     ranges = [('campaign_creatures', 2), ('custom_npcs', 1), ...]
     Duplicate keys are summed — ('kill_contracts',1),('kill_contracts',1) → 2 allocated.
+    Categories with a matching Base WCID Range (Settings) draw from that range;
+    the rest use the legacy cursor ranges.
     Returns {range_key: [wcid1, wcid2, ...]}
     """
     # Consolidate duplicate keys
@@ -128,7 +184,15 @@ def alloc_wcids(config, ranges: list[tuple[str, int]]) -> dict[str, list[int]]:
     result: dict[str, list[int]] = {}
     for key in order:
         count = totals[key]
-        r     = wcid_ranges.get(key, {})
+
+        base = _find_base_range(config, key)
+        if base:
+            allocated = _alloc_from_base_range(config, base, count)
+            if allocated is not None:
+                result[key] = allocated
+                continue
+
+        r = wcid_ranges.get(key, {})
         if not r:
             # Per reference files: kill_tasks use 1000000+ range
             default_start = 1000000 if key == "kill_tasks" else 800000
@@ -138,6 +202,11 @@ def alloc_wcids(config, ranges: list[tuple[str, int]]) -> dict[str, list[int]]:
         result[key] = list(range(start, start + count))
         wcid_ranges[key]["next"] = start + count
     config.set("wcid_ranges", wcid_ranges)
+    # Persist cursors so allocation position survives app restarts
+    try:
+        config.save()
+    except Exception:
+        pass
     return result
 
 
@@ -680,10 +749,12 @@ def generate_kill_task(params: dict, config) -> list[dict]:
     # Allocate WCIDs
     _item_override = params.get("item_wcid", "").strip() if is_item_giver else ""
     _need_item_wcid = is_item_giver and not _item_override.isdigit()
+    # Generators are not allocated — they derive from their creature's WCID
+    # (creature + 1000000, the standard "leading 1" convention).
     needed = [
         ("custom_npcs",        1),
         ("campaign_creatures", 1 + (1 if has_boss else 0)),
-        ("kill_contracts",     1 + (1 if has_boss else 0) + (1 if _need_item_wcid else 0)),
+        ("kill_contracts",     (1 if _need_item_wcid else 0)),
     ]
     if new_reward_count > 0:
         needed.append(("custom_items", new_reward_count))
@@ -699,8 +770,8 @@ def generate_kill_task(params: dict, config) -> list[dict]:
     npc_wcid        = _user_wcid(params, "wcid_npc",       wcids["custom_npcs"][0])
     creature_wcid   = _user_wcid(params, "wcid_creature",  wcids["campaign_creatures"][0])
     boss_wcid       = _user_wcid(params, "wcid_boss",      wcids["campaign_creatures"][1]) if has_boss else None
-    gen_wcid        = _user_wcid(params, "wcid_generator", wcids["kill_contracts"][0])
-    boss_gen_wcid   = _user_wcid(params, "wcid_boss_generator", wcids["kill_contracts"][1]) if has_boss else None
+    gen_wcid        = _user_wcid(params, "wcid_generator", creature_wcid + 1000000)
+    boss_gen_wcid   = _user_wcid(params, "wcid_boss_generator", boss_wcid + 1000000) if has_boss else None
     # The emote script and giver file use this wcid (item or NPC).
     if is_item_giver:
         item_wcid  = int(_item_override) if _item_override.isdigit() else wcids["kill_contracts"][-1]
@@ -1346,7 +1417,7 @@ def generate_item_turnin(params: dict, config) -> list[dict]:
     total_items = 1 + new_reward_count
     needed = [("custom_npcs", 1), ("custom_items", total_items)]
     if has_dropper:
-        needed += [("campaign_creatures", 1), ("kill_contracts", 1)]
+        needed += [("campaign_creatures", 1)]
 
     wcids = alloc_wcids(config, needed)
 
@@ -1354,7 +1425,7 @@ def generate_item_turnin(params: dict, config) -> list[dict]:
     npc_wcid     = wcids["custom_npcs"][0]
     item_wcid    = item_pool.pop(0)  # turn-in item always first
     drop_wcid    = wcids["campaign_creatures"][0] if has_dropper else None
-    gen_wcid     = wcids["kill_contracts"][0] if has_dropper else None
+    gen_wcid     = (drop_wcid + 1000000) if has_dropper else None  # creature WCID with leading 1
 
     # Assign WCIDs to reward items
     for r in reward_items:
@@ -2072,11 +2143,11 @@ def generate_flagging(params: dict, config) -> list[dict]:
     # WCID allocation
     needed = [("custom_npcs", 1)]
     if req_type == "kill_task":
-        needed += [("campaign_creatures", 1), ("kill_contracts", 1)]
+        needed += [("campaign_creatures", 1)]
     elif req_type == "item_turnin":
         needed.append(("custom_items", 1))
         if params.get("req_item_creature", "").strip():
-            needed += [("campaign_creatures", 1), ("kill_contracts", 1)]
+            needed += [("campaign_creatures", 1)]
     if new_reward_count:
         needed.append(("custom_items", new_reward_count))
 
@@ -2084,7 +2155,6 @@ def generate_flagging(params: dict, config) -> list[dict]:
 
     npc_wcid      = wcids["custom_npcs"][0]
     cc_pool = list(wcids.get("campaign_creatures", []))
-    kc_pool = list(wcids.get("kill_contracts", []))
     ci_pool = list(wcids.get("custom_items", []))
 
     req_creature_wcid = None
@@ -2093,12 +2163,13 @@ def generate_flagging(params: dict, config) -> list[dict]:
 
     if req_type == "kill_task":
         req_creature_wcid = cc_pool.pop(0) if cc_pool else None
-        req_gen_wcid      = kc_pool.pop(0) if kc_pool else None
     elif req_type == "item_turnin":
         req_item_wcid = ci_pool.pop(0) if ci_pool else None
         if params.get("req_item_creature", "").strip():
             req_creature_wcid = cc_pool.pop(0) if cc_pool else None
-            req_gen_wcid      = kc_pool.pop(0) if kc_pool else None
+    # Generator = creature WCID with a leading 1 (creature + 1000000)
+    if req_creature_wcid is not None:
+        req_gen_wcid = req_creature_wcid + 1000000
 
     # Assign WCIDs to generated reward items
     for r in reward_items:

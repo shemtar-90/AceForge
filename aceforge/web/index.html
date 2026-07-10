@@ -12159,7 +12159,10 @@ function _renderQuestResults(files){
   // light colors (not theme --ink, which is near-black in light mode).
   var typeLabel={creature:'CREATURE',boss:'BOSS',generator:'GENERATOR',npc:'NPC',quest_flag:'QUEST FLAG',item:'ITEM',chest:'CHEST',quest:'QUEST',error:'ERROR'};
   var typeColor={creature:'#e0a458',boss:'#e0745b',generator:'#8ab4f8',npc:'#c9a0ff',quest_flag:'#d4a72c',item:'#34c28b',chest:'#c9a0ff',quest:'#d4a72c',error:'#e0745b'};
-  fl.innerHTML='<div style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.1em;color:#8b94a3;margin-bottom:8px">GENERATED FILES</div>'
+  fl.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+    +'<span style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.1em;color:#8b94a3">GENERATED FILES</span>'
+    +(files.length?'<button onclick="saveAllQuestFiles()" style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.05em;padding:3px 10px;border:1px solid var(--green);background:transparent;color:var(--green);cursor:pointer;flex-shrink:0">💾 SAVE ALL</button>':'')
+    +'</div>'
     +files.map(function(f,i){
       var lbl=typeLabel[f.type]||(f.type||'FILE').toUpperCase();
       var col=typeColor[f.type]||'#8b94a3';

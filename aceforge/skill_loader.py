@@ -189,6 +189,7 @@ class SkillLoader:
         author: str = "",
         weenie_context: str = "",
         is_local: bool = False,
+        base_wcid_ranges: list = None,
     ) -> str:
         """
         Build the system prompt. When is_local=True (Ollama/local LLM), use a
@@ -204,7 +205,8 @@ class SkillLoader:
             content = self._read(fname)
             parts.append(content)
             if fname == "SKILL.md":
-                parts.append(self._build_server_block(server_name, wcid_ranges, author))
+                parts.append(self._build_server_block(server_name, wcid_ranges, author,
+                                                      base_wcid_ranges))
 
         extra_files = CONTENT_TYPE_FILES.get(content_type, CONTENT_TYPE_FILES["general"])
         for fname in extra_files:
@@ -235,7 +237,8 @@ class SkillLoader:
             )
         return "\n".join(parts)
 
-    def _build_server_block(self, server_name: str, wcid_ranges: dict, author: str) -> str:
+    def _build_server_block(self, server_name: str, wcid_ranges: dict, author: str,
+                            base_wcid_ranges: list = None) -> str:
         lines = [
             "\n\n" + "="*60,
             "# LIVE SERVER CONFIGURATION",
@@ -246,6 +249,13 @@ class SkillLoader:
             lines.append(f"Author/Admin: {author}")
 
         # ── WCID Ranges ──────────────────────────────────────────────────────
+        if base_wcid_ranges:
+            # User-configured base ranges take priority over the legacy cursors
+            lines.append("\n## Reserved WCID Ranges (assign new WCIDs from the matching category):")
+            lines.append("| Category | Min | Max |")
+            lines.append("|----------|-----|-----|")
+            for r in base_wcid_ranges:
+                lines.append(f"| {r.get('name', '?')} | {r.get('min', '?')} | {r.get('max', '?')} |")
         lines.append("\n## Current WCID Ranges (use Next Available for new content):")
         lines.append("| Category | Range Start | Next Available |")
         lines.append("|----------|-------------|----------------|")

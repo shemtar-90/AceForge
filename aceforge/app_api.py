@@ -527,13 +527,20 @@ class AppAPI(LoreMixin):
 
     def _range_folder_for_wcid(self, wcid: int) -> str:
         """Return the configured output dir for the base WCID range containing
-        wcid, or '' if no range matches or the matching range has no folder."""
-        for r in self.config.get_base_wcid_ranges():
-            try:
-                if int(r.get("min")) <= wcid <= int(r.get("max")):
-                    return self._folder_token_to_dir(r.get("folder"))
-            except (TypeError, ValueError):
-                continue
+        wcid, or '' if no range matches or the matching range has no folder.
+        Generators use their creature's WCID with a leading 1 (+1000000), so
+        an unmatched 1xxxxxx WCID retries as xxxxxx — the generator file then
+        lands in the same folder as the creature it spawns."""
+        candidates = [wcid]
+        if wcid > 1000000:
+            candidates.append(wcid - 1000000)
+        for w in candidates:
+            for r in self.config.get_base_wcid_ranges():
+                try:
+                    if int(r.get("min")) <= w <= int(r.get("max")):
+                        return self._folder_token_to_dir(r.get("folder"))
+                except (TypeError, ValueError):
+                    continue
         return ""
 
     def _resolve_output_dir(self, sql: str) -> str:
@@ -1759,6 +1766,7 @@ Start with: /* ===== FILE: {fname} ===== */
                 author=self.config.get("author", ""),
                 weenie_context=weenie_context,
                 is_local=is_local,
+                base_wcid_ranges=self.config.get_base_wcid_ranges(),
             )
         except Exception as e:
             self._generating = False
