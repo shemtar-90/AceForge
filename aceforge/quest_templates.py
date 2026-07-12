@@ -145,22 +145,76 @@ def _find_base_range(config, legacy_key: str):
     return None
 
 
-def _alloc_from_base_range(config, base: dict, count: int):
-    """Allocate count WCIDs from a base range, tracking a per-range cursor in
-    config['base_wcid_next']. Returns list of WCIDs, or None if the range
-    doesn't have count slots left (caller falls back to legacy)."""
-    cursors = dict(config.get("base_wcid_next") or {})
-    try:
-        cur = int(cursors.get(base["key"]))
-    except (TypeError, ValueError):
-        cur = None
-    if cur is None or cur < base["min"] or cur > base["max"] + 1:
-        cur = base["min"]  # first use, or the range was re-defined — restart at min
-    if cur + count - 1 > base["max"]:
+# Folder tokens a base range's "folder" may hold instead of a real path
+_FOLDER_TOKENS = ("default", "weenie", "recipe", "quest", "event")
+
+
+def collect_used_wcids(config) -> set:
+    """Build the set of WCIDs already in use, from two sources:
+      1. Saved .sql files in every configured output folder — filenames follow
+         the '<wcid> Name.sql' convention, so a cheap prefix scan suffices.
+      2. config['wcid_used'] — every WCID this allocator has ever handed out,
+         which covers generated-but-not-yet-saved files.
+    Generator files (1xxxxxx) also reserve their base creature WCID."""
+    used = set()
+    for w in (config.get("wcid_used") or []):
+        try:
+            used.add(int(w))
+        except (TypeError, ValueError):
+            continue
+
+    dirs = set()
+    for key in ("output_dir", "weenie_output_dir", "recipe_output_dir",
+                "quest_output_dir", "event_output_dir"):
+        d = str(config.get(key, "") or "").strip()
+        if d:
+            dirs.add(d)
+    if hasattr(config, "get_base_wcid_ranges"):
+        for r in config.get_base_wcid_ranges():
+            f = str(r.get("folder") or "").strip()
+            if f and f not in _FOLDER_TOKENS:
+                dirs.add(f)
+
+    for d in dirs:
+        try:
+            for p in Path(d).glob("*.sql"):
+                m = re.match(r"(\d{4,8})\b", p.name)
+                if not m:
+                    continue
+                w = int(m.group(1))
+                used.add(w)
+                if w > 1000000:
+                    used.add(w - 1000000)  # generator file reserves its creature slot
+        except OSError:
+            continue
+    return used
+
+
+def _record_used(config, wcids: list):
+    """Append newly allocated WCIDs to the persistent history."""
+    if not wcids:
+        return
+    history = list(config.get("wcid_used") or [])
+    known = set(history)
+    history += [w for w in wcids if w not in known]
+    config.set("wcid_used", history)
+
+
+def _alloc_from_base_range(base: dict, count: int, used: set):
+    """Allocate the lowest count WCIDs in a base range that aren't already
+    used (per saved-file scan + allocation history). Returns list of WCIDs,
+    or None if the range doesn't have count free slots (caller falls back
+    to legacy)."""
+    picks = []
+    w = base["min"]
+    while w <= base["max"] and len(picks) < count:
+        if w not in used:
+            picks.append(w)
+        w += 1
+    if len(picks) < count:
         return None
-    cursors[base["key"]] = cur + count
-    config.set("base_wcid_next", cursors)
-    return list(range(cur, cur + count))
+    used.update(picks)
+    return picks
 
 
 def alloc_wcids(config, ranges: list[tuple[str, int]]) -> dict[str, list[int]]:
@@ -168,8 +222,9 @@ def alloc_wcids(config, ranges: list[tuple[str, int]]) -> dict[str, list[int]]:
     Allocate WCIDs from config ranges.
     ranges = [('campaign_creatures', 2), ('custom_npcs', 1), ...]
     Duplicate keys are summed — ('kill_contracts',1),('kill_contracts',1) → 2 allocated.
-    Categories with a matching Base WCID Range (Settings) draw from that range;
-    the rest use the legacy cursor ranges.
+    Categories with a matching Base WCID Range (Settings) draw the lowest free
+    WCIDs from that range, skipping any already used by saved files or earlier
+    generations; the rest use the legacy cursor ranges (also skipping used).
     Returns {range_key: [wcid1, wcid2, ...]}
     """
     # Consolidate duplicate keys
@@ -180,16 +235,19 @@ def alloc_wcids(config, ranges: list[tuple[str, int]]) -> dict[str, list[int]]:
             order.append(key)
         totals[key] = totals.get(key, 0) + count
 
+    used = collect_used_wcids(config)
     wcid_ranges = config.get_wcid_ranges()
     result: dict[str, list[int]] = {}
+    newly_allocated: list[int] = []
     for key in order:
         count = totals[key]
 
         base = _find_base_range(config, key)
         if base:
-            allocated = _alloc_from_base_range(config, base, count)
+            allocated = _alloc_from_base_range(base, count, used)
             if allocated is not None:
                 result[key] = allocated
+                newly_allocated += allocated
                 continue
 
         r = wcid_ranges.get(key, {})
@@ -199,10 +257,20 @@ def alloc_wcids(config, ranges: list[tuple[str, int]]) -> dict[str, list[int]]:
             wcid_ranges[key] = {"start": default_start, "next": default_start, "label": key}
             r = wcid_ranges[key]
         start = r.get("next", r.get("start", 800000))
-        result[key] = list(range(start, start + count))
-        wcid_ranges[key]["next"] = start + count
+        # Skip WCIDs already used by saved files / earlier generations
+        picks = []
+        w = start
+        while len(picks) < count:
+            if w not in used:
+                picks.append(w)
+            w += 1
+        used.update(picks)
+        result[key] = picks
+        newly_allocated += picks
+        wcid_ranges[key]["next"] = picks[-1] + 1
     config.set("wcid_ranges", wcid_ranges)
-    # Persist cursors so allocation position survives app restarts
+    _record_used(config, newly_allocated)
+    # Persist history + cursors so allocation survives app restarts
     try:
         config.save()
     except Exception:

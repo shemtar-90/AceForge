@@ -3620,7 +3620,7 @@ function switchType(type,btn){
   var _newTabs=TYPE_CFG[type].subTabs;
   curSub=_newTabs.indexOf(curSub)>=0 ? curSub : _newTabs[0];
   spells=[];emotes=[];
-  window._importedClassName=null;window._importedTimestamp=null;extraInt=[];extraInt64=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];generatorRows=[];var _fcnClr=document.getElementById('fClassName');if(_fcnClr)_fcnClr.value='';window._presetStore=[];
+  window._importedClassName=null;window._importedTimestamp=null;window._importedIdent=null;extraInt=[];extraInt64=[];extraBool=[];extraFloat=[];extraStr=[];extraDID=[];generatorRows=[];var _fcnClr=document.getElementById('fClassName');if(_fcnClr)_fcnClr.value='';window._presetStore=[];
   // Reset core skills to default (4 core skills) on type switch
   while(CORE_SKILL_IDS.length) CORE_SKILL_IDS.pop();
   [6,7,15,44].forEach(function(id){CORE_SKILL_IDS.push(id);});window._importedEmoteSQL='';window._importedCreateListSQL='';window._importedBookSQL='';window._importedBodyParts=null;window._importedCoreSkills=null;bookPages=[];bookMeta={maxPages:2,maxChars:1000};window._weenieTabType=0;;window._importedEmoteSQL='';window._importedCreateListSQL='';window._importedBookSQL='';window._importedBodyParts=null;window._importedCoreSkills=null;console.log('[SWITCH] arrays cleared, curType now='+curType);
@@ -4892,8 +4892,20 @@ function _importSQLPayload(sql, path, filename, force){
           var _fnMatch = _fnBase2.match(/^\d+\s+(.+)$/);
           if(_fnMatch && _fnMatch[1]) setV('fRecipeName', _fnMatch[1].trim());
         }
+        // Re-apply the recipe ID after the rebuild — when importing from another
+        // tab, fWcid doesn't exist yet during _parseRecipeSQL, so the parsed ID
+        // is lost and the rebuilt panel falls back to the 600000 default.
+        if(fileType==='recipe'){
+          var _ridM = sql.match(/DELETE FROM `?recipe`?\s+WHERE\s+`?id`?\s*=\s*'?(\d+)/i)
+                   || sql.match(/INSERT INTO `?recipe`?[\s\S]*?VALUES\s*\(\s*'?(\d+)/i);
+          if(_ridM) setV('fWcid', _ridM[1]);
+        }
         // 4. Rebuild live preview from the correctly populated fields
         regen();
+        // Snapshot the imported identity so Save can detect a rename/re-ID
+        // and write a NEW file instead of overwriting the imported one.
+        window._importedWcid = null; window._importedClassName = null; // weenie-only trackers
+        window._importedIdent = _identSnapshot(fileType);
         toast('✓ Imported: '+(path?path.split(/[\\/]/).pop():fileType),2500);
       },150);
       return;
@@ -4925,6 +4937,7 @@ function _importSQLPayload(sql, path, filename, force){
       createList=[];positions=[];bookPages=[];bookMeta={maxPages:2,maxChars:1000};window._weenieTabType=0;
       _importedEmoteSQL='';_importedCreateListSQL='';_importedBookSQL='';
       window._importedClassName=null;window._importedTimestamp=null;
+      window._importedIdent=null; // recipe/quest/event-only tracker
       window._importedBodyParts=null;window._importedCoreSkills=null;
       while(CORE_SKILL_IDS.length) CORE_SKILL_IDS.pop();
       // Load SQL into the output panel
@@ -9993,6 +10006,16 @@ function writeSQLOut(text){
   renderSQLHighlight();
 }
 
+// Identity fields per tab — used to detect whether an imported recipe/quest/
+// event was renamed or re-ID'd before saving (weenies use fWcid/fClassName).
+function _identSnapshot(t){
+  function v(id){var e=document.getElementById(id);return e?String(e.value).trim():'';}
+  if(t==='recipe') return {type:t, id:v('fWcid'), name:v('fRecipeName')};
+  if(t==='quest')  return {type:t, id:v('fWcid'), name:v('fName')};
+  if(t==='event')  return {type:t, id:'', name:v('fEvtName')};
+  return null;
+}
+
 function getPlainSQL(){const el=$('sqlOut');return el?el.value:'';}  // textarea.value
 function copySQL(){navigator.clipboard.writeText(getPlainSQL()).then(()=>toast('Copied to clipboard'));}
 function saveSQL(){
@@ -10007,15 +10030,29 @@ function saveSQL(){
     var _curClassName = (document.getElementById('fClassName')||{}).value||'';
     var _wcidChanged  = window._importedWcid !== null && wcid !== window._importedWcid;
     var _cnChanged    = window._importedClassName !== null && _curClassName.trim() !== (window._importedClassName||'').trim();
+    // Recipe/quest/event identity — compare against the snapshot taken at import
+    var _identChanged = false;
+    if(window._importedIdent && window._importedIdent.type===curType){
+      var _nowIdent = _identSnapshot(curType);
+      _identChanged = !!_nowIdent && (_nowIdent.id !== window._importedIdent.id
+                                   || _nowIdent.name !== window._importedIdent.name);
+    }
     var _saveName;
-    if(_importedFileName && !_wcidChanged && !_cnChanged){
+    if(_importedFileName && !_wcidChanged && !_cnChanged && !_identChanged){
       _saveName = _importedFileName; // unchanged — keep original filename
     } else {
-      // Something changed: build filename from current WCID + class name
+      // Something changed: build filename from the current identity fields
       var _recipeNameEl = document.getElementById('fRecipeName');
       var _recipeName = _recipeNameEl ? _recipeNameEl.value.trim() : '';
-      var _baseName = _recipeName || _curClassName || name;
-      _saveName = wcid + ' ' + _baseName + '.sql';
+      if(curType==='quest'){
+        _saveName = (name||'quest') + '.sql';         // quests are named by quest flag
+      } else if(curType==='event'){
+        var _evtEl = document.getElementById('fEvtName');
+        _saveName = ((_evtEl&&_evtEl.value.trim())||name||'event') + '.sql';
+      } else {
+        var _baseName = _recipeName || _curClassName || name;
+        _saveName = wcid + ' ' + _baseName + '.sql';
+      }
     }
     window.pywebview.api.save_sql(sql,wcid,_saveName).then(r=>{
       if(r.success){
