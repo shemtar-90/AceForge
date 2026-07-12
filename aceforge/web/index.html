@@ -2410,28 +2410,52 @@ var _CSETUPS=null;
   }catch(e){_CSETUPS={};}
 })();
 
-// Write a creature-setup catalog entry into the DID rows: Setup plus all its
-// companion tables (MotionTable, SoundTable, CombatTable, PaletteBase,
-// ClothingBase, PhysicsEffectTable). Existing rows update; missing rows append.
+// The model key ("k") most recently applied via the Setup dropdown — used to
+// keep the exact same-Setup variant highlighted after the panel rebuilds.
+var _pickedSetupKey='';
+
+// Write a creature-setup catalog entry into the DID rows so the DID section
+// *exactly* reflects the picked model: Setup plus its companion tables
+// (MotionTable, SoundTable, CombatTable, PaletteBase, ClothingBase,
+// PhysicsEffectTable). Rows the entry defines are updated/appended; managed rows
+// it does NOT define are removed so a leftover value from the previously-picked
+// model can't bleed through (e.g. a variant with no PaletteTemplate).
 function _applyCreatureSetupEntry(ent){
   if(!ent) return;
-  function setDID(t,v){
-    if(!v) return;
-    var row=extraDID.find(function(x){return parseInt(x.type)===t;});
-    if(row) row.value=v; else extraDID.push({type:t, value:v});
+  var managed={1:ent.s, 2:ent.mt, 3:ent.st, 4:ent.ct4, 6:ent.pb, 7:ent.cb, 22:ent.pt};
+  Object.keys(managed).forEach(function(tStr){
+    var t=parseInt(tStr), v=managed[t];
+    var idx=extraDID.findIndex(function(x){return parseInt(x.type)===t;});
+    if(v){
+      if(idx>=0) extraDID[idx].value=v; else extraDID.push({type:t, value:v});
+    }else if(idx>=0){
+      extraDID.splice(idx,1);
+    }
+  });
+  // Int PaletteTemplate (Int type 3) tints a shared Setup into its real color
+  // (e.g. a Shadow reusing a human Setup). Set it from the model, or clear a
+  // leftover tint when the picked model has none.
+  var _pi=(ent.pi!=null)?String(ent.pi):'';
+  var _ii=extraInt.findIndex(function(x){return parseInt(x.type)===3;});
+  if(_pi!==''){
+    if(_ii>=0) extraInt[_ii].value=_pi; else extraInt.push({type:3, value:_pi});
+  }else if(_ii>=0){
+    extraInt.splice(_ii,1);
   }
-  setDID(1,ent.s);  setDID(2,ent.mt); setDID(3,ent.st); setDID(4,ent.ct4);
-  setDID(6,ent.pb); setDID(7,ent.cb); setDID(22,ent.pt);
 }
 
-// Dropdown pick handler — value is the Setup hex string of the chosen model.
-function _pickCreatureSetup(sHex){
-  if(!sHex) return;
+// Dropdown pick handler — value is the model's unique key "k" (Setup hex, or
+// Setup hex + ".N" for same-Setup armor/color variants). Falls back to matching
+// the raw Setup hex for backward-compat with older saved values.
+function _pickCreatureSetup(key){
+  if(!key){ _pickedSetupKey=''; return; }
   var ctE=extraInt.find(function(x){return parseInt(x.type)===2;});
   var cType=ctE?parseInt(ctE.value):31;
   var list=_CSETUPS?_CSETUPS[String(cType)]:null;
-  var ent=(list||[]).find(function(e){return e.s===sHex;});
+  var ent=(list||[]).find(function(e){return (e.k||e.s)===key;})
+        ||(list||[]).find(function(e){return e.s===key;});
   if(!ent) return;
+  _pickedSetupKey=ent.k||ent.s;
   _applyCreatureSetupEntry(ent);
   // Body parts follow the model (they vary even within a creature type)
   if(ent.bp){
@@ -2563,7 +2587,7 @@ const PROP_DROPDOWNS={
   // Table E — WEAPON_TYPE_INT
   '353':[[0,'Undefined'],[1,'Unarmed'],[2,'Sword'],[3,'Axe'],[4,'Mace'],[5,'Spear'],[6,'Dagger'],[7,'Staff'],[8,'Bow'],[9,'Crossbow'],[10,'Thrown'],[11,'TwoHanded'],[12,'Magic']],
   // Table Q — ITEM_USEABLE_INT (base bits; combos are source|target masks, not enumerated)
-  '16':[[0,'USEABLE_UNDEF'],[1,'USEABLE_NO (Unusable Items, weapons, armor, clothing, etc)'],[2,'USEABLE_SELF'],[4,'USEABLE_WIELDED'],[8,'USEABLE_CONTAINED (food/gems/scrolls/etc)'],[16,'USEABLE_VIEWED'],[32,'USEABLE_REMOTE (doors/lifestone/NPC/Portal)'],[48,'USEABLE_VIEWED_REMOTE (Chests/Hook)'],[56,'USEABLE_CONTAINED_VIEWED_REMOTE (Chests)'],[64,'USEABLE_NEVER_WALK'],[96,'USEABLE_REMOTE_NEVER_WALK'],[112,'USEABLE_VIEWED_REMOTE_NEVER_WALK'],[120,'USEABLE_CONTAINED_VIEWED_REMOTE_NEVER_WALK'],[128,'USEABLE_OBJSELF'],[65535,'USEABLE_SOURCE_MASK'],[-65535,'USEABLE_TARGET_MASK'],[2147483647,'FORCE_ITEM_USEABLE_32_BIT']],
+  '16':[[0,'USEABLE_UNDEF'],[1,'USEABLE_NO (Unusable Items, weapons, armor, clothing, etc)'],[2,'USEABLE_SELF'],[4,'USEABLE_WIELDED'],[8,'USEABLE_CONTAINED (food/gems/scrolls/etc)'],[16,'USEABLE_VIEWED'],[32,'USEABLE_REMOTE (doors/lifestone/NPC/Portal)'],[48,'USEABLE_VIEWED_REMOTE (Chests/Hook)'],[56,'USEABLE_CONTAINED_VIEWED_REMOTE (Chests)'],[64,'USEABLE_NEVER_WALK'],[96,'USEABLE_REMOTE_NEVER_WALK'],[112,'USEABLE_VIEWED_REMOTE_NEVER_WALK'],[120,'USEABLE_CONTAINED_VIEWED_REMOTE_NEVER_WALK'],[128,'USEABLE_OBJSELF'],[524296,'Inventory item on inventory item (crafting)'],[655364,'Wielded, target self (portal wands / casting stein)'],[655368,'Inventory item on self or item (mana stones)'],[2097160,'Contained, target remote (keys / lockpicks)'],[2228232,'Target remote or self (healing kits)'],[6291460,'Built-in wand spells'],[6291464,'Some wands'],[65535,'USEABLE_SOURCE_MASK'],[-65535,'USEABLE_TARGET_MASK'],[2147483647,'FORCE_ITEM_USEABLE_32_BIT']],
   // Table I — IMBUED_EFFECT_INT (base bits)
   '179':[[1,'CriticalStrike'],[2,'CripplingBlow'],[4,'ArmorRending'],[8,'SlashRending'],[16,'PierceRending'],[32,'BludgeonRending'],[64,'AcidRending'],[128,'ColdRending'],[256,'ElectricRending'],[512,'FireRending'],[1024,'MeleeDefense'],[2048,'MissileDefense'],[4096,'MagicDefense'],[8192,'Spellbook'],[16384,'NetherRending'],[536870912,'IgnoreSomeMagicProjectileDamage'],[1073741824,'AlwaysCritical'],[-2147483648,'IgnoreAllArmor'],[2147483647,'FORCE_ImbuedEffectType_32_BIT']],
   // Table G — COMBAT_USE_INT
@@ -2688,6 +2712,7 @@ function onCTypeChange(){
   // row's model dropdown lets the user switch to any other model of the type.
   var _csList=_CSETUPS&&_CSETUPS[String(cType)];
   var _csEnt=(_csList&&_csList.length)?_csList[0]:null;
+  _pickedSetupKey=_csEnt?(_csEnt.k||_csEnt.s):'';
   if(_csEnt) _applyCreatureSetupEntry(_csEnt);
   // Body parts: use the model's actual scraped keys when available (they vary
   // per model — Olthoi have Breath, some types have Tail, etc.)
@@ -8449,7 +8474,14 @@ function buildAdvanced(){
         var opts=CREATURE_TYPES.map(function(ct){return '<option value="'+ct[0]+'"'+(parseInt(r.value)===ct[0]?' selected':'')+'>'+ct[0]+' · '+ct[1]+'</option>';}).join('');
         valCtrl='<select onchange="updateExtraProp(\'extraInt\','+i+',this.value);onCTypeChange()" style="flex-shrink:0;width:220px;font-family:JetBrains Mono,monospace;font-size:12px;font-weight:600">'+opts+'</select>';
       } else if(arrRef==='extraInt' && PROP_DROPDOWNS[String(r.type)]){
-        var ddOpts=PROP_DROPDOWNS[String(r.type)].map(function(opt){return '<option value="'+opt[0]+'"'+(parseInt(r.value)===opt[0]?' selected':'')+'>'+opt[0]+' · '+opt[1]+'</option>';}).join('');
+        var _ddList=PROP_DROPDOWNS[String(r.type)];
+        var _cur=parseInt(r.value);
+        var ddOpts=_ddList.map(function(opt){return '<option value="'+opt[0]+'"'+(_cur===opt[0]?' selected':'')+'>'+opt[0]+' · '+opt[1]+'</option>';}).join('');
+        // Preserve an imported value that isn't in the enum list — without this
+        // the select would fall back to its first option (0) and silently lose
+        // the real value on the next edit/regen.
+        if(!isNaN(_cur) && !_ddList.some(function(opt){return opt[0]===_cur;}))
+          ddOpts='<option value="'+_cur+'" selected>'+_cur+' · (custom / not in list)</option>'+ddOpts;
         valCtrl='<select onchange="updateExtraProp(\''+arrRef+'\','+i+',this.value)" style="flex-shrink:0;width:220px;font-family:JetBrains Mono,monospace;font-size:12px;font-weight:600">'+ddOpts+'</select>';
       } else if(arrRef==='extraBool'){
         var _bVal=String(r.value)==='True'?'True':'False';
@@ -8494,9 +8526,36 @@ function buildAdvanced(){
         var _csL=(_CSETUPS&&_ctRow)?_CSETUPS[String(parseInt(_ctRow.value))]:null;
         if(_csL&&_csL.length){
           var _cur=String(r.value||'').toUpperCase();
+          function _u(x){return x?String(x.value||'').toUpperCase():'';}
+          var _curCB=_u(extraDID.find(function(x){return parseInt(x.type)===7;}));
+          var _curPT=_u(extraDID.find(function(x){return parseInt(x.type)===22;}));
+          var _curPB=_u(extraDID.find(function(x){return parseInt(x.type)===6;}));
+          var _curPI=(function(x){return x?String(x.value||''):'';})(extraInt.find(function(x){return parseInt(x.type)===3;}));
+          // Resolve which option to highlight. Prefer the key the user actually
+          // picked (survives the panel rebuild). Otherwise (import / manual edit)
+          // fall back to the variant whose full visual identity matches the DID
+          // rows, and failing that the first variant sharing the Setup — so a
+          // Setup that exists in the catalog never falls back to the placeholder.
+          var _sameSetup=_csL.filter(function(e){return e.s.toUpperCase()===_cur;});
+          var _selKey='';
+          if(_pickedSetupKey){
+            var pk=_csL.find(function(e){return (e.k||e.s)===_pickedSetupKey;});
+            if(pk && pk.s.toUpperCase()===_cur) _selKey=_pickedSetupKey;
+          }
+          if(!_selKey && _sameSetup.length){
+            var _exact=_sameSetup.find(function(e){
+              return String(e.cb||'').toUpperCase()===_curCB
+                  && String(e.pt||'').toUpperCase()===_curPT
+                  && String(e.pb||'').toUpperCase()===_curPB
+                  && String(e.pi==null?'':e.pi)===_curPI;});
+            _selKey=(_exact||_sameSetup[0]).k||(_exact||_sameSetup[0]).s;
+          }
           _csDD='<select onchange="_pickCreatureSetup(this.value)" title="Base-game models for this creature type — picking one also sets the matching Motion/Sound/Palette/Clothing tables" style="flex:0 1 130px;min-width:70px;max-width:130px;font-family:var(--ui-font);font-size:10px;padding:3px 4px;background:var(--parch);border:1px solid var(--border);color:var(--ink);overflow:hidden;text-overflow:ellipsis">'
             +'<option value="">— '+_csL.length+' model'+(_csL.length!==1?'s':'')+' —</option>'
-            +_csL.map(function(ent){return '<option value="'+ent.s+'"'+(ent.s.toUpperCase()===_cur?' selected':'')+'>'+escHtml(ent.n)+'</option>';}).join('')
+            +_csL.map(function(ent){
+                var sel=(ent.k||ent.s)===_selKey;
+                return '<option value="'+(ent.k||ent.s)+'"'+(sel?' selected':'')+'>'+escHtml(ent.n)+'</option>';
+              }).join('')
             +'</select>';
         }
         valCtrl='<div style="display:flex;align-items:center;gap:6px;">'
@@ -11634,9 +11693,12 @@ function _qfPreviewModel(fieldId){
   var ctEl=document.getElementById('qf_'+ctF);
   var m=((ctEl&&ctEl.value)||'').match(/\((\d+)\)/);
   var list=(_CSETUPS&&m)?(_CSETUPS[m[1]]||[]):[];
-  var ent=list.find(function(e){return e.s===sel.value;})||list[0];
+  var ent=list.find(function(e){return (e.k||e.s)===sel.value;})
+        ||list.find(function(e){return e.s===sel.value;})||list[0];
   if(!ent){ toast('No base-game models for this creature type.'); return; }
-  openModelPreview(ent.s, ent.n, {creature:true, mot:ent.mt||'', clo:ent.cb||''});
+  // palTpl (Int PaletteTemplate) dyes shared setups their real color — e.g. a
+  // Shadow reusing a human setup renders black instead of as a pale human.
+  openModelPreview(ent.s, ent.n, {creature:true, mot:ent.mt||'', clo:ent.cb||'', palTpl:(ent.pi!=null?String(ent.pi):'')});
 }
 
 function _qfPickIcon(fieldId){
@@ -11757,9 +11819,12 @@ function _bktPreviewModel(i, isNpc){
   var cur=isNpc?r.npc_setup_model:r.setup_model;
   var m=(String(ctypeStr||'').match(/\((\d+)\)/)||[])[1];
   var list=(_CSETUPS&&m)?(_CSETUPS[m]||[]):[];
-  var ent=list.find(function(e){return e.s===cur;})||list[0];
+  var ent=list.find(function(e){return (e.k||e.s)===cur;})
+        ||list.find(function(e){return e.s===cur;})||list[0];
   if(!ent){ toast('No base-game models for this creature type.'); return; }
-  openModelPreview(ent.s, ent.n, {creature:true, mot:ent.mt||'', clo:ent.cb||''});
+  // palTpl (Int PaletteTemplate) dyes shared setups their real color — e.g. a
+  // Shadow reusing a human setup renders black instead of as a pale human.
+  openModelPreview(ent.s, ent.n, {creature:true, mot:ent.mt||'', clo:ent.cb||'', palTpl:(ent.pi!=null?String(ent.pi):'')});
 }
 // Model dropdown options for a "Label (int)" creature-type string, from the
 // scraped base-game catalog (_CSETUPS).
@@ -11771,7 +11836,7 @@ function _bktModelOpts(ctypeStr, cur){
   // their first catalog model.
   var defLabel=(m==='31')?'standard Human':list[0].n;
   return '<option value="">— default ('+defLabel+') —</option>'
-    +list.map(function(e){return '<option value="'+e.s+'"'+(e.s===cur?' selected':'')+'>'+_esc(e.n)+'</option>';}).join('');
+    +list.map(function(e){var k=e.k||e.s;return '<option value="'+k+'"'+((k===cur||e.s===cur)?' selected':'')+'>'+_esc(e.n)+'</option>';}).join('');
 }
 function _batchKTDefaultShared(){
   return { repeat_hours:'20', use_reward_xp:'no', xp_type:'AwardXP', use_reward_lum:'no' };
@@ -14372,8 +14437,10 @@ function _mpLoadGLB(glb_data_b64){
   var _ext=gltf.extras&&gltf.extras.emitters;
   if(_ext&&_ext.length){
     _mp.emitters=_ext.map(function(e){
-      return {def:e, parts:[], lastSpawn:0,
+      var em={def:e, parts:[], lastSpawn:0,
               buf:gl.createBuffer(), data:new Float32Array((e.max||32)*5)};
+      _mpPrimeEmitter(em);   // populate so the effect shows on the first frame
+      return em;
     });
     _mp.lastPartT=performance.now();
   }
@@ -14425,6 +14492,77 @@ function _mpRandDir(v){
   return [r*Math.cos(t), r*Math.sin(t), z];
 }
 function _mpRR(lo,hi){ return lo+(hi-lo)*Math.random(); }
+// Display multiplier for particle glow size, on top of the parser's full-extent
+// diameter. Net effect is ~3× the old (half-extent) size the glows used to
+// render at. Applied live, so it's independent of the GLB cache — adjust this
+// one number to taste.
+var _MP_PARTICLE_SIZE_MULT=1.5;
+
+// Particle position at age t (seconds), ported from AC's Particle.Update
+// (ACEmulator/ACViewer, Physics/Particles/Particle.cs). base = origin+offset;
+// A/B/C are the authored vectors already scaled by their random Min/Max factor
+// (magnitude preserved — AC does NOT normalize A/B/C, only the zero-vector
+// Offset gets a random direction). ptype is ACE's ParticleType enum:
+//   1 Still · 2 LocalVelocity · 12 GlobalVelocity ·
+//   3 ParabolicLVGA · 8 ParabolicLVLA · 10 ParabolicGVGA ·
+//   4/9/11 the above + rotation · 5 Swarm · 6 Explode · 7 Implode
+function _mpEmitPos(ptype, base, A, B, C, t){
+  var x=base[0], y=base[1], z=base[2];
+  switch(ptype){
+    case 1: // Still
+      return [x, y, z];
+    case 2: case 12: // LocalVelocity / GlobalVelocity — A only
+      return [x+A[0]*t, y+A[1]*t, z+A[2]*t];
+    case 5: { // Swarm — orbit a center that itself drifts along A·t
+      var sx=x+A[0]*t, sy=y+A[1]*t, sz=z+A[2]*t;
+      return [Math.cos(t*B[0])*C[0]+sx,
+              Math.sin(t*B[1])*C[1]+sy,
+              Math.cos(t*B[2])*C[2]+sz];
+    }
+    case 6: // Explode — (B·t + C·A.x)·t
+      return [(B[0]*t+C[0]*A[0])*t+x,
+              (B[1]*t+C[1]*A[0])*t+y,
+              (B[2]*t+C[2]*A[0])*t+z];
+    case 7: { // Implode — cos(A.x·t)·C + B·t²
+      var t2=t*t, ca=Math.cos(A[0]*t);
+      return [ca*C[0]+B[0]*t2+x, ca*C[1]+B[1]*t2+y, ca*C[2]+B[2]*t2+z];
+    }
+    default: { // Parabolic family (3/8/10 and the 4/9/11 rotate variants):
+              // offset + A·t + B·t²/2  (rotation of the *GR/*LR types omitted)
+      var h=0.5*t*t;
+      return [x+A[0]*t+B[0]*h, y+A[1]*t+B[1]*h, z+A[2]*t+B[2]*h];
+    }
+  }
+}
+
+// Create one particle for emitter def d (AC GetRandomOffset/A/B/C: Offset uses a
+// random direction when OffsetDir is zero; A/B/C are the authored vector ×
+// random(Min,Max), magnitude and sign preserved).
+function _mpSpawnParticle(d){
+  var a=d.a||[0,0,0], b=d.b||[0,0,0], c=d.c||[0,0,0];
+  var od=_mpRandDir(d.offsetDir), ol=_mpRR(d.minOff,d.maxOff);
+  var ra=_mpRR(d.minA,d.maxA), rb=_mpRR(d.minB,d.maxB), rc=_mpRR(d.minC,d.maxC);
+  return {
+    age:0, life:Math.max(0.05,(d.lifespan||1)+_mpRR(-1,1)*(d.lifespanRand||0)),
+    base:[d.pos[0]+od[0]*ol, d.pos[1]+od[1]*ol, d.pos[2]+od[2]*ol],
+    A:[a[0]*ra, a[1]*ra, a[2]*ra],
+    B:[b[0]*rb, b[1]*rb, b[2]*rb],
+    C:[c[0]*rc, c[1]*rc, c[2]*rc],
+    sRand:_mpRR(-1,1)*(d.scaleRand||0),
+  };
+}
+
+// Pre-populate an emitter with particles at random ages so the effect is fully
+// formed on the first frame, instead of the model appearing bare (just the
+// mask/core) while particles slowly spawn in.
+function _mpPrimeEmitter(em){
+  var d=em.def, cap=d.max||32;
+  for(var i=0;i<cap;i++){
+    var pt=_mpSpawnParticle(d);
+    pt.age=Math.random()*pt.life;   // spread across the lifespan
+    em.parts.push(pt);
+  }
+}
 
 function _mpUpdateEmitter(em, dt){
   var d=em.def;
@@ -14435,49 +14573,22 @@ function _mpUpdateEmitter(em, dt){
   var interval=Math.max(d.birthrate||0.1, 0.016);
   while(em.lastSpawn>=interval && em.parts.length<(d.max||32)){
     em.lastSpawn-=interval;
-    var od=_mpRandDir(d.offsetDir), ol=_mpRR(d.minOff,d.maxOff);
-    var da=_mpRandDir(d.a), ra=_mpRR(d.minA,d.maxA);
-    var db=_mpRandDir(d.b), rb=_mpRR(d.minB,d.maxB);
-    var dc=_mpRandDir(d.c), rc=_mpRR(d.minC,d.maxC);
-    var pt0={
-      age:0, life:Math.max(0.05,(d.lifespan||1)+_mpRR(-1,1)*(d.lifespanRand||0)),
-      p0:[d.pos[0]+od[0]*ol, d.pos[1]+od[1]*ol, d.pos[2]+od[2]*ol],
-      va:[da[0]*ra,da[1]*ra,da[2]*ra],
-      vb:[db[0]*rb,db[1]*rb,db[2]*rb],
-      vc:[dc[0]*rc,dc[1]*rc,dc[2]*rc],
-      sRand:_mpRR(-1,1)*(d.scaleRand||0),
-    };
-    if(d.ptype===1){          // Still — no motion, fade in place
-      pt0.va=[0,0,0]; pt0.vb=[0,0,0]; pt0.vc=[0,0,0];
-    } else if(d.ptype===5){   // Swarm — orbit the emitter (Rift Virindi shrouds)
-      pt0.swarm=true;
-      pt0.radius=Math.max(0.05,ol||_mpRR(0.15,0.4));
-      pt0.theta=Math.random()*Math.PI*2;
-      // angular speed from the A scalar range; random handedness
-      pt0.omega=(Math.abs(ra)||1.5)*(Math.random()<0.5?-1:1);
-      pt0.vz=pt0.vb[2]||0;    // vertical drift from B
-      pt0.zJit=_mpRR(-0.15,0.15);
-    }
-    em.parts.push(pt0);
+    em.parts.push(_mpSpawnParticle(d));
   }
   // fill buffer: xyz + size + alpha per particle
   var n=em.parts.length, buf=em.data;
   for(var i=0;i<n;i++){
     var pt=em.parts[i], t=pt.age, u=Math.min(1,t/pt.life);
     var o=i*5;
-    if(pt.swarm){
-      var th=pt.theta+pt.omega*t;
-      buf[o  ]=d.pos[0]+pt.radius*Math.cos(th);
-      buf[o+1]=d.pos[1]+pt.radius*Math.sin(th);
-      buf[o+2]=d.pos[2]+pt.zJit+pt.vz*t;
-    } else {
-      buf[o  ]=pt.p0[0]+pt.va[0]*t+pt.vb[0]*t*t+pt.vc[0]*t*t*t;
-      buf[o+1]=pt.p0[1]+pt.va[1]*t+pt.vb[1]*t*t+pt.vc[1]*t*t*t;
-      buf[o+2]=pt.p0[2]+pt.va[2]*t+pt.vb[2]*t*t+pt.vc[2]*t*t*t;
-    }
-    // World size = particle gfxobj half-extent × interpolated emitter scale
+    var pos=_mpEmitPos(d.ptype, pt.base, pt.A, pt.B, pt.C, t);
+    buf[o  ]=pos[0];
+    buf[o+1]=pos[1];
+    buf[o+2]=pos[2];
+    // World size = particle gfxobj extent × interpolated emitter scale, times a
+    // display multiplier — the raw sizes render visibly too small in-viewer, so
+    // this brings the glows up to the size they read at in-game. Tune here.
     var _sc=Math.max(0.05,(d.startScale+(d.finalScale-d.startScale)*u)+pt.sRand);
-    buf[o+3]=Math.max(0.005,(d.size||0.25)*_sc);
+    buf[o+3]=Math.max(0.005,(d.size||0.25)*_sc*_MP_PARTICLE_SIZE_MULT);
     buf[o+4]=Math.max(0,Math.min(1,1-(d.startTrans+(d.finalTrans-d.startTrans)*u)));
   }
   return n;

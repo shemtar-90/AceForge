@@ -2,10 +2,13 @@
 every Setup DID used by base-game creatures of that type.
 
 Scrapes the bundled weenie database (aceforge/references/weenie_index.json +
-weenies/*.sql). For each creature type, collects one entry per unique Setup,
-keeping the companion DIDs (MotionTable, SoundTable, PaletteBase, ClothingBase,
-PhysicsEffectTable, CombatTable) from the first weenie seen with that Setup so
-the UI can auto-fill the whole DATA ID section when a model is picked.
+weenies/*.sql). For each creature type, collects one entry per unique *visual identity*
+(Setup + PaletteBase + ClothingBase + PaletteTemplate) so same-Setup variants
+with different armor/color schemes are all kept, not collapsed onto the first.
+Keeps the companion DIDs (MotionTable, SoundTable, PaletteBase, ClothingBase,
+PhysicsEffectTable, CombatTable) so the UI can auto-fill the whole DATA ID
+section when a model is picked. Each entry gets a unique key "k" (the select
+value): the Setup hex, or Setup hex + ".N" when several variants share a Setup.
 
 Output format:
 { "<ctype_int>": [ {"s": "0x02000038", "n": "Olthoi Soldier",
@@ -150,6 +153,15 @@ def main():
         if bp_sec:
             bp_keys = sorted({int(m2.group(1)) for m2 in
                               re.finditer(r"\((?:\d+),\s*(\d+),", bp_sec.group(0))})
+        # Int PaletteTemplate (weenie_properties_int type 3) — recolors a shared
+        # Setup (e.g. Shadow creatures reuse a human Setup, tinted Black via 39).
+        # Part of the visual identity, so scrape it and keep it distinct.
+        pal_tmpl = None
+        int_sec = re.search(r"weenie_properties_int\b[^;]+;", text)
+        if int_sec:
+            mi = re.search(r"\(\d+,\s*3,\s*(-?\d+)\)", int_sec.group(0))
+            if mi:
+                pal_tmpl = int(mi.group(1))
         def _name_score(n: str) -> int:
             # Prefer clean display names ("Olthoi Soldier") over internal
             # variant names ("boygrubinfestedpraetorian-nofall-xp").
@@ -160,37 +172,62 @@ def main():
             if not n[:1].isupper(): s += 20
             return s
 
-        by_setup = out.setdefault(ct, {})
+        # Dedup by *visual identity* — Setup plus the fields that change how the
+        # creature actually looks (PaletteBase, ClothingBase, PaletteTemplate DID,
+        # and the int PaletteTemplate tint) — so same-Setup variants with
+        # different armor/color schemes are all kept, not collapsed onto the
+        # first one seen.
+        vkey = (setup, dids.get(6), dids.get(7), dids.get(22), pal_tmpl)
+        by_key = out.setdefault(ct, {})
         pretty = _prettify(e["n"], ct, vocab)
-        if setup not in by_setup:
+        if vkey not in by_key:
             ent = {"s": f"0x{setup:08X}", "n": pretty}
             for key, did_type in (("mt", 2), ("st", 3), ("ct4", 4), ("pb", 6),
                                   ("cb", 7), ("pt", 22)):
                 v = dids.get(did_type)
                 if v:
                     ent[key] = f"0x{v:08X}"
+            if pal_tmpl is not None:
+                ent["pi"] = pal_tmpl
             if bp_keys:
                 ent["bp"] = bp_keys
-            by_setup[setup] = ent
+            by_key[vkey] = ent
         else:
-            cur = by_setup[setup]
+            cur = by_key[vkey]
             if _name_score(pretty) < _name_score(cur["n"]):
                 cur["n"] = pretty
             if bp_keys and "bp" not in cur:
                 cur["bp"] = bp_keys
         n_ok += 1
 
-    # dict-of-dict → dict-of-sorted-list (by name)
-    final = {str(ct): sorted(by_setup.values(), key=lambda x: x["n"].lower())
-             for ct, by_setup in sorted(out.items())}
+    # dict-of-dict → dict-of-sorted-list (by name). Assign each entry a unique
+    # key "k" (the UI/generator select value): the Setup hex when it alone is
+    # unique within the type, else the Setup hex plus a ".N" suffix. Same-name
+    # variants also get a " (N)" label suffix so the dropdown stays legible.
+    final = {}
+    for ct, by_key in sorted(out.items()):
+        ents = sorted(by_key.values(), key=lambda x: x["n"].lower())
+        setup_seen: dict[str, int] = {}
+        name_seen: dict[str, int] = {}
+        for ent in ents:
+            s = ent["s"]
+            n = setup_seen.get(s, 0)
+            setup_seen[s] = n + 1
+            ent["k"] = s if n == 0 else f"{s}.{n}"
+            base = ent["n"]
+            c = name_seen.get(base, 0)
+            name_seen[base] = c + 1
+            if c:
+                ent["n"] = f"{base} ({c + 1})"
+        final[str(ct)] = ents
     OUT.write_text(json.dumps(final, separators=(",", ":")), encoding="utf-8")
 
     total_setups = sum(len(v) for v in final.values())
     print(f"scraped {n_ok} creatures ({n_skip} skipped) -> "
-          f"{len(final)} creature types, {total_setups} unique setups")
+          f"{len(final)} creature types, {total_setups} unique models")
     print(f"wrote {OUT} ({OUT.stat().st_size // 1024} KB)")
     for ct in list(final)[:6]:
-        print(f"  type {ct}: {len(final[ct])} setups, e.g. {final[ct][0]['n']}")
+        print(f"  type {ct}: {len(final[ct])} models, e.g. {final[ct][0]['n']}")
 
 
 if __name__ == "__main__":

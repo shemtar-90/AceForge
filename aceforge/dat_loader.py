@@ -778,20 +778,22 @@ def parse_particle_emitter_info(db: DatDatabase, eid: int) -> Optional[dict]:
 
 
 def particle_gfx_size(db: DatDatabase, gfx_id: int) -> float:
-    """Half-extent of a particle GfxObj — AC's emitter StartScale/FinalScale
-    multiply the particle model's own size, so the world size of a rendered
-    particle is (gfxobj half-extent × scale)."""
+    """Full extent (diameter) of a particle GfxObj. AC's emitter
+    StartScale/FinalScale multiply the particle model's own size; the point
+    sprite is drawn at (this diameter × scale). Uses the full extent, not the
+    half-extent — a point sprite's size is its diameter, so halving it rendered
+    every particle at half the size it should be."""
     try:
         gfx = parse_gfxobj(db.read_file(gfx_id))
         if not gfx or not gfx.vertices:
-            return 0.25
+            return 0.5
         xs = [v.pos[0] for v in gfx.vertices.values()]
         ys = [v.pos[1] for v in gfx.vertices.values()]
         zs = [v.pos[2] for v in gfx.vertices.values()]
         ext = max(max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
-        return max(0.01, ext * 0.5)
+        return max(0.02, ext)
     except Exception:
-        return 0.25
+        return 0.5
 
 
 def particle_gfx_tint(db: DatDatabase, gfx_id: int) -> Tuple[float, float, float]:
@@ -1335,9 +1337,13 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
         _parsed[part_idx] = (gfx, tex_map)
         _anchor[part_idx] = (len(gfx.polygons) <= 2 and bool(gfx.surfaces)
                              and all(_surface_allkey(s) for s in set(gfx.surfaces)))
-    # When emitters exist, anchors never render — the particles are the visual.
-    # (Models that end up with zero meshes export as emitter-only GLBs.)
-    _skip_anchors = bool(emit_hooks)
+    # All-key anchor quads (e.g. 0x010001EC dots, or the big 0x01001932 backdrop)
+    # are fully-transparent attachment/particle points — they can never be
+    # meaningful visible content, so they are ALWAYS dropped. This removes the
+    # stray "trailing dots" on humans, the Virindi shroud anchors, and the gray
+    # backdrop box on elementals/wisps. A setup that is nothing but such quads
+    # (with no emitters) exports as empty (return None below), which is correct —
+    # in-game it has no visible geometry either.
 
     for part_idx, part in enumerate(setup.parts):
         if part_idx not in _parsed:
@@ -1355,9 +1361,8 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
         else:
             part_nodes[part_idx] = ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0))
 
-        # Invisible particle-anchor quads: the particles are the visual —
-        # rendering the anchor as a glow doubles the effect and looks wrong.
-        if _skip_anchors and _anchor.get(part_idx):
+        # Invisible particle-anchor quads are never renderable content.
+        if _anchor.get(part_idx):
             continue
 
         for poly in gfx.polygons:
@@ -1786,7 +1791,7 @@ def _rgba_to_png(rgba: bytes, w: int, h: int) -> bytes:
 # ── Cache helpers (used by app_api.py) ───────────────────────────────────────
 
 # Increment this when parse logic changes — forces cache invalidation
-_PARSER_VERSION = "v18"
+_PARSER_VERSION = "v19"
 
 def get_cache_dir() -> Path:
     appdata = os.environ.get("APPDATA", str(Path.home()))

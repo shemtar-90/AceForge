@@ -41,14 +41,19 @@ def _creature_catalog() -> dict:
     return _CS_CATALOG
 
 
-def _catalog_entry(ctype_int: int, setup_hex: str = "") -> dict | None:
-    """Catalog entry for a creature type — a specific model when setup_hex is
-    given, otherwise the type's first model."""
+def _catalog_entry(ctype_int: int, model_key: str = "") -> dict | None:
+    """Catalog entry for a creature type — a specific model when model_key is
+    given, otherwise the type's first model. model_key is the entry's unique key
+    "k" (Setup hex, or Setup hex + ".N" for same-Setup armor/color variants);
+    a bare Setup hex is still accepted for backward-compat with older saves."""
     lst = _creature_catalog().get(str(ctype_int)) or []
-    if setup_hex:
-        sh = setup_hex.strip().lower()
+    if model_key:
+        mk = model_key.strip().lower()
         for e in lst:
-            if e.get("s", "").lower() == sh:
+            if (e.get("k") or e.get("s", "")).lower() == mk:
+                return e
+        for e in lst:                       # fallback: match raw Setup hex
+            if e.get("s", "").lower() == mk:
                 return e
     return lst[0] if lst else None
 
@@ -78,6 +83,11 @@ def _catalog_dids(ent: dict | None) -> dict:
         v = _h(src)
         if v:
             out[dst] = v
+    # Int PaletteTemplate (stored as a plain int, not a hex DID) — tints a shared
+    # Setup, e.g. a Shadow reusing a human Setup. Kept so generated creatures
+    # actually render in the right color instead of the base skin.
+    if ent.get("pi") is not None:
+        out["palette_template"] = int(ent["pi"])
     if ent.get("bp"):
         out["body_parts"] = list(ent["bp"])
     return out
@@ -354,6 +364,10 @@ def _creature_sql(wcid: int, data: dict, filename: str) -> str:
         (146, xp,               "XpOverride"),
         (332, luminance,        "LuminanceAward"),
     ]
+    # PaletteTemplate (int type 3) tints a shared Setup into its real color —
+    # e.g. Shadow creatures reuse a human Setup and rely on this to look Shadow.
+    if data.get("palette_template") is not None:
+        int_rows.insert(2, (3, data["palette_template"], "PaletteTemplate"))
 
     bool_rows = [
         (1,   True,      "Stuck"),
