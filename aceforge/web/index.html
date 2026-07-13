@@ -11696,9 +11696,15 @@ function _qfPreviewModel(fieldId){
   var ent=list.find(function(e){return (e.k||e.s)===sel.value;})
         ||list.find(function(e){return e.s===sel.value;})||list[0];
   if(!ent){ toast('No base-game models for this creature type.'); return; }
+  // Model cycling + Select Model write the chosen variant back into this field.
+  var nav=_mpBuildNav(m[1], ent.s, function(e){
+    sel.value=(e.k||e.s);
+    sel.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  if(nav) nav.index=Math.max(0,list.findIndex(function(e){return (e.k||e.s)===(ent.k||ent.s);}));
   // palTpl (Int PaletteTemplate) dyes shared setups their real color — e.g. a
   // Shadow reusing a human setup renders black instead of as a pale human.
-  openModelPreview(ent.s, ent.n, {creature:true, mot:ent.mt||'', clo:ent.cb||'', palTpl:(ent.pi!=null?String(ent.pi):'')});
+  openModelPreview(ent.s, ent.n, {creature:true, mot:ent.mt||'', clo:ent.cb||'', palTpl:(ent.pi!=null?String(ent.pi):''), nav:nav});
 }
 
 function _qfPickIcon(fieldId){
@@ -11822,9 +11828,15 @@ function _bktPreviewModel(i, isNpc){
   var ent=list.find(function(e){return (e.k||e.s)===cur;})
         ||list.find(function(e){return e.s===cur;})||list[0];
   if(!ent){ toast('No base-game models for this creature type.'); return; }
+  // Model cycling + Select Model write the chosen variant back into this row.
+  var _fld=isNpc?'npc_setup_model':'setup_model';
+  var nav=_mpBuildNav(m, ent.s, function(e){
+    _batchKTSet(i, _fld, e.k||e.s); renderBatchKT();
+  });
+  if(nav) nav.index=Math.max(0,list.findIndex(function(e){return (e.k||e.s)===(ent.k||ent.s);}));
   // palTpl (Int PaletteTemplate) dyes shared setups their real color — e.g. a
   // Shadow reusing a human setup renders black instead of as a pale human.
-  openModelPreview(ent.s, ent.n, {creature:true, mot:ent.mt||'', clo:ent.cb||'', palTpl:(ent.pi!=null?String(ent.pi):'')});
+  openModelPreview(ent.s, ent.n, {creature:true, mot:ent.mt||'', clo:ent.cb||'', palTpl:(ent.pi!=null?String(ent.pi):''), nav:nav});
 }
 // Model dropdown options for a "Label (int)" creature-type string, from the
 // scraped base-game catalog (_CSETUPS).
@@ -14794,24 +14806,33 @@ function openModelPreview(setup_id_hex, label, opts){
   msg.textContent='Loading model\u2026';
   msg.style.display='flex';
   panel.style.display='';
+  _mpDragInit();
 
   if(_mp.animFrame){ cancelAnimationFrame(_mp.animFrame); _mp.animFrame=null; }
   _mp.meshes=[];
 
   // Callers outside the weenie editor (QuestForge model pickers) pass opts
   // with explicit pose + companion DIDs instead of scraping editor state.
+  // opts.editor forces the editor-state path even when opts is present (so the
+  // model-cycling nav bar can be attached to the WeenieForge preview).
   opts = opts || null;
+  var _useEditor = !opts || opts.editor;
+
+  // Model-cycling / "Select Model" navigation (opts.nav = {list,index,onSelect}).
+  _mp.nav = (opts && opts.nav) ? opts.nav : null;
+  _mp.setupHex = setup_id_hex; _mp.label = label; _mp.lastOpts = opts;
+  _mpRenderNavUI();
 
   // Creature-type weenies (Creature/Vendor/Pet/CombatPet) are authored upright
   // already; everything else (weapons, items) needs the item base rotation.
   var _wtEl=document.getElementById('fWeenieType');
   var _wt=_wtEl?parseInt(_wtEl.value):NaN;
-  _mp.itemMode = opts ? !opts.creature : !(_wt===10 || _wt===12 || _wt===51 || _wt===76);
+  _mp.itemMode = !_useEditor ? !opts.creature : !(_wt===10 || _wt===12 || _wt===51 || _wt===76);
   // Headgear (ValidLocations Int 9 with the HeadWear 0x1 bit) is authored
   // upright like creatures, not long-axis like weapons — keep the creature
   // pose but yaw 180° so the face opening points at the camera.
   _mp.headMode=false;
-  if(!opts) try{
+  if(_useEditor) try{
     (typeof extraInt!=='undefined'?extraInt:[]).forEach(function(r){
       if(parseInt(r.type)===9 && (parseInt(r.value)&1)){ _mp.itemMode=false; _mp.headMode=true; }
     });
@@ -14821,7 +14842,7 @@ function openModelPreview(setup_id_hex, label, opts){
   // ClothingBase DID (type 7, 0x10xxxxxx) swaps in the armor models/textures.
   // The MotionTable DID (type 2, 0x09xxxxxx) bakes the idle animation in.
   var _cloHex='', _motHex='', _palTpl='', _shade='';
-  if(opts){
+  if(!_useEditor){
     _cloHex=opts.clo||''; _motHex=opts.mot||'';
     _palTpl=opts.palTpl||''; _shade=opts.shade||'';
   } else try{
@@ -14964,6 +14985,86 @@ function closeModelPreview(){
   var panel=document.getElementById('modelPreviewPanel');
   if(panel) panel.style.display='none';
   if(_mp.animFrame){ cancelAnimationFrame(_mp.animFrame); _mp.animFrame=null; }
+  _mp.nav=null;
+}
+
+// ── 3D viewer model-cycling / Select Model ────────────────────────────────
+// Build a nav descriptor from the base-game catalog for a creature type:
+// {list, index (of the current setup), onSelect(entry)}. Returns null if the
+// type has no catalog models (then the arrows/Select button stay hidden).
+function _mpBuildNav(ctype, curSetupHex, onSelect){
+  var list=_CSETUPS&&_CSETUPS[String(ctype)];
+  if(!list||!list.length) return null;
+  var cur=String(curSetupHex||'').toUpperCase();
+  var idx=list.findIndex(function(e){return e.s.toUpperCase()===cur;});
+  return {list:list, index:idx<0?0:idx, onSelect:onSelect};
+}
+
+// Show/hide + label the nav controls to match the current _mp.nav.
+function _mpRenderNavUI(){
+  var has=!!(_mp.nav&&_mp.nav.list&&_mp.nav.list.length>1);
+  var hasSel=!!(_mp.nav&&_mp.nav.onSelect);
+  ['mpNavPrev','mpNavNext','mpNavCounter'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.style.display=has?'':'none';
+  });
+  var sel=document.getElementById('mpSelectBtn');
+  if(sel) sel.style.display=hasSel?'':'none';
+  var cnt=document.getElementById('mpNavCounter');
+  if(cnt&&has){
+    var e=_mp.nav.list[_mp.nav.index];
+    cnt.textContent=(_mp.nav.index+1)+' / '+_mp.nav.list.length+(e?'  ·  '+e.n:'');
+  }
+}
+
+// Cycle to the prev/next model in the current nav list and reload the viewer.
+function _mpNavStep(dir){
+  if(!_mp.nav||!_mp.nav.list.length) return;
+  var nav=_mp.nav, n=nav.list.length;
+  nav.index=((nav.index+dir)%n+n)%n;
+  var e=nav.list[nav.index];
+  openModelPreview(e.s, e.n, {creature:true, mot:e.mt||'', clo:e.cb||'',
+    palTpl:(e.pi!=null?String(e.pi):''), nav:nav});
+}
+
+// Apply the currently-shown model back to the field that opened the viewer.
+function _mpNavSelect(){
+  if(!_mp.nav||!_mp.nav.onSelect) return;
+  _mp.nav.onSelect(_mp.nav.list[_mp.nav.index]);
+  var b=document.getElementById('mpSelectBtn');
+  if(b){ var t=b.textContent; b.textContent='✓ Set'; setTimeout(function(){b.textContent=t;},900); }
+}
+
+// WeenieForge Setup-DID preview: open the viewer reading live editor state, with
+// model cycling over the current CreatureType and Select Model writing back via
+// the same path the Setup dropdown uses.
+function _previewSetupFromEditor(){
+  var sRow=(typeof extraDID!=='undefined'?extraDID:[]).find(function(x){return parseInt(x.type)===1;});
+  var setupHex=sRow?String(sRow.value||'0x00000000'):'0x00000000';
+  var ctRow=(typeof extraInt!=='undefined'?extraInt:[]).find(function(x){return parseInt(x.type)===2;});
+  var ctype=ctRow?parseInt(ctRow.value):31;
+  var nav=_mpBuildNav(ctype, setupHex, function(e){ _pickCreatureSetup(e.k||e.s); });
+  openModelPreview(setupHex, 'Setup '+setupHex, {editor:true, nav:nav});
+}
+
+// One-time drag handler: grab the viewer by its header to reposition it.
+function _mpDragInit(){
+  var panel=document.getElementById('modelPreviewPanel');
+  var hdr=document.getElementById('mpHeader');
+  if(!panel||!hdr||hdr._dragWired) return;
+  hdr._dragWired=true;
+  var drag=null;
+  hdr.addEventListener('mousedown',function(ev){
+    if(ev.target.closest('button')) return;   // don't start a drag on the buttons
+    var r=panel.getBoundingClientRect();
+    panel.style.transform='none'; panel.style.left=r.left+'px'; panel.style.top=r.top+'px';
+    drag={dx:ev.clientX-r.left, dy:ev.clientY-r.top}; ev.preventDefault();
+  });
+  window.addEventListener('mousemove',function(ev){
+    if(!drag) return;
+    panel.style.left=Math.max(0,Math.min(window.innerWidth-60, ev.clientX-drag.dx))+'px';
+    panel.style.top =Math.max(0,Math.min(window.innerHeight-40, ev.clientY-drag.dy))+'px';
+  });
+  window.addEventListener('mouseup',function(){ drag=null; });
 }
 
 // ── Setup DID 3D Preview button ───────────────────────────────────────────
@@ -14972,7 +15073,7 @@ function closeModelPreview(){
 // for DID type 1 (Setup) entries.
 function _setupPreviewBtnHtml(hexVal){
   var val=hexVal||'0x00000000';
-  return '<button onclick="openModelPreview(\''+val+'\',\'Setup '+val+'\')" '
+  return '<button onclick="_previewSetupFromEditor()" '
     +'title="Preview 3D model for this Setup DID" '
     +'style="font-family:var(--ui-font);font-size:8px;font-weight:700;'
     +'padding:2px 8px;border:1px solid var(--crimson);background:transparent;'
@@ -15152,12 +15253,18 @@ document.addEventListener('DOMContentLoaded', function(){
   transform:translate(-50%,-50%);z-index:400;
   background:var(--parch);border:1px solid var(--border);border-radius:4px;
   width:480px;box-shadow:0 8px 40px rgba(0,0,0,.6)">
-  <div style="display:flex;align-items:center;justify-content:space-between;
-    padding:10px 14px;border-bottom:1px solid var(--border)">
+  <div id="mpHeader" style="display:flex;align-items:center;justify-content:space-between;
+    padding:10px 14px;border-bottom:1px solid var(--border);cursor:move">
     <div id="modelPreviewTitle" style="font-family:var(--ui-font);font-size:11px;
       font-weight:700;letter-spacing:.08em;color:var(--crimson)">3D PREVIEW</div>
-    <button onclick="closeModelPreview()" style="background:none;border:none;
-      font-size:16px;cursor:pointer;color:var(--ink-dim);line-height:1">&times;</button>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button id="mpSelectBtn" onclick="_mpNavSelect()" title="Set this model as the Setup ID"
+        style="display:none;font-family:var(--ui-font);font-size:9px;font-weight:700;
+        letter-spacing:.05em;padding:3px 10px;border:1px solid var(--crimson);
+        background:transparent;color:var(--crimson);cursor:pointer;white-space:nowrap">Select Model</button>
+      <button onclick="closeModelPreview()" style="background:none;border:none;
+        font-size:16px;cursor:pointer;color:var(--ink-dim);line-height:1">&times;</button>
+    </div>
   </div>
   <div style="position:relative;background:#111;height:340px">
     <canvas id="modelPreviewCanvas" width="478" height="338"
@@ -15167,6 +15274,18 @@ document.addEventListener('DOMContentLoaded', function(){
       font-size:10px;color:rgba(255,255,255,.7);font-style:italic;text-align:center;
       padding:20px;overflow:auto;word-break:break-word;white-space:pre-wrap;
       align-items:flex-start;padding-top:30px">Loading 3D model…</div>
+    <button id="mpNavPrev" onclick="_mpNavStep(-1)" title="Previous model"
+      style="display:none;position:absolute;left:6px;top:50%;transform:translateY(-50%);
+      width:30px;height:44px;border:none;background:rgba(0,0,0,.4);color:#fff;
+      font-size:20px;cursor:pointer;border-radius:3px">&#8249;</button>
+    <button id="mpNavNext" onclick="_mpNavStep(1)" title="Next model"
+      style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);
+      width:30px;height:44px;border:none;background:rgba(0,0,0,.4);color:#fff;
+      font-size:20px;cursor:pointer;border-radius:3px">&#8250;</button>
+    <div id="mpNavCounter" style="display:none;position:absolute;bottom:6px;left:50%;
+      transform:translateX(-50%);font-family:var(--ui-font);font-size:9px;
+      color:rgba(255,255,255,.7);background:rgba(0,0,0,.4);padding:2px 8px;
+      border-radius:3px;max-width:80%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
     <div style="position:absolute;bottom:6px;right:8px;font-family:var(--ui-font);
       font-size:9px;color:rgba(255,255,255,.3)">Drag to rotate &bull; Scroll to zoom</div>
   </div>
