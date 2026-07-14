@@ -103,6 +103,16 @@ def _clear_webview_http_cache():
 
 def main():
     _clear_webview_http_cache()
+    # Belt-and-suspenders against stale UI: the folder-delete above can silently
+    # no-op if a prior ACEForge/WebView2 process still holds the cache open, in
+    # which case the Edge engine keeps serving an OLD index.html/JS from disk
+    # cache and edits never appear. Telling the engine to skip its HTTP/disk
+    # cache entirely guarantees the freshest files load every launch.
+    _prev_args = os.environ.get("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "")
+    if "--disable-http-cache" not in _prev_args:
+        os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = (
+            (_prev_args + " ").lstrip() + "--disable-http-cache --disk-cache-size=1"
+        ).strip()
     try:
         import webview
     except ImportError:

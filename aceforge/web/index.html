@@ -2410,6 +2410,18 @@ var _CSETUPS=null;
   }catch(e){_CSETUPS={};}
 })();
 
+// Per-WeenieType item-model catalog (build_item_setups.py). Loaded the exact
+// same way as _CSETUPS so it can never fall out of sync with it. {wtype: [...]}.
+var _ISETUPS=null;
+(function(){
+  try{
+    fetch((window._appBase||'')+'item_setups.json')
+      .then(function(r){return r.json();})
+      .then(function(d){_ISETUPS=d; console.log('[ACEForge] item_setups loaded: '+Object.keys(d).length+' weenie types');})
+      .catch(function(e){_ISETUPS={}; console.warn('[ACEForge] item_setups.json load failed:', e);});
+  }catch(e){_ISETUPS={};}
+})();
+
 // The model key ("k") most recently applied via the Setup dropdown — used to
 // keep the exact same-Setup variant highlighted after the panel rebuilds.
 var _pickedSetupKey='';
@@ -2468,6 +2480,256 @@ function _pickCreatureSetup(key){
   }
   rebuildPanel('properties');
   regen();
+}
+
+// ── Item model catalog (WeenieType → models) ──────────────────────────────
+// Populated by loadData() from item_setups.json (build_item_setups.py). Same
+// idea as _CSETUPS but keyed by WeenieType, and each list is further filtered
+// by a per-type "subtype" int so the editor shows only the relevant models
+// (e.g. only Sword models on a sword) rather than every item of the type.
+// (_ISETUPS itself is declared and loaded up next to _CSETUPS.)
+// The item-model key most recently applied via the Setup dropdown — kept so the
+// same option stays highlighted after the panel rebuilds.
+var _pickedItemSetupKey='';
+// Which weenie_properties_int key subdivides each type (must match
+// SUBTYPE_INT in build_item_setups.py): 48 WeaponSkill, 9 ValidLocations, 45
+// DamageType. Types not listed are a single flat list.
+const ITEM_SUBTYPE_INT={6:48,3:48,4:48,2:9,35:45};
+
+// Write an item-model catalog entry into the DID/Int rows so the DID section
+// exactly reflects the picked model: Setup + Icon + companion tables (Motion,
+// Sound, PaletteBase, ClothingBase, PhysicsEffectTable). Rows the entry defines
+// are updated/appended; managed rows it does NOT define are removed so a value
+// from a previously-picked model can't bleed through.
+function _applyItemSetupEntry(ent){
+  if(!ent) return;
+  var managed={1:ent.s, 2:ent.mt, 3:ent.st, 6:ent.pb, 7:ent.cb, 8:ent.i, 22:ent.pe};
+  Object.keys(managed).forEach(function(tStr){
+    var t=parseInt(tStr), v=managed[t];
+    var idx=extraDID.findIndex(function(x){return parseInt(x.type)===t;});
+    if(v){
+      if(idx>=0) extraDID[idx].value=v; else extraDID.push({type:t, value:v});
+    }else if(idx>=0){
+      extraDID.splice(idx,1);
+    }
+  });
+  // Int PaletteTemplate (Int 3) tints a shared setup into its real color — set
+  // it from the model, or clear a leftover tint when the model has none.
+  var _pi=(ent.pi!=null)?String(ent.pi):'';
+  var _ii=extraInt.findIndex(function(x){return parseInt(x.type)===3;});
+  if(_pi!==''){
+    if(_ii>=0) extraInt[_ii].value=_pi; else extraInt.push({type:3, value:_pi});
+  }else if(_ii>=0){
+    extraInt.splice(_ii,1);
+  }
+}
+
+// Current weenie type from the form field (falls back to the cached tab type).
+function _curWeenieType(){
+  var el=document.getElementById('fWeenieType');
+  var v=el?parseInt(el.value):NaN;
+  if(isNaN(v)) v=parseInt(window._weenieTabType);
+  return isNaN(v)?null:v;
+}
+
+// The subtype ints (WeaponSkill 48, DamageType 45) are promoted to form fields
+// on import and may live there instead of extraInt — check both sources.
+const ITEM_SUBTYPE_FORM={48:'fWepSkill',45:'fDmgType'};
+function _itemSubValue(wt){
+  var subKey=ITEM_SUBTYPE_INT[wt];
+  if(subKey==null) return NaN;
+  var row=extraInt.find(function(x){return parseInt(x.type)===subKey;});
+  var v=row?parseInt(row.value):NaN;
+  if(isNaN(v)){
+    var fid=ITEM_SUBTYPE_FORM[subKey];
+    var el=fid?document.getElementById(fid):null;
+    if(el) v=parseInt(el.value);
+  }
+  return isNaN(v)?NaN:v;
+}
+
+// Coarse armor region from a ValidLocations bitmask. Exact-coverage matching is
+// too strict (a breastplate covers 0x200, a cuirass 0x600, a hauberk 0x1E00),
+// so instead we bucket every torso piece together, etc. — editing one upper-body
+// piece then surfaces all of them.
+function _armorRegion(vl){
+  if(vl==null||isNaN(vl)) return null;
+  var HEAD=0x1, HANDS=0x20, FEET=0x100, CHEST=0x200, ABD=0x400, UARM=0x800,
+      LARM=0x1000, ULEG=0x2000, LLEG=0x4000, SHIELD=0x200000;
+  // Underwear-layer clothing (shirts/pants/tunics) uses the low coverage bits
+  // that armor never uses on its own.
+  var CLOTHING=0x2|0x4|0x8|0x10|0x40|0x80;
+  if(vl&SHIELD) return 'Shield';
+  var upper=vl&(CHEST|ABD|UARM|LARM), lower=vl&(ULEG|LLEG);
+  if(upper&&lower) return 'Full Suit';
+  if(vl&HEAD) return 'Head';
+  if(vl&HANDS) return 'Hands';
+  if(vl&FEET) return 'Feet';
+  if(upper) return 'Upper Body';
+  if(lower) return 'Lower Body';
+  if(vl&CLOTHING) return 'Clothing';
+  return 'Other';
+}
+
+// The group a model's subtype falls into (armor → body region; weapons → skill;
+// others → the raw sub) and that group's human label. Filtering and optgroup
+// bucketing both route through these so they always agree.
+function _itemGroupKey(wt, sub){
+  if(sub==null) return '';
+  if(wt===2) return _armorRegion(sub)||'Other';
+  return String(sub);
+}
+function _itemGroupLabel(wt, key){
+  if(key===''||key==null) return 'Other';
+  if(wt===2) return key;                       // already a region name
+  var n=parseInt(key);
+  if(wt===6||wt===3||wt===4||wt===5){ var s=ALL_SKILLS.find(function(x){return x[0]===n;}); return s?s[1]:('Skill '+n); }
+  if(wt===35){ var d=DMG_TYPES.find(function(x){return x[0]===n;}); return d?d[1]:('Element '+n); }
+  return 'Group '+n;
+}
+
+// True when the currently-edited weenie is a shield (CombatUse=Shield, or the
+// Shield ValidLocations bit) — shields live in their own catalog regardless of
+// weenie type so they don't pull in hundreds of generic items.
+function _isShieldWeenie(){
+  var cu=extraInt.find(function(x){return parseInt(x.type)===51;});
+  if(cu && parseInt(cu.value)===4) return true;
+  var vl=extraInt.find(function(x){return parseInt(x.type)===9;});
+  if(vl && (parseInt(vl.value)&0x200000)) return true;
+  return false;
+}
+// Which catalog key to use for the current weenie: 'shield' or its WeenieType.
+function _curItemCatalogKey(){
+  if(_isShieldWeenie() && _ISETUPS && _ISETUPS['shield'] && _ISETUPS['shield'].length) return 'shield';
+  return _curWeenieType();
+}
+
+// The models to offer for a catalog key ('shield' or a WeenieType), filtered to
+// the current item's group (weapon skill / armor region / caster element) when
+// that yields a non-empty set — scoping without ever squelching to zero.
+function _itemSetupList(key){
+  if(key==null) return null;
+  var list=_ISETUPS?_ISETUPS[String(key)]:null;
+  if(!list||!list.length) return null;
+  if(key==='shield') return list;             // flat, no subtype
+  var wt=key;
+  if(ITEM_SUBTYPE_INT[wt]==null) return list;
+  // Armor coverage is fuzzy/overlapping (is a long coat "upper body" or "full
+  // suit"?), so never narrow it — show the whole catalog, grouped by region in
+  // the dropdown. Weapons/casters have crisp subtypes and DO get narrowed.
+  if(wt===2) return list;
+  var cur=_itemSubValue(wt);
+  if(isNaN(cur)) return list;
+  var curKey=_itemGroupKey(wt, cur);
+  var filtered=list.filter(function(e){return _itemGroupKey(wt, e.sub)===curKey;});
+  return filtered.length?filtered:list;
+}
+
+// Build <option>/<optgroup> HTML for an item-model list, grouped by subtype so
+// even a large unfiltered list (all 764 melee, all 674 armor) stays navigable.
+function _itemModelOptionsHtml(key, list, selKey){
+  function opt(ent){
+    var sel=(ent.k||ent.s)===selKey;
+    return '<option value="'+(ent.k||ent.s)+'"'+(sel?' selected':'')+'>'+escHtml(ent.n)+'</option>';
+  }
+  var wt=(key==='shield')?null:key;
+  if(wt==null || ITEM_SUBTYPE_INT[wt]==null || list.length<=1){
+    return list.map(opt).join('');
+  }
+  var buckets={};
+  list.forEach(function(e){ var gk=_itemGroupKey(wt, e.sub); (buckets[gk]=buckets[gk]||[]).push(e); });
+  var keys=Object.keys(buckets).sort(function(a,b){
+    if(a==='') return 1; if(b==='') return -1;
+    return _itemGroupLabel(wt,a).localeCompare(_itemGroupLabel(wt,b));
+  });
+  return keys.map(function(k){
+    var label=k===''?'Other':_itemGroupLabel(wt,k);
+    return '<optgroup label="'+escHtml(label)+' ('+buckets[k].length+')">'
+      +buckets[k].map(opt).join('')+'</optgroup>';
+  }).join('');
+}
+
+// ── ClothingBase picker ────────────────────────────────────────────────────
+// The ClothingBase DID (type 7, 0x10xxxxxx) is the armor/clothing MODEL overlay
+// swapped onto the body Setup. This lets a user change just the armor look
+// (keeping the Setup) and see it in the 3D preview, which already composites the
+// ClothingBase. The catalog is derived from the armor models in _ISETUPS — each
+// unique ClothingBase with a representative name + coverage region.
+var _CBLIST=null;
+function _clothingBaseList(){
+  if(_CBLIST) return _CBLIST;
+  var seen={}, out=[];
+  ['2','shield'].forEach(function(key){
+    var src=(_ISETUPS&&_ISETUPS[key])?_ISETUPS[key]:[];
+    src.forEach(function(e){
+      if(!e.cb) return;
+      var k=e.cb.toUpperCase();
+      if(seen[k]) return;
+      seen[k]=1;
+      out.push({cb:e.cb, n:e.n, sub:(key==='shield'?0x200000:e.sub)});
+    });
+  });
+  out.sort(function(a,b){
+    var ra=_armorRegion(a.sub)||'zz', rb=_armorRegion(b.sub)||'zz';
+    if(ra!==rb) return ra.localeCompare(rb);
+    return a.n.toLowerCase().localeCompare(b.n.toLowerCase());
+  });
+  _CBLIST=out; return out;
+}
+function _clothingBaseOptionsHtml(list, selCb){
+  var buckets={};
+  list.forEach(function(e){ var r=_armorRegion(e.sub)||'Other'; (buckets[r]=buckets[r]||[]).push(e); });
+  return Object.keys(buckets).sort().map(function(r){
+    return '<optgroup label="'+escHtml(r)+' ('+buckets[r].length+')">'
+      +buckets[r].map(function(e){
+          var sel=e.cb.toUpperCase()===selCb;
+          return '<option value="'+e.cb+'"'+(sel?' selected':'')+'>'+escHtml(e.n)+'</option>';
+        }).join('')+'</optgroup>';
+  }).join('');
+}
+function _pickClothingBase(cbHex){
+  if(!cbHex) return;
+  var idx=extraDID.findIndex(function(x){return parseInt(x.type)===7;});
+  if(idx>=0) extraDID[idx].value=cbHex; else extraDID.push({type:7, value:cbHex});
+  rebuildPanel('properties');
+  regen();
+}
+
+// Dropdown pick handler for item models — value is the model's unique key "k".
+function _pickItemSetup(key){
+  if(!key){ _pickedItemSetupKey=''; return; }
+  var ck=_curItemCatalogKey();
+  var list=_ISETUPS?_ISETUPS[String(ck)]:null;
+  var ent=(list||[]).find(function(e){return (e.k||e.s)===key;})
+        ||(list||[]).find(function(e){return e.s===key;});
+  if(!ent) return;
+  _pickedItemSetupKey=ent.k||ent.s;
+  _applyItemSetupEntry(ent);
+  rebuildPanel('properties');
+  regen();
+}
+
+// Standalone item-model picker for the DID tab. Shown only when the item type
+// has a catalog but no Setup DID row exists yet (so the inline Setup-row
+// dropdown isn't already covering it) and it isn't a creature. Picking a model
+// seeds the Setup + Icon + companion DID rows via _pickItemSetup.
+function _itemModelPickerBanner(){
+  if(extraInt.find(function(x){return parseInt(x.type)===2;})) return '';   // creature → its own picker
+  if(extraDID.find(function(x){return parseInt(x.type)===1;})) return '';   // Setup row exists → inline dropdown handles it
+  var ck=_curItemCatalogKey();
+  var list=_itemSetupList(ck);
+  if(!list||!list.length) return '';
+  var wtName=ck==='shield'?'Shield':(WEENIE_TYPES.find(function(p){return p[0]===ck;})||[null,'item'])[1];
+  return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:8px;'
+    +'background:var(--parch);border:1px solid var(--border);border-radius:2px">'
+    +'<span style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.1em;'
+    +'text-transform:uppercase;color:var(--ink-dim)">3D Model</span>'
+    +'<select onchange="_pickItemSetup(this.value)" title="Base-game models for this '+escHtml(wtName)+' — picking one sets Setup + Icon + Motion/Sound/Palette/Clothing tables" '
+    +'style="flex:1;font-family:var(--ui-font);font-size:11px;padding:4px 6px;background:var(--paper);'
+    +'border:1px solid var(--border);color:var(--ink)">'
+    +'<option value="">— pick a model ('+list.length+') —</option>'
+    +_itemModelOptionsHtml(ck, list, '')
+    +'</select></div>';
 }
 
 // Keys match weenie_properties_body_part.key in ACE DB
@@ -2809,14 +3071,15 @@ function buildWeenieProps(){
 }
 
 // Weenie type lookup for display
-window._WEENIE_TYPES = {
-  1:'Generic',2:'Container',4:'Creature',6:'Generic/Item',7:'Food',
-  8:'Book',9:'Stackable',10:'Creature',14:'Key',15:'Lockpick',
-  16:'MeleeWeapon',17:'MissileWeapon',18:'Caster',19:'Door',
-  20:'Chest',21:'Container',22:'Key',25:'Vendor',28:'HealingKit',
-  29:'LightSource',30:'Door',34:'Scroll',35:'Jewelry',37:'ManaStone',
-  38:'Gem',39:'TinkerTool',40:'SalvageBag',51:'Stackable',
-};
+// Derived from the authoritative WEENIE_TYPES list (the same one that populates
+// the Weenie Type dropdown) so the summary bar's label can never disagree with
+// the dropdown. The previous hand-written map used a wrong/legacy enum
+// (e.g. 2→Container, 4→Creature, 6→Generic/Item), which mislabeled every item.
+window._WEENIE_TYPES = (function(){
+  var m={};
+  (typeof WEENIE_TYPES!=='undefined'?WEENIE_TYPES:[]).forEach(function(p){ m[p[0]]=p[1]; });
+  return m;
+})();
 
 // Build a stat-ID <select> whose options are drawn from the correct property
 // lookup table based on which Requirement type is currently selected.
@@ -4422,7 +4685,17 @@ function _pickPalette(arrIdx){
   openPalettePicker(function(val){
     updateExtraProp('extraInt',arrIdx,val);
     rebuildPanel('properties');
+    _refreshModelPreview();
   });
+}
+
+// Re-render the 3D preview from live editor state if it's currently open — used
+// so PaletteTemplate/Shade edits recolor the model without reopening the panel.
+function _refreshModelPreview(){
+  var panel=document.getElementById('modelPreviewPanel');
+  if(panel && panel.style.display!=='none' && typeof _previewSetupFromEditor==='function'){
+    try{ _previewSetupFromEditor(); }catch(e){}
+  }
 }
 
 var _palettePickerView='grid'; // remembered across opens within the session
@@ -7285,6 +7558,13 @@ const TMPL_CHEST_SETUPS = [{"wcid": 143, "name": "Chest", "setup": "0x0200007C",
 const TMPL_DOOR_SETUPS  = [{"wcid": 278, "name": "Door", "setup": "0x0200024F", "icon": "0x06001317", "file": "00278 Door.sql"}, {"wcid": 412, "name": "Door", "setup": "0x0200027C", "icon": "0x06001317", "file": "00412 Door.sql"}, {"wcid": 720, "name": "Sliding Door", "setup": "0x02000310", "icon": "0x06001317", "file": "00720 Sliding Door.sql"}, {"wcid": 721, "name": "Door", "setup": "0x02000312", "icon": "0x06001317", "file": "00721 Door.sql"}, {"wcid": 1148, "name": "Door", "setup": "0x0200037E", "icon": "0x06001317", "file": "01148 Door.sql"}, {"wcid": 1666, "name": "Fortress-Door", "setup": "0x02000422", "icon": "0x06001317", "file": "01666 Fortress-Door.sql"}, {"wcid": 2179, "name": "Door", "setup": "0x02000281", "icon": "0x06001317", "file": "02179 Door.sql"}, {"wcid": 7885, "name": "Metal Door", "setup": "0x020005F1", "icon": "0x06001317", "file": "07885 Metal Door.sql"}, {"wcid": 8513, "name": "Vault Door", "setup": "0x020009A9", "icon": "0x06001317", "file": "08513 Vault Door.sql"}, {"wcid": 9108, "name": "Reinforced Door", "setup": "0x02000281", "icon": "0x06001412", "file": "09108 Reinforced Door.sql"}, {"wcid": 11699, "name": "Gate", "setup": "0x02000A7E", "icon": "0x06001317", "file": "11699 Gate.sql"}, {"wcid": 14467, "name": "Fireplace", "setup": "0x02000BDE", "icon": "0x060023AD", "file": "14467 Fireplace.sql"}, {"wcid": 14564, "name": "Swirling Portal", "setup": "0x02000C07", "icon": "0x0600106B", "file": "14564 Swirling Portal.sql"}, {"wcid": 15301, "name": "Bookcase", "setup": "0x02000C56", "icon": "0x06001356", "file": "15301 Bookcase.sql"}, {"wcid": 16919, "name": "Pedestal Weak Spot", "setup": "0x02000D55", "icon": "0x06001317", "file": "16919 Pedestal Weak Spot.sql"}, {"wcid": 25464, "name": "Door", "setup": "0x020005F2", "icon": "0x06001317", "file": "25464 Door.sql"}, {"wcid": 25564, "name": "Bone Door", "setup": "0x02000FDB", "icon": "0x06002D62", "file": "25564 Bone Door.sql"}, {"wcid": 25565, "name": "Sealed Door", "setup": "0x02000FDA", "icon": "0x06002D61", "file": "25565 Sealed Door.sql"}, {"wcid": 25581, "name": "Sarcophagus", "setup": "0x02000FE6", "icon": "0x06001317", "file": "25581 Sarcophagus.sql"}, {"wcid": 25582, "name": "Magic Wall", "setup": "0x02000FE7", "icon": "0x06001317", "file": "25582 Magic Wall.sql"}, {"wcid": 29963, "name": "Crypt Door", "setup": "0x02001204", "icon": "0x06001317", "file": "29963 Crypt Door.sql"}, {"wcid": 30641, "name": "Shrine Door", "setup": "0x020005DA", "icon": "0x06001317", "file": "30641 Shrine Door.sql"}];
 
 // ── Modal open/close ───────────────────────────────────────────────────────
+var STATIC_TEMPLATES = {
+  key: {label:"Key", wcid:820000, name:"Key", raw:"DELETE FROM `weenie` WHERE `class_Id` = 820000;\n\nINSERT INTO `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)\nVALUES (820000, 'KeyTemplate', 22, '2005-02-09 10:00:00') /* Key */;\n\nINSERT INTO `weenie_properties_int` (`object_Id`, `type`, `value`)\nVALUES (820000,   1,      16384) /* ItemType - Key */\n     , (820000,   5,         50) /* EncumbranceVal */\n     , (820000,   8,         20) /* Mass */\n     , (820000,  16,    2097160) /* ItemUseable - SourceContainedTargetRemote */\n     , (820000,  19,        100) /* Value */\n     , (820000,  91,          3) /* MaxStructure */\n     , (820000,  92,          3) /* Structure */\n     , (820000,  93,       1044) /* PhysicsState - Ethereal, IgnoreCollisions, Gravity */\n     , (820000,  94,        640) /* TargetType - LockableMagicTarget */;\n\nINSERT INTO `weenie_properties_bool` (`object_Id`, `type`, `value`)\nVALUES (820000,  22, True ) /* Inscribable */\n     , (820000,  23, True ) /* DestroyOnSell */;\n\nINSERT INTO `weenie_properties_string` (`object_Id`, `type`, `value`)\nVALUES (820000,   1, 'Key') /* Name */\n     , (820000,  13, 'KeyCode') /* KeyCode */\n     , (820000,  14, 'Use this item on a locked door or chest to unlock it.') /* Use */;\n\nINSERT INTO `weenie_properties_d_i_d` (`object_Id`, `type`, `value`)\nVALUES (820000,   1, 0x02000160) /* Setup */\n     , (820000,   3, 0x20000014) /* SoundTable */\n     , (820000,   8, 0x0600105E) /* Icon */\n     , (820000,  22, 0x3400002B) /* PhysicsEffectTable */;\n"},
+  crafttool: {label:"Craft Tool", wcid:830000, name:"Craft Tool Template", raw:"DELETE FROM `weenie` WHERE `class_Id` = 830000;\n\nINSERT INTO `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)\nVALUES (830000, 'CraftToolTemplate', 44, '2021-11-01 00:00:00') /* CraftTool */;\n\nINSERT INTO `weenie_properties_int` (`object_Id`, `type`, `value`)\nVALUES (830000,   1,       2048) /* ItemType - Gem */\n     , (830000,   5,        100) /* EncumbranceVal */\n     , (830000,  11,          1) /* MaxStackSize */\n     , (830000,  12,          1) /* StackSize */\n     , (830000,  13,        100) /* StackUnitEncumbrance */\n     , (830000,  15,        500) /* StackUnitValue */\n     , (830000,  16,     524296) /* ItemUseable - SourceContainedTargetContained */\n     , (830000,  18,          1) /* UiEffects - Magical */\n     , (830000,  19,        500) /* Value */\n     , (830000,  33,          1) /* Bonded - Bonded */\n     , (830000,  93,       1044) /* PhysicsState - Ethereal, IgnoreCollisions, Gravity */\n     , (830000,  94,      33025) /* TargetType - WeaponOrCaster */\n     , (830000, 114,          1) /* Attuned - Attuned */;\n\nINSERT INTO `weenie_properties_bool` (`object_Id`, `type`, `value`)\nVALUES (830000,  22, True ) /* Inscribable */\n     , (830000,  69, False) /* IsSellable */;\n\nINSERT INTO `weenie_properties_string` (`object_Id`, `type`, `value`)\nVALUES (830000,   1, 'Craft Tool Template') /* Name */\n     , (830000,  14, 'Use this Craft Tool on an item for crafting.') /* Use */;\n\nINSERT INTO `weenie_properties_d_i_d` (`object_Id`, `type`, `value`)\nVALUES (830000,   1, 0x020009BE) /* Setup */\n     , (830000,   3, 0x20000014) /* SoundTable */\n     , (830000,   6, 0x04000BEF) /* PaletteBase */\n     , (830000,   8, 0x060064B9) /* Icon */\n     , (830000,  22, 0x3400002B) /* PhysicsEffectTable */;\n"},
+  baseitem: {label:"Base Item", wcid:840000, name:"Base Item Template", raw:"DELETE FROM `weenie` WHERE `class_Id` = 840000;\n\nINSERT INTO `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)\nVALUES (840000, 'BaseItemTemplate', 51, '2022-01-08 18:29:57') /* Stackable */;\n\nINSERT INTO `weenie_properties_int` (`object_Id`, `type`, `value`)\nVALUES (840000,   1,        128) /* ItemType - Misc */\n     , (840000,   5,          5) /* EncumbranceVal */\n     , (840000,  11,        100) /* MaxStackSize */\n     , (840000,  12,          1) /* StackSize */\n     , (840000,  13,          5) /* StackUnitEncumbrance */\n     , (840000,  15,          0) /* StackUnitValue */\n     , (840000,  16,          1) /* ItemUseable - No */\n     , (840000,  19,          0) /* Value */\n     , (840000,  33,          1) /* Bonded - Bonded */\n     , (840000,  93,       1044) /* PhysicsState - Ethereal, IgnoreCollisions, Gravity */\n     , (840000, 114,          1) /* Attuned - Attuned */;\n\nINSERT INTO `weenie_properties_bool` (`object_Id`, `type`, `value`)\nVALUES (840000,  23, True ) /* DestroyOnSell */;\n\nINSERT INTO `weenie_properties_string` (`object_Id`, `type`, `value`)\nVALUES (840000,   1, 'Base Item Template') /* Name */\n     , (840000,  14, 'An item than can be generic, or used for a quest turn-in.') /* Use */;\n\nINSERT INTO `weenie_properties_d_i_d` (`object_Id`, `type`, `value`)\nVALUES (840000,   1, 0x02000172) /* Setup */\n     , (840000,   3, 0x20000014) /* SoundTable */\n     , (840000,   8, 0x06006750) /* Icon */\n     , (840000,  22, 0x3400002B) /* PhysicsEffectTable */;\n"},
+  structure: {label:"Structure/Decoration", wcid:880000, name:"Structure Decoration Template", raw:"DELETE FROM `weenie` WHERE `class_Id` = 880000;\n\nINSERT INTO `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)\nVALUES (880000, 'StructureDecorationTemplate', 1, '2005-02-09 10:00:00') /* Generic */;\n\nINSERT INTO `weenie_properties_int` (`object_Id`, `type`, `value`)\nVALUES (880000,   1,        128) /* ItemType - Misc */\n     , (880000,   5,         50) /* EncumbranceVal */\n     , (880000,   8,         50) /* Mass */\n     , (880000,   9,          0) /* ValidLocations - None */\n     , (880000,  16,          1) /* ItemUseable - No */\n     , (880000,  19,          0) /* Value */\n     , (880000,  93,       1040) /* PhysicsState - IgnoreCollisions, Gravity */;\n\nINSERT INTO `weenie_properties_bool` (`object_Id`, `type`, `value`)\nVALUES (880000,   1, True ) /* Stuck */\n     , (880000,  13, False) /* Ethereal */\n     , (880000,  24, True ) /* UiHidden */;\n\nINSERT INTO `weenie_properties_string` (`object_Id`, `type`, `value`)\nVALUES (880000,   1, 'Structure Decoration Template') /* Name */;\n\nINSERT INTO `weenie_properties_d_i_d` (`object_Id`, `type`, `value`)\nVALUES (880000,   1, 0x0200043C) /* Setup */\n     , (880000,   8, 0x06001066) /* Icon */;\n"},
+};
+
 function openTemplateModal(){
   var ov = document.getElementById('weenieTemplateModal');
   if(ov){ ov.style.display='flex'; _tmplSwitchType('creature_mob'); }
@@ -7298,7 +7578,7 @@ function closeTemplateModal(){
 var _tmplType = 'creature_mob';
 function _tmplSwitchType(t){
   _tmplType = t;
-  var tabs = ['creature_mob','creature_npc','generator','door','chest','event','stopgap'];
+  var tabs = ['creature_mob','creature_npc','generator','door','chest','key','crafttool','baseitem','structure','event','stopgap'];
   tabs.forEach(function(id){
     var btn = document.getElementById('tmplTab_'+id);
     if(btn) btn.classList.toggle('active', id===t);
@@ -7417,6 +7697,17 @@ function _tmplRenderOptions(){
       <div class="fl" style="margin-bottom:6px">Appearance</div>
       ${_tmplSetupPickerHtml('tmplChestSetup', TMPL_CHEST_SETUPS)}`;
 
+  } else if(STATIC_TEMPLATES[_tmplType]){
+    // Static SQL templates (Key, Craft Tool, Base Item, Structure/Decoration) —
+    // editable WCID + Name; the rest of the weenie loads verbatim from the file.
+    var _st=STATIC_TEMPLATES[_tmplType];
+    html = `
+      <div class="fl" style="margin-bottom:4px">WCID</div>
+      <input type="number" id="tmplStaticWcid" value="${_st.wcid}" style="width:100%;margin-bottom:10px">
+      <div class="fl" style="margin-bottom:4px">Name</div>
+      <input type="text" id="tmplStaticName" value="${escHtml(_st.name)}" style="width:100%;margin-bottom:10px">
+      <div class="note" style="margin-bottom:0">Loads the ${escHtml(_st.label)} template. Setup, Icon and all
+      properties come from the template — change the 3D model and other fields after loading.</div>`;
   } else if(_tmplType === 'event'){
     html = '<div class="note">Loads Event Controller (WCID 70820). Start/stop server events. Load Stopgap separately via its own tab.</div>';
   } else if(_tmplType === 'stopgap'){
@@ -7596,7 +7887,23 @@ function _buildTemplateSql(){
   if(_tmplType==='chest')           return _tmplChestSQL(now);
   if(_tmplType==='event')           return _tmplEventSQL(now);
   if(_tmplType==='stopgap')         return _tmplStopgapSQL(now);
+  if(STATIC_TEMPLATES[_tmplType])   return _tmplStaticSQL(_tmplType);
   return null;
+}
+
+// Static SQL template loader — takes the verbatim SQL from STATIC_TEMPLATES and
+// rebases it onto the user's WCID and Name. The base WCID is a distinctive
+// 6-digit number that only appears as object ids in the file, so a plain
+// replace is safe; Name is swapped only on its /* Name */ property row.
+function _tmplStaticSQL(type){
+  var st=STATIC_TEMPLATES[type];
+  if(!st) return null;
+  var wcid=parseInt((document.getElementById('tmplStaticWcid')||{}).value)||st.wcid;
+  var name=((document.getElementById('tmplStaticName')||{}).value||st.name).replace(/'/g,"''");
+  var sql=st.raw.split(String(st.wcid)).join(String(wcid));
+  // Replace the Name string value (…, 1, '<old>') /* Name */
+  sql=sql.replace(/(,\s*1,\s*')(?:[^']|'')*('\)\s*\/\* Name \*\/)/, '$1'+name+'$2');
+  return sql;
 }
 
 // ── Creature (Mob) ─────────────────────────────────────────────────────────
@@ -8489,6 +8796,18 @@ function buildAdvanced(){
           +'<option value="False"'+(_bVal==='False'?' selected':'')+'>False</option>'
           +'<option value="True"'+(_bVal==='True'?' selected':'')+'>True</option>'
           +'</select>';
+      } else if(arrRef==='extraFloat' && parseInt(r.type)===12){
+        // Shade (Float 12) — 0.0–1.0 dye intensity that slides the palette toward
+        // its darker sub-range. Slider + live preview refresh so the 3D preview
+        // recolors as you drag (paired with the PaletteTemplate picker on Int 3).
+        var _shVal=parseFloat(r.value); if(isNaN(_shVal)) _shVal=0; if(_shVal<0)_shVal=0; if(_shVal>1)_shVal=1;
+        var _shid='fshade_'+i;
+        valCtrl='<div style="display:flex;align-items:center;gap:6px;flex:1;max-width:320px">'
+          +'<span style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);white-space:nowrap;width:36px">Light</span>'
+          +'<input type="range" min="0" max="1" step="0.02" value="'+_shVal+'" oninput="document.getElementById(\''+_shid+'\').textContent=parseFloat(this.value).toFixed(2);updateExtraProp(\''+arrRef+'\','+i+',this.value);_refreshModelPreview()" style="flex:1;accent-color:var(--gold)">'
+          +'<span style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);white-space:nowrap;width:36px;text-align:right">Dark</span>'
+          +'<span id="'+_shid+'" style="width:34px;text-align:right;font-family:JetBrains Mono,monospace;font-size:12px;font-weight:600;color:var(--ink)">'+_shVal.toFixed(2)+'</span>'
+          +'</div>';
       } else if(arrRef==='extraFloat' && ELEMENT_SLIDER_KIND[parseInt(r.type)]){
         var _kind=ELEMENT_SLIDER_KIND[parseInt(r.type)];
         var _sVal=parseFloat(r.value); if(isNaN(_sVal)) _sVal=1;
@@ -8522,8 +8841,14 @@ function buildAdvanced(){
       // listing every base-game Setup for the current CreatureType.
       if(arrRef==='extraDID' && parseInt(r.type)===1){
         var _csDD='';
+        // The WeenieType decides which catalog to offer. Types with an item
+        // catalog (weapons/armor/portals/…) use the item dropdown below; only
+        // genuine creature types (absent from the item catalog) use the
+        // CreatureType-keyed creature dropdown.
+        var _wtNow=_curItemCatalogKey();
+        var _isItemType=!!(_ISETUPS&&_wtNow!=null&&_ISETUPS[String(_wtNow)]&&_ISETUPS[String(_wtNow)].length);
         var _ctRow=extraInt.find(function(x){return parseInt(x.type)===2;});
-        var _csL=(_CSETUPS&&_ctRow)?_CSETUPS[String(parseInt(_ctRow.value))]:null;
+        var _csL=(!_isItemType&&_CSETUPS&&_ctRow)?_CSETUPS[String(parseInt(_ctRow.value))]:null;
         if(_csL&&_csL.length){
           var _cur=String(r.value||'').toUpperCase();
           function _u(x){return x?String(x.value||'').toUpperCase():'';}
@@ -8558,11 +8883,47 @@ function buildAdvanced(){
               }).join('')
             +'</select>';
         }
+        // No creature catalog for this weenie → offer the item-model catalog for
+        // its WeenieType, scoped to the item's subtype (weapon skill / armor
+        // coverage / caster element). Picking one sets Setup + Icon + companions.
+        if(!_csDD){
+          var _isKey=_curItemCatalogKey();
+          var _isL=_itemSetupList(_isKey);
+          if(_isL&&_isL.length){
+            var _icur=String(r.value||'').toUpperCase();
+            function _iu(x){return x?String(x.value||'').toUpperCase():'';}
+            var _iCB=_iu(extraDID.find(function(x){return parseInt(x.type)===7;}));
+            var _iPB=_iu(extraDID.find(function(x){return parseInt(x.type)===6;}));
+            var _iIC=_iu(extraDID.find(function(x){return parseInt(x.type)===8;}));
+            var _iPI=(function(x){return x?String(x.value||''):'';})(extraInt.find(function(x){return parseInt(x.type)===3;}));
+            var _iSame=_isL.filter(function(e){return e.s.toUpperCase()===_icur;});
+            var _iSel='';
+            if(_pickedItemSetupKey){
+              var ipk=_isL.find(function(e){return (e.k||e.s)===_pickedItemSetupKey;});
+              if(ipk && ipk.s.toUpperCase()===_icur) _iSel=_pickedItemSetupKey;
+            }
+            if(!_iSel && _iSame.length){
+              var _iEx=_iSame.find(function(e){
+                return String(e.cb||'').toUpperCase()===_iCB
+                    && String(e.pb||'').toUpperCase()===_iPB
+                    && String(e.i||'').toUpperCase()===_iIC
+                    && String(e.pi==null?'':e.pi)===_iPI;});
+              _iSel=(_iEx||_iSame[0]).k||(_iEx||_iSame[0]).s;
+            }
+            _csDD='<select onchange="_pickItemSetup(this.value)" title="Base-game models for this item type — grouped by subtype; picking one also sets the matching Icon/Motion/Sound/Palette/Clothing tables" style="flex:0 1 130px;min-width:70px;max-width:130px;font-family:var(--ui-font);font-size:10px;padding:3px 4px;background:var(--parch);border:1px solid var(--border);color:var(--ink);overflow:hidden;text-overflow:ellipsis">'
+              +'<option value="">— '+_isL.length+' model'+(_isL.length!==1?'s':'')+' —</option>'
+              +_itemModelOptionsHtml(_isKey, _isL, _iSel)
+              +'</select>';
+          }
+        }
         valCtrl='<div style="display:flex;align-items:center;gap:6px;">'
           +_setupPreviewBtnHtml(String(r.value||'0x00000000'))
           +_csDD
           +valCtrl+'</div>';
       }
+      // (ClothingBase DID-7 dropdown temporarily removed pending categorization
+      // refinement — helper functions _clothingBaseList/_pickClothingBase remain
+      // defined for when it's reinstated.)
       return '<div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-lt)">'
         +'<div style="width:42px;font-family:JetBrains Mono,monospace;font-size:13px;color:var(--ink-faint);flex-shrink:0">'+r.type+'</div>'
         +'<div style="flex:1;font-family:var(--ui-font);font-size:12px;font-weight:700;color:var(--ink-mid);text-transform:uppercase;letter-spacing:.04em">'+name+'</div>'
@@ -8651,6 +9012,7 @@ function buildAdvanced(){
       ${addRowUI('extraStr',PROP_STRING,'','str')}
     </div>
     <div class="prop-stab-panel${_curPropType==='did'?' active':''}" id="pst_did">
+      ${_itemModelPickerBanner()}
       <div id="adv_did">${extraRows('extraDID',PROP_DID)||none}</div>
       ${addRowUI('extraDID',PROP_DID,'0x00000000','did')}
       ${buildDIDIconPreview()}
@@ -14671,9 +15033,14 @@ function _mpDraw(){
   // model +Y, which the creature base leaves pointing at the camera. An extra
   // view-space -90° pitch stands them up, then a 180° in-plane roll flips them
   // right-side-up while keeping the same face toward the camera.
-  if(_mp.itemMode) base=_mpMat4Mul(_mpRotZ(Math.PI), _mpMat4Mul(_mpRotX(-Math.PI/2), base));
-  // Headgear keeps the upright creature pose but faces away — yaw it around.
-  if(_mp.headMode) base=_mpMat4Mul(_mpRotY(Math.PI), base);
+  if(_mp.itemMode){
+    base=_mpMat4Mul(_mpRotX(-Math.PI/2), base);          // stand the long axis up
+    if(!_mp.weaponMode) base=_mpMat4Mul(_mpRotZ(Math.PI), base);  // armor roll (weapons skip it → point-up)
+  }
+  // Headgear renders correctly with the plain creature base (verified against
+  // real DAT geometry) — face opening toward the camera, upright. headMode just
+  // forces itemMode off so the item/weapon rotations don't tip it; no extra
+  // transform is applied here.
   var rot=_mpMat4Mul(_mpMat4Mul(rx,ry),base);
   // Frame the model: translate to origin then scale to ~unit size so any setup
   // (tiny ring or large armor) fills the view consistently.
@@ -14829,14 +15196,24 @@ function openModelPreview(setup_id_hex, label, opts){
   var _wt=_wtEl?parseInt(_wtEl.value):NaN;
   _mp.itemMode = !_useEditor ? !opts.creature : !(_wt===10 || _wt===12 || _wt===51 || _wt===76);
   // Headgear (ValidLocations Int 9 with the HeadWear 0x1 bit) is authored
-  // upright like creatures, not long-axis like weapons — keep the creature
-  // pose but yaw 180° so the face opening points at the camera.
+  // upright like a creature head — it renders correctly with the plain creature
+  // base, so headMode just forces itemMode off (no long-axis/roll transform).
+  // Editor mode reads the live ValidLocations; nav/QuestForge callers pass
+  // opts.head so cycling onto a helm still orients it right.
   _mp.headMode=false;
   if(_useEditor) try{
     (typeof extraInt!=='undefined'?extraInt:[]).forEach(function(r){
       if(parseInt(r.type)===9 && (parseInt(r.value)&1)){ _mp.itemMode=false; _mp.headMode=true; }
     });
   }catch(e){}
+  if(!_useEditor && opts.head){ _mp.itemMode=false; _mp.headMode=true; }
+  // Held weapons (melee, missile launchers, ammo, casters) are authored along
+  // their long axis and render upside-down under the plain item pose (which is
+  // tuned for armor/clothing). weaponMode drops the 180° roll so they stand
+  // point-up. In editor mode we read the live WeenieType; nav/QuestForge callers
+  // pass opts.weapon so model-cycling keeps the same orientation.
+  var _WEAPON_WT={3:1,4:1,5:1,6:1,35:1};
+  _mp.weaponMode = _useEditor ? !!_WEAPON_WT[_wt] : !!(opts&&opts.weapon);
 
   // Armor/clothing weenies point their Setup at base body parts; the
   // ClothingBase DID (type 7, 0x10xxxxxx) swaps in the armor models/textures.
@@ -15000,6 +15377,18 @@ function _mpBuildNav(ctype, curSetupHex, onSelect){
   return {list:list, index:idx<0?0:idx, onSelect:onSelect};
 }
 
+// Build a nav descriptor from the item catalog for a WeenieType, scoped to the
+// current item's subtype (weapon skill / armor coverage / …). nav.item marks it
+// as an item nav so the viewer uses the item pose. Returns null when the type
+// has no catalog models.
+function _mpBuildItemNav(key, curSetupHex, onSelect){
+  var list=_itemSetupList(key);
+  if(!list||!list.length) return null;
+  var cur=String(curSetupHex||'').toUpperCase();
+  var idx=list.findIndex(function(e){return e.s.toUpperCase()===cur;});
+  return {list:list, index:idx<0?0:idx, onSelect:onSelect, item:true, catalogKey:key};
+}
+
 // Show/hide + label the nav controls to match the current _mp.nav.
 function _mpRenderNavUI(){
   var has=!!(_mp.nav&&_mp.nav.list&&_mp.nav.list.length>1);
@@ -15022,7 +15411,13 @@ function _mpNavStep(dir){
   var nav=_mp.nav, n=nav.list.length;
   nav.index=((nav.index+dir)%n+n)%n;
   var e=nav.list[nav.index];
-  openModelPreview(e.s, e.n, {creature:true, mot:e.mt||'', clo:e.cb||'',
+  // Item nav uses the item pose; creature nav uses the upright pose. For armor
+  // (catalogKey 2) each model's orientation depends on its coverage — a helm
+  // (HeadWear bit) uses the head pose, everything else the item pose. Weapons
+  // keep the weapon orientation across cycling.
+  var _isHead = nav.catalogKey===2 && e.sub!=null && (parseInt(e.sub)&1);
+  openModelPreview(e.s, e.n, {creature:!nav.item, weapon:!_isHead && _mp.weaponMode,
+    head:_isHead, mot:e.mt||'', clo:e.cb||'',
     palTpl:(e.pi!=null?String(e.pi):''), nav:nav});
 }
 
@@ -15041,8 +15436,18 @@ function _previewSetupFromEditor(){
   var sRow=(typeof extraDID!=='undefined'?extraDID:[]).find(function(x){return parseInt(x.type)===1;});
   var setupHex=sRow?String(sRow.value||'0x00000000'):'0x00000000';
   var ctRow=(typeof extraInt!=='undefined'?extraInt:[]).find(function(x){return parseInt(x.type)===2;});
-  var ctype=ctRow?parseInt(ctRow.value):31;
-  var nav=_mpBuildNav(ctype, setupHex, function(e){ _pickCreatureSetup(e.k||e.s); });
+  var nav;
+  var ck=_curItemCatalogKey();
+  var itemList=(_ISETUPS&&ck!=null)?_ISETUPS[String(ck)]:null;
+  if(itemList&&itemList.length){
+    // The WeenieType decides: any type with an item catalog (weapons, armor,
+    // shields, portals, …) cycles the item catalog — even if a stray
+    // CreatureType int row is present. Only genuine creature types (10/12/…,
+    // absent from the item catalog) fall through to the creature catalog below.
+    nav=_mpBuildItemNav(ck, setupHex, function(e){ _pickItemSetup(e.k||e.s); });
+  }else if(ctRow){
+    nav=_mpBuildNav(parseInt(ctRow.value), setupHex, function(e){ _pickCreatureSetup(e.k||e.s); });
+  }
   openModelPreview(setupHex, 'Setup '+setupHex, {editor:true, nav:nav});
 }
 
@@ -15429,6 +15834,14 @@ document.addEventListener('DOMContentLoaded', function(){
         onclick="_tmplSwitchType('door')">Door</button>
       <button class="prop-stab" id="tmplTab_chest"
         onclick="_tmplSwitchType('chest')">Chest</button>
+      <button class="prop-stab" id="tmplTab_key"
+        onclick="_tmplSwitchType('key')">Key</button>
+      <button class="prop-stab" id="tmplTab_crafttool"
+        onclick="_tmplSwitchType('crafttool')">Craft Tool</button>
+      <button class="prop-stab" id="tmplTab_baseitem"
+        onclick="_tmplSwitchType('baseitem')">Base Item</button>
+      <button class="prop-stab" id="tmplTab_structure"
+        onclick="_tmplSwitchType('structure')">Structure/Decor</button>
       <button class="prop-stab" id="tmplTab_event"
         onclick="_tmplSwitchType('event')">Event Controller</button>
       <button class="prop-stab" id="tmplTab_stopgap"

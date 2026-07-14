@@ -57,3 +57,11 @@ aceforge/web/icons.js
 # Users install via the separate 3-Core weenie database release asset.
 aceforge/references/weenie_index.json
 aceforge/references/weenies/
+
+# AC client DAT files — copyrighted Turbine/AC client assets, ~500-700MB each.
+# LOCAL ONLY: used at dev time to parse real 3D/model data. NEVER commit.
+# Covers any *.dat anywhere plus the conventional folder names.
+*.dat
+dat/
+DAT Files/
+DAT_Files/

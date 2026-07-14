@@ -2142,6 +2142,68 @@ Start with: /* ===== FILE: {fname} ===== */
 
     # ── DAT Loader — 3D model preview ────────────────────────────────────────
 
+    # The AC client DAT set. portal is the only one the 3D preview needs today;
+    # the rest (cell=landblocks/terrain, highres=hi-res textures, local=UI
+    # strings) are discovered too so future features can use them without any
+    # extra wiring. Maps the client filename → the config key its path is cached
+    # under.
+    _DAT_FILES = {
+        "portal":  ("client_portal.dat",        "portal_dat"),
+        "cell":    ("client_cell_1.dat",         "cell_dat"),
+        "highres": ("client_highres.dat",        "highres_dat"),
+        "local":   ("client_local_English.dat",  "local_dat"),
+    }
+
+    def _dat_search_folders(self) -> list:
+        """Conventional local folders that may hold the DAT set, most-likely
+        first. Includes the OneDrive-redirected Documents (Known-Folder-Move)."""
+        repo_root = Path(__file__).resolve().parent.parent
+        folders = [
+            repo_root / "dat",
+            repo_root / "DAT Files",
+            Path.home() / "Documents" / "DAT Files",
+            Path.home() / "Documents" / "DAT",
+            Path.home() / "Desktop" / "DAT Files",
+        ]
+        onedrive = os.environ.get("OneDrive") or os.environ.get("OneDriveConsumer")
+        if onedrive:
+            folders.insert(0, Path(onedrive) / "Documents" / "DAT Files")
+        return folders
+
+    def _resolve_dat(self, which: str = "portal") -> str:
+        """Return a usable path for one of the client DAT files.
+
+        Prefers the path configured via Settings, else auto-discovers the file
+        in conventional local folders and caches the hit back to config. Every
+        folder here is gitignored or outside the repo, so the copyrighted DATs
+        (~1.3GB for the full set) are never committed.
+        """
+        filename, cfg_key = self._DAT_FILES.get(which, self._DAT_FILES["portal"])
+        configured = self.config.get(cfg_key, "")
+        if configured and Path(configured).exists():
+            return configured
+        for folder in self._dat_search_folders():
+            f = folder / filename
+            if f.exists():
+                self.config.set(cfg_key, str(f))
+                self.config.save()
+                return str(f)
+        return configured
+
+    def _resolve_portal_dat(self) -> str:
+        """Back-compat shim — the 3D preview resolves the portal DAT."""
+        return self._resolve_dat("portal")
+
+    def get_dat_status(self) -> dict:
+        """Discovery status for the whole DAT set — {key: {configured, path}}."""
+        out = {}
+        for which, (filename, cfg_key) in self._DAT_FILES.items():
+            path = self._resolve_dat(which)
+            out[which] = {"filename": filename,
+                          "path": path,
+                          "configured": bool(path and Path(path).exists())}
+        return out
+
     def browse_portal_dat(self) -> dict:
         """Open a file dialog for the user to locate client_portal.dat."""
         try:
@@ -2187,7 +2249,7 @@ Start with: /* ===== FILE: {fname} ===== */
 
     def get_portal_dat_status(self) -> dict:
         """Return the configured DAT path and whether it's valid."""
-        path = self.config.get("portal_dat", "")
+        path = self._resolve_portal_dat()
         if not path:
             return {"configured": False, "path": ""}
         from pathlib import Path
@@ -2255,7 +2317,7 @@ Start with: /* ===== FILE: {fname} ===== */
             return {"success": True,
                     "data_b64": base64.b64encode(cached.read_bytes()).decode()}
 
-        path = self.config.get("portal_dat", "")
+        path = self._resolve_portal_dat()
         if not path or not Path(path).exists():
             return {"success": False, "error": "client_portal.dat not configured"}
 
