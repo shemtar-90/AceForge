@@ -1192,7 +1192,10 @@ const ALL_SKILLS=[
   [52,'DirtyFighting'],[53,'Challenge'],[54,'Summoning'],
 ];
 const SKILL_SAC=[[1,'Untrained'],[2,'Trained'],[3,'Specialized']];
-const WEENIE_TYPES=[[1,'Generic'],[2,'Clothing/Armor'],[3,'MissileLauncher'],[4,'Missile'],[6,'MeleeWeapon'],[7,'Portal'],[8,'Book'],[9,'Coin'],[10,'Creature'],[12,'Vendor'],[18,'Food'],[19,'Door'],[20,'Chest'],[21,'Container'],[22,'Key'],[24,'PressurePlate'],[25,'LifeStone'],[26,'Switch'],[28,'Healer'],[29,'LightSource'],[32,'SpellComponent'],[34,'Scroll'],[35,'Caster'],[37,'ManaStone'],[38,'Gem'],[51,'Stackable']];
+// Full ACE WeenieType enum. Names for the added types were scraped from the
+// base weenie DB's /* … */ comments (build was missing CraftTool 44, House 53,
+// Ammunition 5, and ~30 others). Curated labels kept for the common item types.
+const WEENIE_TYPES=[[1,'Generic'],[2,'Clothing/Armor'],[3,'MissileLauncher'],[4,'Missile'],[5,'Ammunition'],[6,'MeleeWeapon'],[7,'Portal'],[8,'Book'],[9,'Coin'],[10,'Creature'],[11,'Admin'],[12,'Vendor'],[13,'HotSpot'],[14,'Corpse'],[15,'Cow'],[17,'Machine'],[18,'Food'],[19,'Door'],[20,'Chest'],[21,'Container'],[22,'Key'],[23,'Lockpick'],[24,'PressurePlate'],[25,'LifeStone'],[26,'Switch'],[27,'PKModifier'],[28,'Healer'],[29,'LightSource'],[30,'Allegiance'],[32,'SpellComponent'],[33,'ProjectileSpell'],[34,'Scroll'],[35,'Caster'],[36,'Channel'],[37,'ManaStone'],[38,'Gem'],[39,'AdvocateFane'],[40,'AdvocateItem'],[41,'Sentinel'],[42,'GSpellEconomy'],[43,'LSpellEconomy'],[44,'CraftTool'],[45,'LScoreKeeper'],[46,'GScoreKeeper'],[47,'GScoreGatherer'],[48,'ScoreBook'],[49,'EventCoordinator'],[51,'Stackable'],[52,'HUD'],[53,'House'],[54,'Deed'],[55,'SlumLord'],[56,'Hook'],[57,'Storage'],[58,'BootSpot'],[59,'HousePortal'],[61,'GamePiece'],[62,'SkillAlterationDevice'],[63,'AttributeTransferDevice'],[64,'Hooker'],[65,'AllegianceBindstone'],[66,'InGameStatKeeper']];
 const PROP_INT={
   1:'ItemType',
   2:'CreatureType',
@@ -2905,6 +2908,11 @@ const PROP_DROPDOWNS={
   PROP_DROPDOWNS['68']=rows;   // TargetingTactic
   PROP_DROPDOWNS['70']=rows;   // HomesickTargetingTactic (same enum)
 })();
+
+// TargetType (Int 94) uses the ItemType enum. It's a bitmask, so combined values
+// won't be in the list — the property-row dropdown preserves any out-of-list
+// value as "custom / not in list", which keeps user-entered bitmask combos.
+if(typeof PROP_DROPDOWNS!=='undefined' && PROP_DROPDOWNS['1']) PROP_DROPDOWNS['94']=PROP_DROPDOWNS['1'];
 
 
 
@@ -5968,7 +5976,9 @@ function _nestSQLEmotes(flatEmotes){
       prob:        parseFloat(em.probability)||1,
       questFilter: em.quest||'',
       wcidFilter:  '',
-      vendorType:  1,
+      // Preserve the imported vendor_Type (Open/Close/Sell/Buy/Heartbeat) — was
+      // hardcoded to 1, which flattened every vendor emote onto "Open".
+      vendorType:  (em.vendorType!=null && em.vendorType!=='' ? parseInt(em.vendorType) : null),
       actions:     nestActions(em.actions),
     };
   });
@@ -7567,7 +7577,7 @@ var STATIC_TEMPLATES = {
 
 function openTemplateModal(){
   var ov = document.getElementById('weenieTemplateModal');
-  if(ov){ ov.style.display='flex'; _tmplSwitchType('creature_mob'); }
+  if(ov){ ov.style.display='flex'; _tmplSwitchGroup('Creature'); }
 }
 function closeTemplateModal(){
   var ov = document.getElementById('weenieTemplateModal');
@@ -7575,14 +7585,56 @@ function closeTemplateModal(){
 }
 
 // ── Type switch ────────────────────────────────────────────────────────────
+// Two-level tabs: a main category, each holding several template sub-types.
+var TMPL_GROUPS = [
+  ['Creature',        [['creature_mob','Creature (Mob)'],['creature_npc','Creature (NPC)']]],
+  ['Generator',       [['generator','Generator'],['event','Event Controller'],['stopgap','Stopgap']]],
+  ['Item',            [['key','Key'],['crafttool','Craft Tool'],['baseitem','Base Item']]],
+  ['Structure/Decor', [['door','Door'],['chest','Chest'],['structure','Other']]],
+];
 var _tmplType = 'creature_mob';
+var _tmplGroup = 'Creature';
+
+function _tmplGroupOf(type){
+  for(var i=0;i<TMPL_GROUPS.length;i++){
+    if(TMPL_GROUPS[i][1].some(function(s){return s[0]===type;})) return TMPL_GROUPS[i][0];
+  }
+  return TMPL_GROUPS[0][0];
+}
+function _tmplRenderTabs(){
+  var main=document.getElementById('tmplMainTabs');
+  var sub=document.getElementById('tmplSubTabs');
+  if(!main||!sub) return;
+  // Main categories = filled pill buttons (bold, uppercase). Sub-types =
+  // lighter underline tabs. Visually distinct so the two levels don't blur.
+  main.innerHTML=TMPL_GROUPS.map(function(g){
+    var on=g[0]===_tmplGroup;
+    return '<button onclick="_tmplSwitchGroup(\''+g[0].replace(/'/g,"\\'")+'\')" '
+      +'style="font-family:var(--ui-font);font-size:11px;font-weight:700;letter-spacing:.07em;'
+      +'text-transform:uppercase;padding:8px 16px;border:1px solid '+(on?'var(--crimson)':'var(--border)')+';'
+      +'border-radius:4px;cursor:pointer;background:'+(on?'var(--crimson)':'transparent')+';'
+      +'color:'+(on?'#fff':'var(--ink-mid)')+'">'+escHtml(g[0])+'</button>';
+  }).join('');
+  var grp=TMPL_GROUPS.find(function(g){return g[0]===_tmplGroup;})||TMPL_GROUPS[0];
+  sub.innerHTML=grp[1].map(function(s){
+    var on=s[0]===_tmplType;
+    return '<button onclick="_tmplSwitchType(\''+s[0]+'\')" '
+      +'style="font-family:var(--ui-font);font-size:10px;font-weight:600;letter-spacing:.04em;'
+      +'padding:5px 12px 6px;border:none;border-bottom:2px solid '+(on?'var(--crimson)':'transparent')+';'
+      +'cursor:pointer;background:transparent;color:'+(on?'var(--crimson)':'var(--ink-dim)')+'">'+escHtml(s[1])+'</button>';
+  }).join('');
+}
+function _tmplSwitchGroup(g){
+  _tmplGroup=g;
+  var grp=TMPL_GROUPS.find(function(x){return x[0]===g;})||TMPL_GROUPS[0];
+  _tmplType=grp[1][0][0];          // first sub-type of the group
+  _tmplRenderTabs();
+  _tmplRenderOptions();
+}
 function _tmplSwitchType(t){
-  _tmplType = t;
-  var tabs = ['creature_mob','creature_npc','generator','door','chest','key','crafttool','baseitem','structure','event','stopgap'];
-  tabs.forEach(function(id){
-    var btn = document.getElementById('tmplTab_'+id);
-    if(btn) btn.classList.toggle('active', id===t);
-  });
+  _tmplType=t;
+  _tmplGroup=_tmplGroupOf(t);
+  _tmplRenderTabs();
   _tmplRenderOptions();
 }
 
@@ -7621,6 +7673,102 @@ function _tmplGetPickerVal(id){
   return checked ? parseInt(checked.value) : 0;
 }
 
+// <option>s for a CreatureType <select> (from CREATURE_TYPES).
+function _tmplCreatureTypeOpts(sel){
+  return (typeof CREATURE_TYPES!=='undefined'?CREATURE_TYPES:[[0,'None']]).map(function(ct){
+    return '<option value="'+ct[0]+'"'+(ct[0]===sel?' selected':'')+'>'+ct[0]+' · '+escHtml(ct[1])+'</option>';
+  }).join('');
+}
+// Segmented-control button (radio styled as a pill); read via _tmplSegVal(name).
+function _tmplSegBtn(name,value,label,checked){
+  return '<label style="flex:1;text-align:center;position:relative;padding:8px 10px;border:1px solid '
+    +(checked?'var(--crimson)':'var(--border)')+';border-radius:4px;cursor:pointer;font-family:var(--ui-font);'
+    +'font-size:11px;font-weight:700;background:'+(checked?'rgba(192,64,64,.10)':'var(--parch-dk)')+';'
+    +'color:'+(checked?'var(--crimson)':'var(--ink-mid)')+'">'
+    +'<input type="radio" name="'+name+'" value="'+value+'"'+(checked?' checked':'')
+    +' onchange="_tmplSegSync(\''+name+'\')" style="position:absolute;opacity:0;pointer-events:none">'
+    +escHtml(label)+'</label>';
+}
+function _tmplSegVal(name){
+  var c=document.querySelector('input[name="'+name+'"]:checked');
+  return c?c.value:'';
+}
+function _tmplSegSync(name){
+  document.querySelectorAll('input[name="'+name+'"]').forEach(function(r){
+    var lbl=r.closest('label'); if(!lbl) return; var on=r.checked;
+    lbl.style.background=on?'rgba(192,64,64,.10)':'var(--parch-dk)';
+    lbl.style.color=on?'var(--crimson)':'var(--ink-mid)';
+    lbl.style.borderColor=on?'var(--crimson)':'var(--border)';
+  });
+}
+// Apply a CreatureType's base 3D model (Setup + companion DIDs) into a verbatim
+// SQL template's DID block, and set its CreatureType int. Used by the Mob/NPC
+// templates so picking a Creature Type also changes the model. Non-human types
+// drop the human-only face-texture DID rows (9,10,11,15,16,17).
+function _tmplApplyCreatureType(sql, ctype){
+  ctype=parseInt(ctype);
+  if(!ctype) return sql;
+  // CreatureType int (type 2) — anchored on its /* CreatureType comment.
+  sql=sql.replace(/(\(\s*\d+\s*,\s*2\s*,\s*)\d+(\s*\)\s*\/\* CreatureType)/,'$1'+ctype+'$2');
+  var list=(typeof _CSETUPS!=='undefined'&&_CSETUPS)?_CSETUPS[String(ctype)]:null;
+  var ent=(list&&list.length)?list[0]:null;
+  if(!ent) return sql;
+  // Rewrite ONLY inside the DID block, so DID types 1/2 (Setup/MotionTable)
+  // don't collide with the int rows of the same type (ItemType/CreatureType).
+  sql=sql.replace(/INSERT INTO `weenie_properties_d_i_d`[\s\S]*?;/, function(did){
+    function setD(t,hex){
+      if(!hex) return;
+      did=did.replace(new RegExp('(\\(\\s*\\d+\\s*,\\s*'+t+'\\s*,\\s*)(?:0x[0-9A-Fa-f]+|\\d+)(\\s*\\))'), '$1'+hex+'$2');
+    }
+    setD(1,ent.s); setD(2,ent.mt); setD(3,ent.st); setD(4,ent.ct4); setD(6,ent.pb);
+    if(ctype!==31){
+      // strip human face-texture / palette DID rows (types 9,10,11,15,16,17)
+      did=did.replace(/\n\s*,\s*\(\s*\d+\s*,\s*(?:9|10|11|15|16|17)\s*,[^)]*\)\s*\/\*[^*]*\*\//g,'');
+    }
+    return did;
+  });
+  return sql;
+}
+
+// <option>s for the ItemType/TargetType bitmask list (reuses the ItemType enum).
+function _tmplItemTypeOpts(sel){
+  var list=(typeof PROP_DROPDOWNS!=='undefined'&&PROP_DROPDOWNS['1'])?PROP_DROPDOWNS['1']:[];
+  return list.map(function(o){
+    return '<option value="'+o[0]+'"'+(o[0]===sel?' selected':'')+'>'+o[0]+' · '+escHtml(o[1])+'</option>';
+  }).join('');
+}
+// Visual grid picker built from an item-model catalog (_ISETUPS[key]); each cell
+// shows the model's icon + name. Read the choice with _tmplGetPickerVal(id).
+function _tmplCatalogPickerHtml(id, catKey){
+  var list=(typeof _ISETUPS!=='undefined'&&_ISETUPS&&_ISETUPS[catKey])?_ISETUPS[catKey]:[];
+  if(!list.length) return '<div class="note">No models available for this type.</div>';
+  var rows=list.slice(0,150).map(function(s,i){
+    var iurl=s.i?_tmplIconUrl(s.i):'';
+    var img=iurl?'<img src="'+iurl+'" style="width:36px;height:36px;object-fit:contain;image-rendering:pixelated;display:block;margin:0 auto 2px" onerror="this.style.display=\'none\'">':'';
+    return '<label style="display:flex;flex-direction:column;align-items:center;position:relative;padding:6px 4px;'
+      +'border:2px solid var(--border);border-radius:3px;cursor:pointer;background:var(--parch-dk);min-width:68px;flex-shrink:0" '
+      +'title="'+escHtml(s.n)+' ('+s.s+')">'
+      +'<input type="radio" name="'+id+'" value="'+i+'"'+(i===0?' checked':'')+' style="position:absolute;opacity:0;pointer-events:none">'
+      +img+'<span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-dim);text-align:center;line-height:1.2;word-break:break-word;max-width:66px">'+escHtml(s.n)+'</span></label>';
+  }).join('');
+  return '<div id="'+id+'_grid" style="display:flex;flex-wrap:wrap;gap:6px;max-height:220px;overflow-y:auto;'
+    +'padding:8px;background:var(--parch-lt);border:1px solid var(--border);border-radius:3px">'+rows+'</div>';
+}
+// Base Item / Structure: load the template, then open the 3D model picker for
+// its type; selecting a model sets the Setup and closes both dialogs.
+function _tmplPickModel(type){
+  if(!STATIC_TEMPLATES[type]) return;
+  loadTemplate();   // imports the static template (closes the template modal)
+  setTimeout(function(){
+    var key=_curItemCatalogKey();
+    var sRow=(typeof extraDID!=='undefined')?extraDID.find(function(x){return parseInt(x.type)===1;}):null;
+    var setupHex=sRow?String(sRow.value||'0x00000000'):'0x00000000';
+    var nav=_mpBuildItemNav(key, setupHex, function(e){ _pickItemSetup(e.k||e.s); closeModelPreview(); });
+    if(!nav){ return; }
+    openModelPreview(setupHex, 'Pick a model', {editor:true, nav:nav});
+  }, 350);
+}
+
 function _tmplRenderOptions(){
   var wrap = document.getElementById('tmplOptions');
   if(!wrap) return;
@@ -7631,18 +7779,25 @@ function _tmplRenderOptions(){
       <div class="fl" style="margin-bottom:4px">Level (used to auto-scale attributes &amp; skills)</div>
       <input type="number" id="tmplMobLevel" value="50" min="1" max="275"
         style="width:100%;margin-bottom:10px">
+      <div class="fl" style="margin-bottom:4px">Creature Type</div>
+      <select id="tmplMobCreatureType" style="width:100%;margin-bottom:10px">${_tmplCreatureTypeOpts(0)}</select>
       <div class="note" style="margin-bottom:0">
         Base: Drudge Prowler. Stats scale linearly from level 1 baseline to level 275 cap.
-        Attributes, vitals, and skills are all scaled. Tune per-property after loading.
+        Pick a Creature Type to also set its base 3D model (Setup + Motion/Sound/Palette).
+        Tune per-property after loading.
       </div>`;
 
   } else if(_tmplType === 'creature_npc'){
     html = `
       <div class="fl" style="margin-bottom:4px">NPC Type</div>
-      <select id="tmplNpcType" style="width:100%;margin-bottom:0">
-        <option value="quest">Quest NPC</option>
-        <option value="vendor">Vendor NPC</option>
-      </select>`;
+      <div id="tmplNpcTypeSeg" style="display:flex;gap:8px;margin-bottom:12px">
+        ${_tmplSegBtn('tmplNpcType','quest','Quest NPC',true)}
+        ${_tmplSegBtn('tmplNpcType','vendor','Vendor NPC',false)}
+      </div>
+      <div class="fl" style="margin-bottom:4px">Creature Type</div>
+      <select id="tmplNpcCreatureType" style="width:100%;margin-bottom:0">${_tmplCreatureTypeOpts(31)}</select>
+      <div class="note" style="margin-top:8px;margin-bottom:0">Human (31) uses the full template with face textures.
+        Choosing another type swaps the base 3D model to that creature.</div>`;
 
   } else if(_tmplType === 'generator'){
     html = `
@@ -7697,17 +7852,30 @@ function _tmplRenderOptions(){
       <div class="fl" style="margin-bottom:6px">Appearance</div>
       ${_tmplSetupPickerHtml('tmplChestSetup', TMPL_CHEST_SETUPS)}`;
 
-  } else if(STATIC_TEMPLATES[_tmplType]){
-    // Static SQL templates (Key, Craft Tool, Base Item, Structure/Decoration) —
-    // editable WCID + Name; the rest of the weenie loads verbatim from the file.
-    var _st=STATIC_TEMPLATES[_tmplType];
+  } else if(_tmplType === 'key'){
     html = `
-      <div class="fl" style="margin-bottom:4px">WCID</div>
-      <input type="number" id="tmplStaticWcid" value="${_st.wcid}" style="width:100%;margin-bottom:10px">
-      <div class="fl" style="margin-bottom:4px">Name</div>
-      <input type="text" id="tmplStaticName" value="${escHtml(_st.name)}" style="width:100%;margin-bottom:10px">
-      <div class="note" style="margin-bottom:0">Loads the ${escHtml(_st.label)} template. Setup, Icon and all
-      properties come from the template — change the 3D model and other fields after loading.</div>`;
+      <div class="fl" style="margin-bottom:4px">KeyCode</div>
+      <input type="text" id="tmplKeyCode" placeholder="KeyCode" value="" style="width:100%;margin-bottom:12px">
+      <div class="fl" style="margin-bottom:6px">Appearance</div>
+      ${_tmplCatalogPickerHtml('tmplKeySetup','22')}`;
+
+  } else if(_tmplType === 'crafttool'){
+    html = `
+      <div class="fl" style="margin-bottom:4px">Target Type <span class="fc">Int 94</span></div>
+      <select id="tmplCraftTarget" style="width:100%;margin-bottom:8px">${_tmplItemTypeOpts(33025)}</select>
+      <div class="note" style="margin-bottom:0">What this tool can be used on. TargetType is a bitmask —
+      combine values in the builder's TargetType row after loading.</div>`;
+
+  } else if(_tmplType === 'baseitem' || _tmplType === 'structure'){
+    var _stLabel = STATIC_TEMPLATES[_tmplType].label;
+    html = `
+      <div class="fl" style="margin-bottom:6px">3D Model</div>
+      <button onclick="_tmplPickModel('${_tmplType}')" style="width:100%;padding:10px;font-family:var(--ui-font);
+        font-size:11px;font-weight:700;letter-spacing:.05em;border:1px solid var(--crimson);background:transparent;
+        color:var(--crimson);cursor:pointer;border-radius:4px">&#x1F4E6; Choose 3D Model &amp; Load…</button>
+      <div class="note" style="margin-top:8px;margin-bottom:0">Loads the ${escHtml(_stLabel)} template and opens the
+      3D model picker — choosing a model sets its Setup and closes this dialog. Or just click Load Template to keep the
+      default model.</div>`;
   } else if(_tmplType === 'event'){
     html = '<div class="note">Loads Event Controller (WCID 70820). Start/stop server events. Load Stopgap separately via its own tab.</div>';
   } else if(_tmplType === 'stopgap'){
@@ -7898,11 +8066,29 @@ function _buildTemplateSql(){
 function _tmplStaticSQL(type){
   var st=STATIC_TEMPLATES[type];
   if(!st) return null;
-  var wcid=parseInt((document.getElementById('tmplStaticWcid')||{}).value)||st.wcid;
-  var name=((document.getElementById('tmplStaticName')||{}).value||st.name).replace(/'/g,"''");
-  var sql=st.raw.split(String(st.wcid)).join(String(wcid));
-  // Replace the Name string value (…, 1, '<old>') /* Name */
-  sql=sql.replace(/(,\s*1,\s*')(?:[^']|'')*('\)\s*\/\* Name \*\/)/, '$1'+name+'$2');
+  var sql=st.raw;
+  // WCID / Name fields are only present for some template types now.
+  var wEl=document.getElementById('tmplStaticWcid');
+  if(wEl){ var wcid=parseInt(wEl.value)||st.wcid; sql=sql.split(String(st.wcid)).join(String(wcid)); }
+  var nEl=document.getElementById('tmplStaticName');
+  if(nEl){ var name=(nEl.value||st.name).replace(/'/g,"''");
+    sql=sql.replace(/(,\s*1,\s*')(?:[^']|'')*('\)\s*\/\* Name \*\/)/, '$1'+name+'$2'); }
+
+  if(type==='key'){
+    // KeyCode string — default to "KeyCode" when left blank.
+    var kc=(((document.getElementById('tmplKeyCode')||{}).value)||'').trim()||'KeyCode';
+    sql=sql.replace(/(,\s*13,\s*')(?:[^']|'')*('\)\s*\/\* KeyCode \*\/)/, '$1'+kc.replace(/'/g,"''")+'$2');
+    // Appearance (Setup + Icon) from the catalog picker.
+    var kl=(_ISETUPS&&_ISETUPS['22'])?_ISETUPS['22'][_tmplGetPickerVal('tmplKeySetup')]:null;
+    if(kl){
+      if(kl.s) sql=sql.replace(/(\(\s*\d+\s*,\s*1\s*,\s*)0x[0-9A-Fa-f]+(\s*\)\s*\/\* Setup)/, '$1'+kl.s+'$2');
+      if(kl.i) sql=sql.replace(/(\(\s*\d+\s*,\s*8\s*,\s*)0x[0-9A-Fa-f]+(\s*\)\s*\/\* Icon)/, '$1'+kl.i+'$2');
+    }
+  }
+  if(type==='crafttool'){
+    var tt=(document.getElementById('tmplCraftTarget')||{}).value;
+    if(tt) sql=sql.replace(/(,\s*94,\s*)[-0-9]+(\s*\))/, '$1'+tt+'$2');
+  }
   return sql;
 }
 
@@ -7938,7 +8124,7 @@ function _tmplMobSQL(now){
   var xp  = scale(125000, 8000000);
   var lum = scale(  5000,  200000);
 
-  return `DELETE FROM \`weenie\` WHERE \`class_Id\` = 800000;
+  var _mobSql = `DELETE FROM \`weenie\` WHERE \`class_Id\` = 800000;
 
 INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)
 VALUES (800000, 'CreatureMobTemplate', 10, '${now}') /* Creature */;
@@ -8050,62 +8236,25 @@ VALUES (800000,  6, 0, 2, 0, ${melee_def},  0, 0) /* MeleeDefense   Trained */
      , (800000, 16, 0, 2, 0, ${mana_conv},  0, 0) /* ManaConversion Trained */
      , (800000, 45, 0, 2, 0, ${light_wpn},  0, 0) /* LightWeapons   Trained */
      , (800000, 51, 0, 2, 0, ${sneak_att},  0, 0) /* SneakAttack    Trained */;`;
+  var _mobCt=(document.getElementById('tmplMobCreatureType')||{}).value;
+  return _mobCt ? _tmplApplyCreatureType(_mobSql, _mobCt) : _mobSql;
 }
 
 // ── Creature (NPC) ─────────────────────────────────────────────────────────
+var NPC_TEMPLATES = {
+  vendor: "DELETE FROM `weenie` WHERE `class_Id` = 810000;\n\nINSERT INTO `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)\nVALUES (810000, 'CreatureVendorTemplate', 10, '2026-06-28 14:42:24');\n\nINSERT INTO `weenie_properties_int` (`object_Id`, `type`, `value`)\nVALUES (810000,   1,         16) /* ItemType - Creature */\n     , (810000,   2,         31) /* CreatureType - Human */\n     , (810000,   6,         -1) /* ItemsCapacity */\n     , (810000,   7,         -1) /* ContainersCapacity */\n     , (810000,   8,        120) /* Mass */\n     , (810000,  16,         32) /* ItemUseable - Remote */\n     , (810000,  25,        50) /* Level */\n     , (810000,  27,          0) /* ArmorType - None */\n     , (810000,  74, 1208248231) /* MerchandiseItemTypes - VendorShopKeep */\n     , (810000,  75,          0) /* MerchandiseMinValue */\n     , (810000,  76,    1000000) /* MerchandiseMaxValue */\n     , (810000,  93,    2098200) /* PhysicsState - ReportCollisions, IgnoreCollisions, Gravity, ReportCollisionsAsEnvironment */\n     , (810000, 113,          1) /* Gender - Male */\n     , (810000, 126,        125) /* VendorHappyMean */\n     , (810000, 127,        125) /* VendorHappyVariance */\n     , (810000, 133,          4) /* ShowableOnRadar - ShowAlways */\n     , (810000, 134,         16) /* PlayerKillerStatus - RubberGlue */\n     , (810000, 146,         72) /* XpOverride */\n     , (810000, 188,          1) /* HeritageGroup - Aluvian */;\n\nINSERT INTO `weenie_properties_bool` (`object_Id`, `type`, `value`)\nVALUES (810000,   1, True ) /* Stuck */\n     , (810000,  19, False) /* Attackable */;\n\nINSERT INTO `weenie_properties_float` (`object_Id`, `type`, `value`)\nVALUES (810000,   1,      60) /* HeartbeatInterval */\n     , (810000,   2,       0) /* HeartbeatTimestamp */;\n\nINSERT INTO `weenie_properties_string` (`object_Id`, `type`, `value`)\nVALUES (810000,   1, 'Creature Vendor Template') /* Name */;\n\nINSERT INTO `weenie_properties_d_i_d` (`object_Id`, `type`, `value`)\nVALUES (810000,   1,   33554433) /* Setup */\n     , (810000,   2,  150994945) /* MotionTable */\n     , (810000,   3,  536870913) /* SoundTable */\n     , (810000,   4,  805306368) /* CombatTable */\n     , (810000,   6,   67108990) /* PaletteBase */\n     , (810000,   8,  100667446) /* Icon */\n     , (810000,   9,   83890445) /* EyesTexture */\n     , (810000,  10,   83890560) /* NoseTexture */\n     , (810000,  11,   83890632) /* MouthTexture */\n     , (810000,  15,   67116995) /* HairPalette */\n     , (810000,  16,   67110064) /* EyesPalette */\n     , (810000,  17,   67109560) /* SkinPalette */;\n\nINSERT INTO `weenie_properties_attribute` (`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`)\nVALUES (810000,   1, 200, 0, 0) /* Strength */\n     , (810000,   2, 200, 0, 0) /* Endurance */\n     , (810000,   3, 200, 0, 0) /* Quickness */\n     , (810000,   4, 200, 0, 0) /* Coordination */\n     , (810000,   5, 200, 0, 0) /* Focus */\n     , (810000,   6, 200, 0, 0); /* Self */\n\nINSERT INTO `weenie_properties_attribute_2nd` (`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`, `current_Level`)\nVALUES (810000,   1,  1000, 0, 0, 1000) /* MaxHealth */\n     , (810000,   3,   500, 0, 0, 500) /* MaxStamina */\n     , (810000,   5,   500, 0, 0, 500); /* MaxMana */\n\t \nINSERT INTO `weenie_properties_body_part` (`object_Id`, `key`, `d_Type`, `d_Val`, `d_Var`, `base_Armor`, `armor_Vs_Slash`, `armor_Vs_Pierce`, `armor_Vs_Bludgeon`, `armor_Vs_Cold`, `armor_Vs_Fire`, `armor_Vs_Acid`, `armor_Vs_Electric`, `armor_Vs_Nether`, `b_h`, `h_l_f`, `m_l_f`, `l_l_f`, `h_r_f`, `m_r_f`, `l_r_f`, `h_l_b`, `m_l_b`, `l_l_b`, `h_r_b`, `m_r_b`, `l_r_b`)\nVALUES (810000,  0,  4,  0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0, 1, 0.33,    0,    0, 0.33,    0,    0, 0.33,    0,    0, 0.33,    0,    0) /* Head */\n     , (810000,  1,  4,  0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0, 2, 0.44, 0.17,    0, 0.44, 0.17,    0, 0.44, 0.17,    0, 0.44, 0.17,    0) /* Chest */\n     , (810000,  2,  4,  0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0, 3,    0, 0.17,    0,    0, 0.17,    0,    0, 0.17,    0,    0, 0.17,    0) /* Abdomen */\n     , (810000,  3,  4,  0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0, 1, 0.23, 0.03,    0, 0.23, 0.03,    0, 0.23, 0.03,    0, 0.23, 0.03,    0) /* UpperArm */\n     , (810000,  4,  4,  0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0, 2,    0,  0.3,    0,    0,  0.3,    0,    0,  0.3,    0,    0,  0.3,    0) /* LowerArm */\n     , (810000,  5,  4,  2, 0.75,    0,    0,    0,    0,    0,    0,    0,    0,    0, 2,    0,  0.2,    0,    0,  0.2,    0,    0,  0.2,    0,    0,  0.2,    0) /* Hand */\n     , (810000,  6,  4,  0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0, 3,    0, 0.13, 0.18,    0, 0.13, 0.18,    0, 0.13, 0.18,    0, 0.13, 0.18) /* UpperLeg */\n     , (810000,  7,  4,  0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0, 3,    0,    0,  0.6,    0,    0,  0.6,    0,    0,  0.6,    0,    0,  0.6) /* LowerLeg */\n     , (810000,  8,  4,  2, 0.75,    0,    0,    0,    0,    0,    0,    0,    0,    0, 3,    0,    0, 0.22,    0,    0, 0.22,    0,    0, 0.22,    0,    0, 0.22) /* Foot */;\n\nINSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)\nVALUES (810000,  2 /* Vendor */,    0.8, NULL, NULL, NULL, NULL, 1 /* Open */, NULL, NULL);\n\nSET @parent_id = LAST_INSERT_ID();\n\nINSERT INTO `weenie_properties_emote_action` (`emote_Id`, `order`, `type`, `delay`, `extent`, `motion`, `message`, `test_String`, `min`, `max`, `min_64`, `max_64`, `min_Dbl`, `max_Dbl`, `stat`, `display`, `amount`, `amount_64`, `hero_X_P_64`, `percent`, `spell_Id`, `wealth_Rating`, `treasure_Class`, `treasure_Type`, `p_Script`, `sound`, `destination_Type`, `weenie_Class_Id`, `stack_Size`, `palette`, `shade`, `try_To_Bond`, `obj_Cell_Id`, `origin_X`, `origin_Y`, `origin_Z`, `angles_W`, `angles_X`, `angles_Y`, `angles_Z`)\nVALUES (@parent_id,  0,  10 /* Tell */, 0, 1, NULL, 'Welcome! What''s your pleasure today?', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);\n\nINSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)\nVALUES (810000,  2 /* Vendor */,    0.8, NULL, NULL, NULL, NULL, 2 /* Close */, NULL, NULL);\n\nSET @parent_id = LAST_INSERT_ID();\n\nINSERT INTO `weenie_properties_emote_action` (`emote_Id`, `order`, `type`, `delay`, `extent`, `motion`, `message`, `test_String`, `min`, `max`, `min_64`, `max_64`, `min_Dbl`, `max_Dbl`, `stat`, `display`, `amount`, `amount_64`, `hero_X_P_64`, `percent`, `spell_Id`, `wealth_Rating`, `treasure_Class`, `treasure_Type`, `p_Script`, `sound`, `destination_Type`, `weenie_Class_Id`, `stack_Size`, `palette`, `shade`, `try_To_Bond`, `obj_Cell_Id`, `origin_X`, `origin_Y`, `origin_Z`, `angles_W`, `angles_X`, `angles_Y`, `angles_Z`)\nVALUES (@parent_id,  0,  10 /* Tell */, 0, 1, NULL, 'Thank you for your business. Please return soon.', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);\n\nINSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)\nVALUES (810000,  2 /* Vendor */,    0.8, NULL, NULL, NULL, NULL, 3 /* Sell */, NULL, NULL);\n\nSET @parent_id = LAST_INSERT_ID();\n\nINSERT INTO `weenie_properties_emote_action` (`emote_Id`, `order`, `type`, `delay`, `extent`, `motion`, `message`, `test_String`, `min`, `max`, `min_64`, `max_64`, `min_Dbl`, `max_Dbl`, `stat`, `display`, `amount`, `amount_64`, `hero_X_P_64`, `percent`, `spell_Id`, `wealth_Rating`, `treasure_Class`, `treasure_Type`, `p_Script`, `sound`, `destination_Type`, `weenie_Class_Id`, `stack_Size`, `palette`, `shade`, `try_To_Bond`, `obj_Cell_Id`, `origin_X`, `origin_Y`, `origin_Z`, `angles_W`, `angles_X`, `angles_Y`, `angles_Z`)\nVALUES (@parent_id,  0,  10 /* Tell */, 0, 1, NULL, 'You drive a hard bargain, my friend.', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);\n\nINSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)\nVALUES (810000,  2 /* Vendor */,    0.8, NULL, NULL, NULL, NULL, 4 /* Buy */, NULL, NULL);\n\nSET @parent_id = LAST_INSERT_ID();\n\nINSERT INTO `weenie_properties_emote_action` (`emote_Id`, `order`, `type`, `delay`, `extent`, `motion`, `message`, `test_String`, `min`, `max`, `min_64`, `max_64`, `min_Dbl`, `max_Dbl`, `stat`, `display`, `amount`, `amount_64`, `hero_X_P_64`, `percent`, `spell_Id`, `wealth_Rating`, `treasure_Class`, `treasure_Type`, `p_Script`, `sound`, `destination_Type`, `weenie_Class_Id`, `stack_Size`, `palette`, `shade`, `try_To_Bond`, `obj_Cell_Id`, `origin_X`, `origin_Y`, `origin_Z`, `angles_W`, `angles_X`, `angles_Y`, `angles_Z`)\nVALUES (@parent_id,  0,  10 /* Tell */, 0, 1, NULL, 'An excellent purchase.', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);\n\nINSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)\nVALUES (810000,  2 /* Vendor */,  0.125, NULL, NULL, NULL, NULL, 5 /* Heartbeat */, NULL, NULL);\n\nSET @parent_id = LAST_INSERT_ID();\n\nINSERT INTO `weenie_properties_emote_action` (`emote_Id`, `order`, `type`, `delay`, `extent`, `motion`, `message`, `test_String`, `min`, `max`, `min_64`, `max_64`, `min_Dbl`, `max_Dbl`, `stat`, `display`, `amount`, `amount_64`, `hero_X_P_64`, `percent`, `spell_Id`, `wealth_Rating`, `treasure_Class`, `treasure_Type`, `p_Script`, `sound`, `destination_Type`, `weenie_Class_Id`, `stack_Size`, `palette`, `shade`, `try_To_Bond`, `obj_Cell_Id`, `origin_X`, `origin_Y`, `origin_Z`, `angles_W`, `angles_X`, `angles_Y`, `angles_Z`)\nVALUES (@parent_id,  0,   5 /* Motion */, 0, 1, 318767239 /* Wave */, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);\n\nINSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)\nVALUES (810000,  2 /* Vendor */,   0.25, NULL, NULL, NULL, NULL, 5 /* Heartbeat */, NULL, NULL);\n\nSET @parent_id = LAST_INSERT_ID();\n\nINSERT INTO `weenie_properties_emote_action` (`emote_Id`, `order`, `type`, `delay`, `extent`, `motion`, `message`, `test_String`, `min`, `max`, `min_64`, `max_64`, `min_Dbl`, `max_Dbl`, `stat`, `display`, `amount`, `amount_64`, `hero_X_P_64`, `percent`, `spell_Id`, `wealth_Rating`, `treasure_Class`, `treasure_Type`, `p_Script`, `sound`, `destination_Type`, `weenie_Class_Id`, `stack_Size`, `palette`, `shade`, `try_To_Bond`, `obj_Cell_Id`, `origin_X`, `origin_Y`, `origin_Z`, `angles_W`, `angles_X`, `angles_Y`, `angles_Z`)\nVALUES (@parent_id,  0,   5 /* Motion */, 0, 1, 318767229 /* BowDeep */, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);\n\nINSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)\nVALUES (810000,  2 /* Vendor */,  0.375, NULL, NULL, NULL, NULL, 5 /* Heartbeat */, NULL, NULL);\n\nSET @parent_id = LAST_INSERT_ID();\n\nINSERT INTO `weenie_properties_emote_action` (`emote_Id`, `order`, `type`, `delay`, `extent`, `motion`, `message`, `test_String`, `min`, `max`, `min_64`, `max_64`, `min_Dbl`, `max_Dbl`, `stat`, `display`, `amount`, `amount_64`, `hero_X_P_64`, `percent`, `spell_Id`, `wealth_Rating`, `treasure_Class`, `treasure_Type`, `p_Script`, `sound`, `destination_Type`, `weenie_Class_Id`, `stack_Size`, `palette`, `shade`, `try_To_Bond`, `obj_Cell_Id`, `origin_X`, `origin_Y`, `origin_Z`, `angles_W`, `angles_X`, `angles_Y`, `angles_Z`)\nVALUES (@parent_id,  0,   5 /* Motion */, 0, 1, 318767238 /* Shrug */, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);\n\nINSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)\nVALUES (810000,  2 /* Vendor */,    0.5, NULL, NULL, NULL, NULL, 5 /* Heartbeat */, NULL, NULL);\n\nSET @parent_id = LAST_INSERT_ID();\n\nINSERT INTO `weenie_properties_emote_action` (`emote_Id`, `order`, `type`, `delay`, `extent`, `motion`, `message`, `test_String`, `min`, `max`, `min_64`, `max_64`, `min_Dbl`, `max_Dbl`, `stat`, `display`, `amount`, `amount_64`, `hero_X_P_64`, `percent`, `spell_Id`, `wealth_Rating`, `treasure_Class`, `treasure_Type`, `p_Script`, `sound`, `destination_Type`, `weenie_Class_Id`, `stack_Size`, `palette`, `shade`, `try_To_Bond`, `obj_Cell_Id`, `origin_X`, `origin_Y`, `origin_Z`, `angles_W`, `angles_X`, `angles_Y`, `angles_Z`)\nVALUES (@parent_id,  0,   5 /* Motion */, 0, 1, 318767235 /* Nod */, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);\n\nINSERT INTO `weenie_properties_create_list` (`object_Id`, `destination_Type`, `weenie_Class_Id`, `stack_Size`, `palette`, `shade`, `try_To_Bond`)\nVALUES (810000, 4,   377,  1, 0, 0, False); /* Shop: WCID 377 - Potion of Healing */\n",
+  quest: "DELETE FROM `weenie` WHERE `class_Id` = 810001;\n\nINSERT INTO `weenie` (`class_Id`, `class_Name`, `type`, `last_Modified`)\nVALUES (810001, 'CreatureQuestGiverNPC', 10, '2026-06-05 08:21:30');\n\nINSERT INTO `weenie_properties_int` (`object_Id`, `type`, `value`)\nVALUES (810001,   1,        16) /* ItemType */\n     , (810001,   2,        31) /* CreatureType */\n     , (810001,   6,        -1) /* ItemsCapacity */\n     , (810001,   7,        -1) /* ContainersCapacity */\n     , (810001,  16,        32) /* ItemUseable */\n     , (810001,  25,        50) /* Level */\n     , (810001,  93,   6292504) /* PhysicsState */\n     , (810001,  95,         8) /* RadarblipColor */\n     , (810001, 113,         1) /* Gender */\n     , (810001, 133,         4) /* ShowableOnRadar */\n     , (810001, 134,        16) /* PlayerKillerStatus */\n     , (810001, 146,         0) /* XpOverride */\n     , (810001, 188,         1) /* HeritageGroup */;\n\nINSERT INTO `weenie_properties_bool` (`object_Id`, `type`, `value`)\nVALUES (810001,   1, True ) /* Stuck */\n     , (810001,  19, False) /* Attackable */;\n\nINSERT INTO `weenie_properties_float` (`object_Id`, `type`, `value`)\nVALUES (810001,   1,      60) /* HeartbeatInterval */\n     , (810001,   2,       0) /* HeartbeatTimestamp */\n     , (810001,   3,       2) /* HealthRate */\n     , (810001,   4,       5) /* StaminaRate */\n     , (810001,   5,       1) /* ManaRate */\n     , (810001,  13,       1) /* ArmorModVsSlash */\n     , (810001,  14,       1) /* ArmorModVsPierce */\n     , (810001,  15,       1) /* ArmorModVsBludgeon */\n     , (810001,  16,       1) /* ArmorModVsCold */\n     , (810001,  17,       1) /* ArmorModVsFire */\n     , (810001,  18,       1) /* ArmorModVsAcid */\n     , (810001,  19,       1) /* ArmorModVsElectric */\n     , (810001,  31,      18) /* VisualAwarenessRange */\n     , (810001,  39,       1) /* DefaultScale */\n     , (810001,  54,       3) /* UseRadius */\n     , (810001,  64,       1) /* ResistSlash */\n     , (810001,  65,       1) /* ResistPierce */\n     , (810001,  66,       1) /* ResistBludgeon */\n     , (810001,  67,       1) /* ResistFire */\n     , (810001,  68,       1) /* ResistCold */\n     , (810001,  69,       1) /* ResistAcid */\n     , (810001,  70,       1) /* ResistElectric */\n     , (810001,  80,       2) /* AiUseMagicDelay */\n     , (810001, 104,      10) /* ObviousRadarRange */\n     , (810001, 122,       2) /* AiAcquireHealth */\n     , (810001, 125,       1) /* ResistHealthDrain */;\n\nINSERT INTO `weenie_properties_string` (`object_Id`, `type`, `value`)\nVALUES (810001,   1, 'Creature Quest Giver') /* Name */;\n\nINSERT INTO `weenie_properties_d_i_d` (`object_Id`, `type`, `value`)\nVALUES (810001,   1, 0x02000001) /* Setup */\n     , (810001,   2, 0x09000001) /* MotionTable */\n     , (810001,   3, 0x20000001) /* SoundTable */\n     , (810001,   6, 0x0400007E) /* PaletteBase */\n     , (810001,   8, 0x06001036) /* Icon */;\n\nINSERT INTO `weenie_properties_attribute` (`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`)\nVALUES (810001,   1, 120, 0, 0) /* Strength */\n     , (810001,   2, 120, 0, 0) /* Endurance */\n     , (810001,   3, 120, 0, 0) /* Quickness */\n     , (810001,   4, 120, 0, 0) /* Coordination */\n     , (810001,   5,  80, 0, 0) /* Focus */\n     , (810001,   6,  80, 0, 0); /* Self */\n\nINSERT INTO `weenie_properties_attribute_2nd` (`object_Id`, `type`, `init_Level`, `level_From_C_P`, `c_P_Spent`, `current_Level`)\nVALUES (810001,   1,   196, 0, 0, 326) /* MaxHealth */\n     , (810001,   3,   196, 0, 0, 456) /* MaxStamina */\n     , (810001,   5,   196, 0, 0, 396); /* MaxMana */\n\nINSERT INTO `weenie_properties_body_part` (`object_Id`, `key`, `d_Type`, `d_Val`, `d_Var`, `base_Armor`, `armor_Vs_Slash`, `armor_Vs_Pierce`, `armor_Vs_Bludgeon`, `armor_Vs_Cold`, `armor_Vs_Fire`, `armor_Vs_Acid`, `armor_Vs_Electric`, `armor_Vs_Nether`, `b_h`, `h_l_f`, `m_l_f`, `l_l_f`, `h_r_f`, `m_r_f`, `l_r_f`, `h_l_b`, `m_l_b`, `l_l_b`, `h_r_b`, `m_r_b`, `l_r_b`)\nVALUES (810001,  0, 4, 0, 0, 250, 125, 125, 125, 125, 125, 125, 125, 0, 1, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0) /* Head */\n     , (810001,  1, 4, 0, 0, 250, 125, 125, 125, 125, 125, 125, 125, 0, 2, 0.44, 0.17, 0, 0.44, 0.17, 0, 0.44, 0.17, 0, 0.44, 0.17, 0) /* Chest */\n     , (810001,  2, 4, 0, 0, 250, 125, 125, 125, 125, 125, 125, 125, 0, 3, 0, 0.17, 0, 0, 0.17, 0, 0, 0.17, 0, 0, 0.17, 0) /* Abdomen */\n     , (810001,  3, 4, 0, 0, 250, 125, 125, 125, 125, 125, 125, 125, 0, 1, 0.23, 0.03, 0, 0.23, 0.03, 0, 0.23, 0.03, 0, 0.23, 0.03, 0) /* UpperArm */\n     , (810001,  4, 4, 0, 0, 250, 125, 125, 125, 125, 125, 125, 125, 0, 2, 0, 0.3, 0, 0, 0.3, 0, 0, 0.3, 0, 0, 0.3, 0) /* LowerArm */\n     , (810001,  5, 4, 4, 0.75, 250, 125, 125, 125, 125, 125, 125, 125, 0, 2, 0, 0.2, 0, 0, 0.2, 0, 0, 0.2, 0, 0, 0.2, 0) /* Hand */\n     , (810001,  6, 4, 0, 0, 250, 125, 125, 125, 125, 125, 125, 125, 0, 3, 0, 0.13, 0.18, 0, 0.13, 0.18, 0, 0.13, 0.18, 0, 0.13, 0.18) /* UpperLeg */\n     , (810001,  7, 4, 0, 0, 250, 125, 125, 125, 125, 125, 125, 125, 0, 3, 0, 0, 0.6, 0, 0, 0.6, 0, 0, 0.6, 0, 0, 0.6) /* LowerLeg */\n     , (810001,  8, 4, 8, 0.75, 250, 125, 125, 125, 125, 125, 125, 125, 0, 3, 0, 0, 0.22, 0, 0, 0.22, 0, 0, 0.22, 0, 0, 0.22); /* Foot */\n\n\nINSERT INTO `weenie_properties_emote` (`object_Id`, `category`, `probability`, `weenie_Class_Id`, `style`, `substyle`, `quest`, `vendor_Type`, `min_Health`, `max_Health`)\nVALUES (810001, 7 /* Use */, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL);\n\nSET @parent_id = LAST_INSERT_ID();\n\nINSERT INTO `weenie_properties_emote_action` (`emote_Id`, `order`, `type`, `delay`, `extent`, `motion`, `message`, `test_String`, `min`, `max`, `min_64`, `max_64`, `min_Dbl`, `max_Dbl`, `stat`, `display`, `amount`, `amount_64`, `hero_X_P_64`, `percent`, `spell_Id`, `wealth_Rating`, `treasure_Class`, `treasure_Type`, `p_Script`, `sound`, `destination_Type`, `weenie_Class_Id`, `stack_Size`, `palette`, `shade`, `try_To_Bond`, `obj_Cell_Id`, `origin_X`, `origin_Y`, `origin_Z`, `angles_W`, `angles_X`, `angles_Y`, `angles_Z`)\nVALUES (@parent_id, 0, 10 /* Tell */, 0, 1, NULL, 'Hello traveler!', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);\n",
+};
+
 function _tmplNpcSQL(now){
-  var npcType = (document.getElementById('tmplNpcType')||{}).value||'quest';
-  var isVendor = npcType === 'vendor';
-  var wcid  = isVendor ? 810000 : 810001;
-  var cname = isVendor ? 'CreatureVendorTemplate' : 'CreatureQuestNpcTemplate';
-  var dname = isVendor ? 'Creature Vendor Template' : 'Creature Quest NPC Template';
-  var vendorExtra = isVendor ? `
-     , (${wcid},  11,         1) /* MaxStackSize */
-     , (${wcid},  12,         0) /* StackSize */
-     , (${wcid},  13,    100000) /* StackUnitEncumb */
-     , (${wcid},  14,         5) /* StackUnitMass */` : '';
-  var shopInsert = isVendor ? `\nINSERT INTO \`weenie_properties_create_list\` (\`object_Id\`, \`destination_Type\`, \`weenie_Class_Id\`, \`stack_Size\`, \`palette\`, \`shade\`, \`try_To_Bond\`)\nVALUES (${wcid}, 4, 377, 1, 0, 0, False); /* Shop: WCID 377 - Potion of Healing */` : '';
-  return `DELETE FROM \`weenie\` WHERE \`class_Id\` = ${wcid};
-
-INSERT INTO \`weenie\` (\`class_Id\`, \`class_Name\`, \`type\`, \`last_Modified\`)
-VALUES (${wcid}, '${cname}', 10, '${now}') /* Creature */;
-
-INSERT INTO \`weenie_properties_int\` (\`object_Id\`, \`type\`, \`value\`)
-VALUES (${wcid},   1,        10) /* ItemType */
-     , (${wcid},  16,         1) /* ItemUseable */
-     , (${wcid},  25,        50) /* Level */
-     , (${wcid},  93,   8388608) /* PhysicsState */${vendorExtra};
-
-INSERT INTO \`weenie_properties_bool\` (\`object_Id\`, \`type\`, \`value\`)
-VALUES (${wcid},   1, True ) /* Stuck */
-     , (${wcid},  19, False) /* Attackable */;
-
-INSERT INTO \`weenie_properties_float\` (\`object_Id\`, \`type\`, \`value\`)
-VALUES (${wcid},   1,      60) /* HeartbeatInterval */
-     , (${wcid},   2,       0) /* HeartbeatTimestamp */;
-
-INSERT INTO \`weenie_properties_string\` (\`object_Id\`, \`type\`, \`value\`)
-VALUES (${wcid},   1, '${dname}') /* Name */;
-
-INSERT INTO \`weenie_properties_d_i_d\` (\`object_Id\`, \`type\`, \`value\`)
-VALUES (${wcid},   1, 0x0200007D) /* Setup */
-     , (${wcid},   2, 0x09000001) /* MotionTable */
-     , (${wcid},   3, 0x20000001) /* SoundTable */
-     , (${wcid},   8, 0x06001139) /* Icon */;
-
-INSERT INTO \`weenie_properties_attribute\` (\`object_Id\`, \`type\`, \`init_Level\`, \`level_From_C_P\`, \`c_P_Spent\`)
-VALUES (${wcid},   1, 200, 0, 0) /* Strength */
-     , (${wcid},   2, 200, 0, 0) /* Endurance */
-     , (${wcid},   3, 200, 0, 0) /* Quickness */
-     , (${wcid},   4, 200, 0, 0) /* Coordination */
-     , (${wcid},   5, 200, 0, 0) /* Focus */
-     , (${wcid},   6, 200, 0, 0) /* Self */;
-
-INSERT INTO \`weenie_properties_attribute_2nd\` (\`object_Id\`, \`type\`, \`init_Level\`, \`level_From_C_P\`, \`c_P_Spent\`, \`current_Level\`)
-VALUES (${wcid},   1,  1000, 0, 0, 1000) /* MaxHealth */
-     , (${wcid},   3,   500, 0, 0,  500) /* MaxStamina */
-     , (${wcid},   5,   500, 0, 0,  500) /* MaxMana */;
-${shopInsert}`;
+  // Verbatim Vendor / Quest Giver templates (user-provided; full NPC with
+  // body parts + emotes). The NPC Type dropdown picks the variant; rename or
+  // re-WCID in the editor after import.
+  var npcType=_tmplSegVal("tmplNpcType")||"quest";
+  var sql=NPC_TEMPLATES[npcType]||NPC_TEMPLATES.quest;
+  var ct=(document.getElementById("tmplNpcCreatureType")||{}).value;
+  if(ct) sql=_tmplApplyCreatureType(sql, ct);
+  return sql;
 }
 
 // ── Generator ──────────────────────────────────────────────────────────────
@@ -10143,7 +10292,8 @@ function buildSQL(){
       }
 
       emoteList.forEach(em=>{
-        blocks.push({category:em.category||7,quest:em.questFilter||null,prob:em.prob||1,actions:em.actions||[]});
+        blocks.push({category:em.category||7,quest:em.questFilter||null,prob:em.prob||1,
+                     vendorType:(em.vendorType!=null&&em.vendorType!==''?em.vendorType:null),actions:em.actions||[]});
         walkActions(em.actions||[]);
       });
       _d('EMOTE','flattenEmoteTree: '+emoteList.length+' triggers → '+blocks.length+' blocks');
@@ -10157,7 +10307,9 @@ function buildSQL(){
       const qf=blk.quest?`'${String(blk.quest).replace(/'/g,"''")}'`:'NULL';
       lines.push('');
       lines.push(`INSERT INTO \`weenie_properties_emote\` ${ECOLS}`);
-      lines.push(`VALUES (${wcid}, ${blk.category} /* ${catName} */, 1, NULL, NULL, NULL, ${qf}, NULL, NULL, NULL);`);
+      var _eProb=(blk.prob!=null&&blk.prob!=='')?blk.prob:1;
+      var _eVt=(blk.vendorType!=null&&blk.vendorType!=='')?blk.vendorType:'NULL';
+      lines.push(`VALUES (${wcid}, ${blk.category} /* ${catName} */, ${_eProb}, NULL, NULL, NULL, ${qf}, ${_eVt}, NULL, NULL);`);
       lines.push('');
       lines.push('SET @parent_id = LAST_INSERT_ID();');
       if(blk.actions.length){
@@ -15037,10 +15189,9 @@ function _mpDraw(){
     base=_mpMat4Mul(_mpRotX(-Math.PI/2), base);          // stand the long axis up
     if(!_mp.weaponMode) base=_mpMat4Mul(_mpRotZ(Math.PI), base);  // armor roll (weapons skip it → point-up)
   }
-  // Headgear renders correctly with the plain creature base (verified against
-  // real DAT geometry) — face opening toward the camera, upright. headMode just
-  // forces itemMode off so the item/weapon rotations don't tip it; no extra
-  // transform is applied here.
+  // Headgear uses the plain creature base but is authored facing away, so yaw
+  // it 180° to bring the face toward the camera (verified against real geometry).
+  if(_mp.headMode) base=_mpMat4Mul(_mpRotY(Math.PI), base);
   var rot=_mpMat4Mul(_mpMat4Mul(rx,ry),base);
   // Frame the model: translate to origin then scale to ~unit size so any setup
   // (tiny ring or large armor) fills the view consistently.
@@ -15194,26 +15345,31 @@ function openModelPreview(setup_id_hex, label, opts){
   // already; everything else (weapons, items) needs the item base rotation.
   var _wtEl=document.getElementById('fWeenieType');
   var _wt=_wtEl?parseInt(_wtEl.value):NaN;
-  _mp.itemMode = !_useEditor ? !opts.creature : !(_wt===10 || _wt===12 || _wt===51 || _wt===76);
-  // Headgear (ValidLocations Int 9 with the HeadWear 0x1 bit) is authored
-  // upright like a creature head — it renders correctly with the plain creature
-  // base, so headMode just forces itemMode off (no long-axis/roll transform).
-  // Editor mode reads the live ValidLocations; nav/QuestForge callers pass
-  // opts.head so cycling onto a helm still orients it right.
-  _mp.headMode=false;
-  if(_useEditor) try{
-    (typeof extraInt!=='undefined'?extraInt:[]).forEach(function(r){
-      if(parseInt(r.type)===9 && (parseInt(r.value)&1)){ _mp.itemMode=false; _mp.headMode=true; }
-    });
-  }catch(e){}
-  if(!_useEditor && opts.head){ _mp.itemMode=false; _mp.headMode=true; }
-  // Held weapons (melee, missile launchers, ammo, casters) are authored along
-  // their long axis and render upside-down under the plain item pose (which is
-  // tuned for armor/clothing). weaponMode drops the 180° roll so they stand
-  // point-up. In editor mode we read the live WeenieType; nav/QuestForge callers
-  // pass opts.weapon so model-cycling keeps the same orientation.
+  // Orientation classes, verified against real DAT geometry:
+  //  • weapons (3/4/5/6/35): authored along their long axis → weaponMode
+  //  • body armor/clothing (type 2, non-head): body-authored → itemMode (roll)
+  //  • headgear (type 2 w/ HeadWear bit): authored like a head → plain base + a
+  //    180° yaw so the face points at the camera
+  //  • everything else (creatures, generics, structures, books, food, gems,
+  //    portals…): authored Z-up upright → plain creature base
   var _WEAPON_WT={3:1,4:1,5:1,6:1,35:1};
-  _mp.weaponMode = _useEditor ? !!_WEAPON_WT[_wt] : !!(opts&&opts.weapon);
+  var _isWeapon, _isHead=false, _isBodyArmor=false;
+  if(_useEditor){
+    _isWeapon=!!_WEAPON_WT[_wt];
+    try{
+      (typeof extraInt!=='undefined'?extraInt:[]).forEach(function(r){
+        if(parseInt(r.type)===9 && (parseInt(r.value)&1)) _isHead=true;
+      });
+    }catch(e){}
+    _isBodyArmor=(_wt===2 && !_isHead);
+  }else{
+    _isWeapon=!!(opts&&opts.weapon);
+    _isHead=!!(opts&&opts.head);
+    _isBodyArmor=!!(opts&&opts.bodyArmor);
+  }
+  _mp.headMode=_isHead;
+  _mp.weaponMode=_isWeapon;
+  _mp.itemMode=_isWeapon || _isBodyArmor;   // plain base for everything else
 
   // Armor/clothing weenies point their Setup at base body parts; the
   // ClothingBase DID (type 7, 0x10xxxxxx) swaps in the armor models/textures.
@@ -15398,6 +15554,9 @@ function _mpRenderNavUI(){
   });
   var sel=document.getElementById('mpSelectBtn');
   if(sel) sel.style.display=hasSel?'':'none';
+  // Show the search bar whenever there's a browsable model list.
+  var sw=document.getElementById('mpSearchWrap');
+  if(sw){ sw.style.display=has?'':'none'; if(!has){var si=document.getElementById('mpSearchInput'); if(si) si.value='';} }
   var cnt=document.getElementById('mpNavCounter');
   if(cnt&&has){
     var e=_mp.nav.list[_mp.nav.index];
@@ -15405,20 +15564,56 @@ function _mpRenderNavUI(){
   }
 }
 
-// Cycle to the prev/next model in the current nav list and reload the viewer.
-function _mpNavStep(dir){
+// Load a specific model in the nav list by index and reload the viewer.
+function _mpNavGoto(index){
   if(!_mp.nav||!_mp.nav.list.length) return;
   var nav=_mp.nav, n=nav.list.length;
-  nav.index=((nav.index+dir)%n+n)%n;
+  nav.index=((index%n)+n)%n;
   var e=nav.list[nav.index];
   // Item nav uses the item pose; creature nav uses the upright pose. For armor
   // (catalogKey 2) each model's orientation depends on its coverage — a helm
   // (HeadWear bit) uses the head pose, everything else the item pose. Weapons
   // keep the weapon orientation across cycling.
   var _isHead = nav.catalogKey===2 && e.sub!=null && (parseInt(e.sub)&1);
+  var _isBodyArmor = nav.catalogKey===2 && !_isHead;
   openModelPreview(e.s, e.n, {creature:!nav.item, weapon:!_isHead && _mp.weaponMode,
-    head:_isHead, mot:e.mt||'', clo:e.cb||'',
+    head:_isHead, bodyArmor:_isBodyArmor, mot:e.mt||'', clo:e.cb||'',
     palTpl:(e.pi!=null?String(e.pi):''), nav:nav});
+}
+// Cycle to the prev/next model in the current nav list.
+function _mpNavStep(dir){
+  if(!_mp.nav||!_mp.nav.list.length) return;
+  _mpNavGoto(_mp.nav.index+dir);
+}
+
+// ── 3D viewer model search ─────────────────────────────────────────────────
+// Filter the current nav list by name (and Setup hex) and show a results
+// dropdown; picking one jumps the viewer to it. Most models carry real names,
+// so this is far faster than clicking through hundreds with the arrows.
+function _mpSearch(q){
+  var box=document.getElementById('mpSearchResults');
+  if(!box) return;
+  q=(q||'').trim().toLowerCase();
+  if(!_mp.nav||!_mp.nav.list||!_mp.nav.list.length||!q){ box.style.display='none'; box.innerHTML=''; return; }
+  var hits=[];
+  for(var i=0;i<_mp.nav.list.length && hits.length<60;i++){
+    var e=_mp.nav.list[i];
+    if((e.n||'').toLowerCase().indexOf(q)>=0 || (e.s||'').toLowerCase().indexOf(q)>=0) hits.push(i);
+  }
+  if(!hits.length){ box.innerHTML='<div style="padding:6px 10px;font-size:10px;color:var(--ink-faint);font-style:italic">No matches</div>'; box.style.display=''; return; }
+  box.innerHTML=hits.map(function(i){
+    var e=_mp.nav.list[i];
+    return '<div onmousedown="_mpSearchPick('+i+')" style="padding:5px 10px;font-family:var(--ui-font);font-size:11px;'
+      +'color:var(--ink);cursor:pointer;border-bottom:1px solid var(--border-lt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" '
+      +'onmouseover="this.style.background=\'var(--parch-dk)\'" onmouseout="this.style.background=\'\'">'
+      +escHtml(e.n||e.s)+' <span style="color:var(--ink-faint);font-size:9px">'+escHtml(e.s||'')+'</span></div>';
+  }).join('');
+  box.style.display='';
+}
+function _mpSearchPick(index){
+  var box=document.getElementById('mpSearchResults'); if(box){ box.style.display='none'; }
+  var inp=document.getElementById('mpSearchInput'); if(inp){ inp.value=''; }
+  _mpNavGoto(index);
 }
 
 // Apply the currently-shown model back to the field that opened the viewer.
@@ -15671,6 +15866,16 @@ document.addEventListener('DOMContentLoaded', function(){
         font-size:16px;cursor:pointer;color:var(--ink-dim);line-height:1">&times;</button>
     </div>
   </div>
+  <div id="mpSearchWrap" style="display:none;position:relative;padding:8px 14px;border-bottom:1px solid var(--border-lt)">
+    <input id="mpSearchInput" type="text" placeholder="&#x1F50D; Search models by name…" autocomplete="off"
+      oninput="_mpSearch(this.value)" onfocus="_mpSearch(this.value)"
+      onblur="setTimeout(function(){var b=document.getElementById('mpSearchResults');if(b)b.style.display='none';},160)"
+      style="width:100%;box-sizing:border-box;font-family:var(--ui-font);font-size:11px;padding:6px 10px;
+      background:var(--parch-dk);border:1px solid var(--border);color:var(--ink);border-radius:2px;outline:none">
+    <div id="mpSearchResults" style="display:none;position:absolute;left:14px;right:14px;top:100%;z-index:5;
+      max-height:220px;overflow-y:auto;background:var(--parch);border:1px solid var(--border);
+      border-top:none;border-radius:0 0 3px 3px;box-shadow:0 6px 20px rgba(0,0,0,.35)"></div>
+  </div>
   <div style="position:relative;background:#111;height:340px">
     <canvas id="modelPreviewCanvas" width="478" height="338"
       style="display:block;width:100%;height:100%"></canvas>
@@ -15822,31 +16027,10 @@ document.addEventListener('DOMContentLoaded', function(){
         font-size:18px;cursor:pointer;color:var(--ink-dim);line-height:1">&times;</button>
     </div>
 
-    <!-- Type selector tabs -->
-    <div style="display:flex;flex-wrap:wrap;gap:4px;padding:12px 18px 0;flex-shrink:0">
-      <button class="prop-stab active" id="tmplTab_creature_mob"
-        onclick="_tmplSwitchType('creature_mob')">Creature (Mob)</button>
-      <button class="prop-stab" id="tmplTab_creature_npc"
-        onclick="_tmplSwitchType('creature_npc')">Creature (NPC)</button>
-      <button class="prop-stab" id="tmplTab_generator"
-        onclick="_tmplSwitchType('generator')">Generator</button>
-      <button class="prop-stab" id="tmplTab_door"
-        onclick="_tmplSwitchType('door')">Door</button>
-      <button class="prop-stab" id="tmplTab_chest"
-        onclick="_tmplSwitchType('chest')">Chest</button>
-      <button class="prop-stab" id="tmplTab_key"
-        onclick="_tmplSwitchType('key')">Key</button>
-      <button class="prop-stab" id="tmplTab_crafttool"
-        onclick="_tmplSwitchType('crafttool')">Craft Tool</button>
-      <button class="prop-stab" id="tmplTab_baseitem"
-        onclick="_tmplSwitchType('baseitem')">Base Item</button>
-      <button class="prop-stab" id="tmplTab_structure"
-        onclick="_tmplSwitchType('structure')">Structure/Decor</button>
-      <button class="prop-stab" id="tmplTab_event"
-        onclick="_tmplSwitchType('event')">Event Controller</button>
-      <button class="prop-stab" id="tmplTab_stopgap"
-        onclick="_tmplSwitchType('stopgap')">Stopgap</button>
-    </div>
+    <!-- Main category tabs (row 1) + sub-type tabs (row 2), both built by
+         _tmplRenderTabs() from TMPL_GROUPS -->
+    <div id="tmplMainTabs" style="display:flex;flex-wrap:wrap;gap:4px;padding:12px 18px 0;flex-shrink:0"></div>
+    <div id="tmplSubTabs" style="display:flex;flex-wrap:wrap;gap:4px;padding:8px 18px 0;flex-shrink:0;border-bottom:1px solid var(--border-lt);padding-bottom:10px"></div>
 
     <!-- Options body -->
     <div id="tmplOptions" style="padding:16px 18px;flex:1"></div>
