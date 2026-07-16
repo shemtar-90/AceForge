@@ -331,6 +331,10 @@ class AppAPI(LoreMixin):
 
         return {
             "wcid": new_wcid,
+            # Which catalog weenie this was cloned from. The generated wcid is
+            # brand new and absent from the catalog, so without this the Doll
+            # can't re-dress (or re-generate) an already-generated set.
+            "source_wcid": source.get("wcid"),
             "class_name": re.sub(r"[^a-zA-Z0-9]", "", new_name.lower())[:30] or f"item{new_wcid}",
             "weenie_type": source.get("weenie_type", 1),
             "int": int_props, "bool": bool_props, "float": float_props,
@@ -1460,13 +1464,16 @@ Start with: /* ===== FILE: {fname} ===== */
                 "task separately — put them ON EACH TASK, never only in \"shared\". When the "
                 "user describes groups of tasks with different stats, every task in a group "
                 "repeats that group's exact numbers, and different groups keep DIFFERENT "
-                "numbers. Do not copy one group's values onto another.\n"
-                "EXAMPLE — \"3 tasks at level 275, 15% xp, 25000 luminance, kill 50, spawn 5; "
-                "then 3 at level 350, 25% xp, 50000 luminance, kill 1, spawn 1\" -> 6 tasks: "
-                "the first three each have creature_level 275, xp_percent 0.15, "
-                "reward_luminance 25000, kill_count 50, spawn_count 5; the next three each "
-                "have creature_level 350, xp_percent 0.25, reward_luminance 50000, "
-                "kill_count 1, spawn_count 1.\n\n"
+                "numbers. Do not copy one group's values onto another. This includes "
+                "loot_tier: a tier stated for ONE group applies to that group ONLY — every "
+                "other group stays \"None\" unless the user gave it a tier too.\n"
+                "EXAMPLE — \"3 tasks at level 275, 15% xp, 25000 luminance, kill 50, spawn 5, "
+                "loot tier 8; then 3 at level 350, 25% xp, 50000 luminance, kill 1, spawn 1\" "
+                "-> 6 tasks: the first three each have creature_level 275, xp_percent 0.15, "
+                "reward_luminance 25000, kill_count 50, spawn_count 5, loot_tier \"T8\"; the "
+                "next three each have creature_level 350, xp_percent 0.25, reward_luminance "
+                "50000, kill_count 1, spawn_count 1, loot_tier \"None\" (no tier was stated "
+                "for them).\n\n"
                 "NAMING: If the user says the giver items are called e.g. \"Commissions\", set "
                 'each item_name to "<Creature Name> Commission".'
             )
@@ -2776,6 +2783,483 @@ Start with: /* ===== FILE: {fname} ===== */
         except Exception as e:
             return {"success": False,
                     "error": f"Exception: {e}\n{traceback.format_exc()[-800:]}"}
+
+    # ── Doll: wearable catalog ────────────────────────────────────────────
+    # Only armor + clothing. Weapons are deliberately excluded: they hang off
+    # attachment points rather than replacing body parts, so they need
+    # different handling than a ClothingBase composite.
+    _doll_wearables_cache = None
+
+    _EQUIP_SLOT_NAMES = [
+        (0x00000001, "Head"),      (0x00000002, "Chest"),
+        (0x00000004, "Abdomen"),   (0x00000008, "Upper Arms"),
+        (0x00000010, "Lower Arms"), (0x00000020, "Hands"),
+        (0x00000040, "Upper Legs"), (0x00000080, "Lower Legs"),
+        (0x00000100, "Feet"),      (0x00000200, "Chest"),
+        (0x00000400, "Abdomen"),   (0x00000800, "Upper Arms"),
+        (0x00001000, "Lower Arms"), (0x00002000, "Upper Legs"),
+        (0x00004000, "Lower Legs"), (0x08000000, "Cloak"),
+    ]
+
+    def _doll_slot_label(self, valid_locations: int) -> str:
+        if not valid_locations:
+            return ""
+        seen, out = set(), []
+        for bit, name in self._EQUIP_SLOT_NAMES:
+            if (valid_locations & bit) and name not in seen:
+                seen.add(name)
+                out.append(name)
+        return " / ".join(out[:3])
+
+    def _doll_load_wearables(self):
+        if self._doll_wearables_cache is not None:
+            return self._doll_wearables_cache
+        out = []
+        try:
+            path = self._gear_resolve_web_path("gear_data", "gear_full.json")
+            with open(path, encoding="utf-8") as f:
+                raw = json.load(f)
+            for cat in ("armor", "clothing"):
+                for r in raw.get(cat, []):
+                    cb = (r.get("did") or {}).get("ClothingBase")
+                    if not cb:
+                        continue          # nothing to map onto a body
+                    def _i(key, sec="int"):
+                        v = (r.get(sec) or {}).get(key)
+                        try:
+                            return int(v["value"]) if v else 0
+                        except (ValueError, TypeError, KeyError):
+                            return 0
+                    tl = (r.get("bool") or {}).get("TopLayerPriority")
+                    tlv = None
+                    if tl is not None:
+                        tlv = str(tl.get("value", "")).strip().lower() in ("1", "true")
+                    try:
+                        shade = float(((r.get("float") or {})
+                                       .get("Shade") or {}).get("value") or 0.0)
+                    except (ValueError, TypeError):
+                        shade = 0.0
+                    vl = _i("ValidLocations")
+                    out.append({
+                        "wcid":              r["wcid"],
+                        "name":              ((r.get("string") or {}).get("Name") or {})
+                                                .get("value") or r.get("class_name") or "",
+                        "class_name":        r.get("class_name") or "",
+                        "category":          cat,
+                        "clothing_id":       str(cb["value"]),
+                        "palette_template":  _i("PaletteTemplate"),
+                        "shade":             min(max(shade, 0.0), 1.0),
+                        "item_type":         _i("ItemType"),
+                        "valid_locations":   vl,
+                        "clothing_priority": _i("ClothingPriority"),
+                        "top_layer":         tlv,
+                        "slot":              self._doll_slot_label(vl),
+                    })
+        except Exception:
+            out = []
+        out.sort(key=lambda x: x["name"].lower())
+        self._doll_wearables_cache = out
+        return out
+
+    def doll_generate_items(self, pieces: list, options: dict) -> dict:
+        """Generate editable gear items from the Doll's worn pieces.
+
+        Unlike generate_gear_items — which applies one palette/shade to the
+        whole set — each piece keeps the exact PaletteTemplate + Shade it was
+        given in the wardrobe, so what was previewed is what gets written.
+
+        pieces: [{wcid, palette_template, shade}, ...] in worn order.
+        """
+        try:
+            data = self._gear_load_data()
+            name_prefix = (options or {}).get("name_prefix") or ""
+            name_prefix = str(name_prefix).strip()
+            try:
+                start_wcid = int((options or {}).get("start_wcid") or 0)
+            except (ValueError, TypeError):
+                start_wcid = 0
+            if not start_wcid:
+                return {"success": False, "error": "Starting WCID is required.",
+                        "items": []}
+
+            items, skipped = [], []
+            next_wcid = start_wcid
+            for p in (pieces or []):
+                try:
+                    src_wcid = int((p or {}).get("wcid") or 0)
+                except (ValueError, TypeError):
+                    src_wcid = 0
+                src = data.get(src_wcid)
+                if not src:
+                    # Pieces seeded from already-generated items have new WCIDs
+                    # that aren't in the source catalog — nothing to clone from.
+                    skipped.append({"wcid": src_wcid,
+                                    "name": (p or {}).get("name") or ""})
+                    continue
+                orig_name = (src.get("string", {}).get("Name", {}) or {}).get("value", "Item")
+                if name_prefix:
+                    new_name = f"{name_prefix} {self._gear_piece_type_word(orig_name)}".strip()
+                else:
+                    new_name = orig_name
+                tpl = (p or {}).get("palette_template")
+                shade = (p or {}).get("shade")
+                item = self._gear_build_item(
+                    src, next_wcid, new_name,
+                    tpl if tpl not in (None, "") else None,
+                    shade if shade not in (None, "") else None,
+                    None, None)
+                items.append(item)
+                next_wcid += 1
+
+            if not items:
+                return {"success": False, "items": [], "skipped": skipped,
+                        "error": "None of the worn pieces could be generated — "
+                                 "they have no source weenie in the catalog."}
+            return {"success": True, "items": items, "skipped": skipped,
+                    "next_wcid": next_wcid, "error": None}
+        except Exception as e:
+            import traceback
+            return {"success": False, "error": str(e), "items": [],
+                    "traceback": traceback.format_exc()}
+
+    def doll_items_by_wcid(self, wcids: list) -> dict:
+        """Look up wearable gear by WCID, preserving the caller's order.
+
+        Lets the Doll seed itself from the set pieces the user has ticked in
+        GearForge, before anything has been generated.
+        """
+        by_wcid = {i["wcid"]: i for i in self._doll_load_wearables()}
+        out, missing = [], []
+        for w in (wcids or []):
+            try:
+                k = int(w)
+            except (ValueError, TypeError):
+                continue
+            if k in by_wcid:
+                out.append(by_wcid[k])
+            else:
+                missing.append(k)      # weapon/jewelry or no ClothingBase
+        return {"success": True, "items": out, "missing": missing}
+
+    # Everyday words players use for gear AC names differently — searching
+    # "chainmail gloves" should find "Chainmail Gauntlets".
+    _DOLL_SYNONYMS = {
+        "gloves": "gauntlets", "glove": "gauntlets", "mitts": "gauntlets",
+        "boots": "sollerets", "boot": "sollerets", "shoes": "shoes",
+        "helmet": "helm", "hat": "helm", "cap": "helm",
+        "pants": "leggings", "trousers": "leggings",
+        "shirt": "shirt", "gloves/gauntlets": "gauntlets",
+        "armour": "armor", "vest": "breastplate", "chest": "breastplate",
+        "bracer": "bracers", "sleeves": "bracers",
+    }
+
+    def doll_search_items(self, query: str = "", limit: int = 60) -> dict:
+        """Search wearable gear by name, class name, or WCID.
+
+        Tokenised AND-match so word order does not matter, with a small
+        synonym pass mapping common player vocabulary onto AC's naming.
+        """
+        items = self._doll_load_wearables()
+        q = str(query or "").strip().lower()
+        try:
+            limit = max(1, min(int(limit), 200))
+        except (ValueError, TypeError):
+            limit = 60
+        if not q:
+            return {"success": True, "total": len(items), "items": items[:limit]}
+
+        tokens = [self._DOLL_SYNONYMS.get(t, t) for t in q.split() if t]
+        if not tokens:
+            return {"success": True, "total": len(items), "items": items[:limit]}
+
+        exact, starts, contains = [], [], []
+        for i in items:
+            n, c, w = i["name"].lower(), i["class_name"].lower(), str(i["wcid"])
+            if q == w:
+                exact.append(i)
+                continue
+            hay = n + " " + c + " " + w
+            if all(t in hay for t in tokens):
+                (starts if n.startswith(tokens[0]) else contains).append(i)
+        hits = exact + starts + contains
+        return {"success": True, "total": len(hits), "items": hits[:limit]}
+
+    # Palette data is immutable for a given DAT, and opening the DAT costs far
+    # more (~700ms — it walks the B-tree directory and attaches
+    # client_highres.dat) than the parse itself (~60ms). So memoize results and
+    # let callers batch, rather than holding a shared DatDatabase open: the
+    # bridge can run calls concurrently and a shared file handle's seek/read
+    # would race.
+    _doll_palette_cache = None
+
+    def _doll_parse_cid(self, raw):
+        s = str(raw or "").strip()
+        try:
+            cid = int(s, 16) if s.lower().startswith("0x") else int(s, 10)
+        except (ValueError, TypeError):
+            return 0
+        return cid if cid and (cid >> 24) == 0x10 else 0
+
+    def doll_item_palettes(self, clothing_id_hex: str) -> dict:
+        """Dye templates + shade swatches available to one ClothingBase."""
+        cid = self._doll_parse_cid(clothing_id_hex)
+        if not cid:
+            return {"success": False, "error": "Not a ClothingBase DID"}
+        r = self.doll_item_palettes_batch([clothing_id_hex])
+        if not r.get("success"):
+            return r
+        return {"success": True,
+                "palettes": r["palettes"].get(f"0x{cid:08X}", [])}
+
+    def doll_item_palettes_batch(self, clothing_ids: list) -> dict:
+        """Dye options for several ClothingBases, opening the DAT at most once.
+
+        Returns {"palettes": {"0xNNNNNNNN": [...], ...}} keyed by padded hex.
+        """
+        from pathlib import Path
+        if self._doll_palette_cache is None:
+            self._doll_palette_cache = {}
+        cache = self._doll_palette_cache
+
+        want = []
+        for raw in (clothing_ids or []):
+            cid = self._doll_parse_cid(raw)
+            if cid and cid not in want:
+                want.append(cid)
+        if not want:
+            return {"success": True, "palettes": {}}
+
+        missing = [c for c in want if c not in cache]
+        if missing:
+            path = self._resolve_portal_dat()
+            if not path or not Path(path).exists():
+                return {"success": False,
+                        "error": "client_portal.dat not configured"}
+            db = None
+            try:
+                from aceforge.dat_loader import DatDatabase, list_clothing_palettes
+                db = DatDatabase(path)
+                for cid in missing:
+                    try:
+                        cache[cid] = list_clothing_palettes(db, cid)
+                    except Exception:
+                        cache[cid] = []
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+            finally:
+                if db is not None:
+                    try:
+                        db.close()
+                    except Exception:
+                        pass
+        return {"success": True,
+                "palettes": {f"0x{c:08X}": cache.get(c, []) for c in want}}
+
+    def get_body_setups(self) -> dict:
+        """List the body setups the Doll can dress, for the body picker."""
+        from aceforge.dat_loader import BODY_SETUPS
+        return {"success": True,
+                "bodies": [{"id": f"0x{k:08X}", "name": v}
+                           for k, v in BODY_SETUPS.items()]}
+
+    def doll_resolve_body(self, setup_hex: str) -> dict:
+        """Can this Setup DID be dressed, and which body should the Doll use?
+
+        Lets WeenieForge decide whether to offer the Doll for the creature
+        currently in the editor. Alternate setups (Anakshay, barber variants)
+        are eligible via the alias map even though no ClothingTable names them.
+        """
+        from aceforge.dat_loader import BODY_SETUPS, resolve_body_setup
+        s = str(setup_hex or "").strip()
+        try:
+            sid = int(s, 16) if s.lower().startswith("0x") else int(s, 10)
+        except (ValueError, TypeError):
+            return {"success": True, "eligible": False}
+        if not sid or (sid >> 24) != 0x02:
+            return {"success": True, "eligible": False}
+        if sid in BODY_SETUPS:
+            return {"success": True, "eligible": True, "body": f"0x{sid:08X}",
+                    "name": BODY_SETUPS[sid], "aliased": False}
+        alias = resolve_body_setup(sid)
+        if alias in BODY_SETUPS:
+            return {"success": True, "eligible": True, "body": f"0x{sid:08X}",
+                    "name": BODY_SETUPS[alias], "aliased": True}
+        return {"success": True, "eligible": False}
+
+    def doll_base_clothing(self) -> dict:
+        """The shirt/pants layer worn under armor.
+
+        Armor and clothing paint DISJOINT palette ranges (verified: Pants
+        writes 128 indices with zero overlap against Platemail Leggings), so
+        without a clothing layer those ranges keep the texture's default and
+        read as white. Applying a shirt+pants underneath colours them.
+        """
+        by_wcid = {i["wcid"]: i for i in self._doll_load_wearables()}
+        out = {}
+        for key, wcid in (("shirt", 2588), ("pants", 127)):
+            rec = by_wcid.get(wcid)
+            if rec:
+                out[key] = rec
+        return {"success": True, "clothing": out}
+
+    def weenie_palette_options_batch(self, wcids: list) -> dict:
+        """weenie_palette_options for several WCIDs, opening the DAT once.
+
+        Returns {"items": {"<wcid>": {clothing_id, palettes}, ...}}. Callers
+        with N rows must use this rather than N single calls — each single
+        call can re-open the DAT (~700ms) before the memo is warm.
+        """
+        data = self._gear_load_data()
+        want = {}
+        for w in (wcids or []):
+            try:
+                k = int(w)
+            except (ValueError, TypeError):
+                continue
+            src = data.get(k)
+            cb = (src.get("did") or {}).get("ClothingBase") if src else None
+            want[k] = cb["value"] if cb else None
+
+        cids = [v for v in want.values() if v]
+        pal_map = {}
+        if cids:
+            r = self.doll_item_palettes_batch(cids)
+            if not r.get("success"):
+                return {"success": False, "error": r.get("error"), "items": {}}
+            pal_map = r["palettes"]
+
+        out = {}
+        for k, cbv in want.items():
+            if not cbv:
+                out[str(k)] = {"clothing_id": "", "palettes": []}
+                continue
+            cid = self._doll_parse_cid(cbv)
+            key = f"0x{cid:08X}"
+            out[str(k)] = {"clothing_id": key, "palettes": pal_map.get(key, [])}
+        return {"success": True, "items": out}
+
+    def weenie_palette_options(self, wcid) -> dict:
+        """Dye options for ANY weenie in the catalog (gear or weapon).
+
+        Backs the Create Items palette/shade row, which can reference any
+        wieldable — not just the armor/clothing the Doll's wardrobe lists.
+        """
+        try:
+            w = int(wcid)
+        except (ValueError, TypeError):
+            return {"success": True, "clothing_id": "", "palettes": []}
+        src = self._gear_load_data().get(w)
+        if not src:
+            return {"success": True, "clothing_id": "", "palettes": []}
+        cb = (src.get("did") or {}).get("ClothingBase")
+        if not cb:
+            return {"success": True, "clothing_id": "", "palettes": []}
+        r = self.doll_item_palettes_batch([cb["value"]])
+        if not r.get("success"):
+            return {"success": False, "error": r.get("error"), "palettes": []}
+        cid = self._doll_parse_cid(cb["value"])
+        return {"success": True, "clothing_id": f"0x{cid:08X}",
+                "palettes": r["palettes"].get(f"0x{cid:08X}", [])}
+
+    def get_doll_glb(self, body_setup_hex: str, outfit: list,
+                     motion_id_hex: str = "") -> dict:
+        """Return a base64 GLB of a body setup wearing an outfit.
+
+        outfit: list of dicts, one per equipped item, each with
+          clothing_id (hex/dec str), and optionally palette_template, shade,
+          item_type, valid_locations, clothing_priority, top_layer.
+        Items are ordered and composited the way ACE's CalculateObjDesc does,
+        so overlapping pieces layer the same way they would in game.
+        """
+        import base64, traceback
+        from pathlib import Path
+
+        def _did(raw, default=0):
+            s = str(raw or "").strip()
+            if not s:
+                return default
+            try:
+                return int(s, 16) if s.lower().startswith("0x") else int(s, 10)
+            except (ValueError, TypeError):
+                return default
+
+        def _num(raw, default=0):
+            try:
+                return int(str(raw).strip())
+            except (ValueError, TypeError, AttributeError):
+                return default
+
+        setup_id = _did(body_setup_hex)
+        if not setup_id or (setup_id >> 24) != 0x02:
+            return {"success": False, "error": "Invalid body setup ID"}
+        motion_id = _did(motion_id_hex)
+        if motion_id and (motion_id >> 24) != 0x09:
+            motion_id = 0
+
+        clean = []
+        for it in (outfit or []):
+            cid = _did((it or {}).get("clothing_id"))
+            if not cid or (cid >> 24) != 0x10:
+                continue          # only real ClothingTables can dress a body
+            tl = (it or {}).get("top_layer")
+            if isinstance(tl, str):
+                tl = {"true": True, "false": False}.get(tl.strip().lower())
+            try:
+                shade = min(max(float((it or {}).get("shade") or 0.0), 0.0), 1.0)
+            except (ValueError, TypeError):
+                shade = 0.0
+            clean.append({
+                "clothing_id":       cid,
+                "palette_template":  _num(it.get("palette_template")),
+                "shade":             shade,
+                "item_type":         _num(it.get("item_type")),
+                "valid_locations":   _num(it.get("valid_locations")),
+                "clothing_priority": _num(it.get("clothing_priority")),
+                "top_layer":         tl if isinstance(tl, bool) else None,
+            })
+
+        from aceforge.dat_loader import (cached_glb_path, DatDatabase,
+                                         get_or_export_glb, order_outfit)
+
+        # "pieces" is always present; "layers" only when the order was actually
+        # computed (a cache hit skips the DB, and re-opening it just to derive
+        # the order would defeat the cache).
+        cached = cached_glb_path(setup_id, motion_id=motion_id, outfit=clean)
+        if cached.exists():
+            return {"success": True,
+                    "data_b64": base64.b64encode(cached.read_bytes()).decode(),
+                    "pieces": len(clean),
+                    "info": f"{len(clean)} piece(s), cached"}
+
+        path = self._resolve_portal_dat()
+        if not path or not Path(path).exists():
+            return {"success": False, "error": "client_portal.dat not configured"}
+
+        db = None
+        try:
+            db = DatDatabase(path)
+            layers = [f"0x{i['clothing_id']:08X}" for i in order_outfit(db, clean)]
+            glb_path = get_or_export_glb(db, setup_id, motion_id=motion_id,
+                                         outfit=clean)
+            if glb_path is None:
+                return {"success": False,
+                        "error": "Could not build the doll — the body setup "
+                                 "has no renderable geometry."}
+            glb = glb_path.read_bytes()
+            return {"success": True,
+                    "data_b64": base64.b64encode(glb).decode(),
+                    "pieces": len(clean),
+                    "info": f"{len(clean)} piece(s), glb={len(glb):,}B",
+                    "layers": layers}
+        except Exception as e:
+            return {"success": False,
+                    "error": f"Exception: {e}\n{traceback.format_exc()[-800:]}"}
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
 
     def clear_model_cache(self) -> dict:
         """Delete all cached GLB files."""

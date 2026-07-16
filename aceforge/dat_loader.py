@@ -638,7 +638,8 @@ def parse_animation(db: DatDatabase, anim_id: int) -> Optional[list]:
 
 
 def parse_clothing_subpals(db: DatDatabase, clothing_id: int,
-                           palette_template: int) -> list:
+                           palette_template: int,
+                           fallback_first: bool = False) -> list:
     """Parse a ClothingTable's SubPalEffects for one palette template.
     Returns [(palette_or_paletteset_id, [(offset, num_colors), ...]), ...].
 
@@ -646,6 +647,12 @@ def parse_clothing_subpals(db: DatDatabase, clothing_id: int,
     u16 buckets, then count × (key u32 + value). CloSubPalEffect = Icon u32 +
     List<CloSubPalette>; CloSubPalette = List<Range(offset u32, count u32)>
     then PaletteSet u32 (verified against 0x10000215 — Shadow).
+
+    fallback_first: when the requested template has no entry, return the first
+    subpal effect instead of nothing. This is what ACE's CalculateObjDesc does
+    ("else itemSubPal = ClothingSubPalEffects[Keys.ElementAt(0)]") and is
+    needed for the doll — many items carry a dye set under a template id that
+    doesn't match the weenie's PaletteTemplate, and would render untinted.
     """
     data = db.read_file(clothing_id)
     if not data or len(data) < 8:
@@ -661,6 +668,7 @@ def parse_clothing_subpals(db: DatDatabase, clothing_id: int,
                 off += 8                                # part idx + model id
                 ntex, = struct.unpack_from("<I", data, off); off += 4 + 8 * ntex
         nsp, _b2 = struct.unpack_from("<HH", data, off); off += 4
+        first = None
         for _ in range(nsp):
             key, = struct.unpack_from("<I", data, off); off += 4
             _icon, = struct.unpack_from("<I", data, off); off += 4
@@ -676,9 +684,328 @@ def parse_clothing_subpals(db: DatDatabase, clothing_id: int,
                 subs.append((palset, ranges))
             if key == palette_template:
                 return subs
-        return []
+            if first is None:
+                first = subs
+        return first if (fallback_first and first is not None) else []
     except Exception:
         return []
+
+
+# ── Paper doll: compositing several ClothingBases onto one body ──────────────
+# Ported from ACE's Creature_Networking.CalculateObjDesc() +
+# ClothingTable.GetVisualPriority() + the CoverageMask/EquipMask enums.
+
+HUMAN_MALE_SETUP = 0x02000001
+
+# Body setups that armor ClothingBases carry base effects for, keyed by DID.
+# Each is present in ~93% of the 1262 CB-bearing gear entries. The named ones
+# are confirmed against ACE's SetupConst enum; the 0x02001A1x block is used by
+# the non-human heritages but is absent from SetupConst, so it is left
+# unlabeled rather than guessed at.
+#
+# Note Aluvian / Gharu'ndim / Sho / Viamontian all share the Human body — they
+# differ only by skin palette, so there is no separate setup for them.
+BODY_SETUPS = {
+    0x02000001: "Human Male",
+    0x0200004E: "Human Female",
+    0x0200196F: "Umbraen Male",
+    0x02001970: "Umbraen Female",
+    0x0200196E: "Penumbraen Male",
+    0x0200196D: "Penumbraen Female",
+    0x02001A0E: "Undead Male",
+    0x02001A0C: "Undead Female",
+    0x02001A10: "Body 0x02001A10",
+    0x02001A12: "Body 0x02001A12",
+    0x02001A14: "Body 0x02001A14",
+    0x02001A16: "Body 0x02001A16",
+    0x02001A18: "Body 0x02001A18",
+    0x02001A1A: "Body 0x02001A1A",
+}
+
+# Alternate/barber setups have no ClothingTable entries of their own, so ACE
+# remaps them to the nearest body that does before looking up base effects.
+# Ported verbatim from Creature_Networking.CalculateObjDesc()'s switch.
+_SETUP_ALIASES = {
+    0x02001972: 0x0200196F,   # UmbraenMaleCrownGen    -> UmbraenMaleCrown
+    0x02001A5F: 0x0200196F,   # UmbraenMaleNoCrown     -> UmbraenMaleCrown
+    0x02001A6F: 0x0200196F,   # UmbraenMaleVoid        -> UmbraenMaleCrown
+    0x02001A5E: 0x02001970,   # UmbraenFemaleNoCrown   -> UmbraenFemaleCrown
+    0x02001971: 0x0200196E,   # PenumbraenMaleCrownGen -> PenumbraenMaleCrown
+    0x02001A5D: 0x0200196E,   # PenumbraenMaleNoCrown  -> PenumbraenMaleCrown
+    0x02001A70: 0x0200196E,   # PenumbraenMaleVoid     -> PenumbraenMaleCrown
+    0x02001A5C: 0x0200196D,   # PenumbraenFemaleNoCrown-> PenumbraenFemaleCrown
+    0x02001A71: 0x0200196D,   # PenumbraenFemaleVoid   -> PenumbraenFemaleCrown
+    0x02001A0F: 0x02001A0E,   # UndeadMaleUndeadGen    -> UndeadMaleUndead
+    0x02001A9C: 0x02001A0E,   # UndeadMaleSkeleton     -> UndeadMaleUndead
+    0x02001A9E: 0x02001A0E,   # UndeadMaleSkeletonNoFlame
+    0x02001A9D: 0x02001A0E,   # UndeadMaleZombie
+    0x02001A96: 0x02001A0E,   # UndeadMaleZombieNoFlame
+    0x02001A0D: 0x02001A0C,   # UndeadFemaleUndeadGen  -> UndeadFemaleUndead
+    0x02001AA0: 0x02001A0C,   # UndeadFemaleSkeleton
+    0x02001A9F: 0x02001A0C,   # UndeadFemaleSkeletonNoFlame
+    0x02001AA1: 0x02001A0C,   # UndeadFemaleZombie
+    0x02001AA2: 0x02001A0C,   # UndeadFemaleZombieNoFlame
+    0x02001AA3: 0x02000001,   # AnakshayMale           -> HumanMale
+    0x02001AA4: 0x0200004E,   # AnakshayFemale         -> HumanFemale
+}
+
+
+def resolve_body_setup(setup_id: int) -> int:
+    """Map an alternate/barber body setup to one that has ClothingBase entries.
+
+    Anakshay and the Umbraen/Penumbraen/Undead variants render fine on their
+    own, but no ClothingTable references them (verified: 0 of 1262 CB-bearing
+    gear entries mention AnakshayMale), so gear would silently not appear.
+    """
+    return _SETUP_ALIASES.get(setup_id, setup_id)
+
+# CoverageMask bits (ACE.Entity.Enum.CoverageMask)
+_CM_OUTER_UPPER_LEGS = 0x00000100
+_CM_OUTER_LOWER_LEGS = 0x00000200
+_CM_OUTER_CHEST      = 0x00000400
+_CM_OUTER_ABDOMEN    = 0x00000800
+_CM_OUTER_UPPER_ARMS = 0x00001000
+_CM_OUTER_LOWER_ARMS = 0x00002000
+_CM_HEAD             = 0x00004000
+_CM_HANDS            = 0x00008000
+_CM_FEET             = 0x00010000
+
+# Setup part index → CoverageMask bit, exactly as ClothingTable.GetVisualPriority
+_PART_COVERAGE = {
+    0:  _CM_OUTER_ABDOMEN,
+    1:  _CM_OUTER_UPPER_LEGS, 5:  _CM_OUTER_UPPER_LEGS,
+    2:  _CM_OUTER_LOWER_LEGS, 6:  _CM_OUTER_LOWER_LEGS,
+    3:  _CM_FEET, 4: _CM_FEET, 7: _CM_FEET, 8: _CM_FEET,
+    9:  _CM_OUTER_CHEST,
+    10: _CM_OUTER_UPPER_ARMS, 13: _CM_OUTER_UPPER_ARMS,
+    11: _CM_OUTER_LOWER_ARMS, 14: _CM_OUTER_LOWER_ARMS,
+    12: _CM_HANDS, 15: _CM_HANDS,
+    16: _CM_HEAD,
+}
+
+# EquipMask (ACE.Entity.Enum.EquipMask)
+EQUIP_ARMOR     = 0x00007F00   # Chest/Abdomen/UpperArm/LowerArm/UpperLeg/LowerLeg/Foot armor
+EQUIP_EXTREMITY = 0x00000121   # HeadWear | HandWear | FootWear
+EQUIP_CLOTHING  = 0x800001FF
+EQUIP_CLOAK     = 0x08000000
+
+ITEM_TYPE_ARMOR    = 2
+ITEM_TYPE_CLOTHING = 4
+
+
+def clothing_visual_priority(db: DatDatabase, clothing_id: int,
+                             setup_id: int = HUMAN_MALE_SETUP) -> int:
+    """Derive an item's VisualClothingPriority from its ClothingTable.
+
+    Mirrors ACE's ClothingTable.GetVisualPriority(), which always measures
+    against HUMAN_MALE regardless of the body actually being dressed: it ORs a
+    CoverageMask bit for every body part the item's base effect replaces. This
+    is what makes an over-robe (nominally just "Chest") sort as covering the
+    torso, arms and legs.
+    """
+    parts = parse_clothing_base_effect(db, clothing_id, setup_id)
+    if not parts:
+        return 0
+    mask = 0
+    for pidx in parts:
+        mask |= _PART_COVERAGE.get(pidx, 0)
+    return mask
+
+
+def order_outfit(db: DatDatabase, items: List[dict]) -> List[dict]:
+    """Order equipped items the way the client composites them.
+
+    Ported from ACE Creature_Networking.CalculateObjDesc():
+
+        var top     = armor.Where(TopLayerPriority == true ).OrderBy(VisualClothingPriority);
+        var noLayer = armor.Where(TopLayerPriority == null ).OrderBy(VisualClothingPriority);
+        var bottom  = armor.Where(TopLayerPriority == false).OrderBy(VisualClothingPriority);
+        var sortedArmorItems = bottom.Concat(noLayer).Concat(top);
+        var eo = clothesAndCloaks.OrderBy(ClothingPriority).Concat(sortedArmorItems);
+
+    Note the final concat order: clothing/cloaks come FIRST and armor LAST, so
+    armor overwrites clothing on any shared part. Later in the returned list
+    wins, matching the client applying AnimPartChanges in order.
+
+    Each item dict may carry: clothing_id, item_type, valid_locations,
+    top_layer (True/False/None), clothing_priority, palette_template, shade.
+    """
+    def _is_armor(i):
+        # ItemType.Armor, or anything wielded into an armor/extremity slot
+        # (a cloth Kasa is ItemType.Clothing but sorts as armor).
+        vl = i.get("valid_locations") or 0
+        return (i.get("item_type") == ITEM_TYPE_ARMOR
+                or (vl & (EQUIP_ARMOR | EQUIP_EXTREMITY)) != 0)
+
+    armor, clothes = [], []
+    for i in items:
+        if not i.get("clothing_id"):
+            continue
+        (armor if _is_armor(i) else clothes).append(i)
+
+    for a in armor:
+        a["_vis"] = clothing_visual_priority(db, a["clothing_id"])
+
+    def _tl(i):
+        v = i.get("top_layer")
+        return v if isinstance(v, bool) else None
+
+    bottom  = sorted([a for a in armor if _tl(a) is False], key=lambda x: x["_vis"])
+    nolayer = sorted([a for a in armor if _tl(a) is None],  key=lambda x: x["_vis"])
+    top     = sorted([a for a in armor if _tl(a) is True],  key=lambda x: x["_vis"])
+
+    clothes = sorted(clothes, key=lambda x: x.get("clothing_priority") or 0)
+    return clothes + bottom + nolayer + top
+
+
+# ── Palette / dye options (for the Doll's per-item color picker) ─────────────
+
+# ACE.Entity.Enum.PaletteTemplate — implicit sequential values, 0..93.
+PALETTE_TEMPLATE_NAMES = {
+    0: "Undef", 1: "Aqua Blue", 2: "Blue", 3: "Blue Purple", 4: "Brown",
+    5: "Dark Blue", 6: "Deep Brown", 7: "Deep Green", 8: "Green", 9: "Grey",
+    10: "Light Blue", 11: "Maroon", 12: "Navy", 13: "Purple", 14: "Red",
+    15: "Red Purple", 16: "Rose", 17: "Yellow", 18: "Yellow Brown",
+    19: "Copper", 20: "Silver", 21: "Gold", 22: "Aqua",
+    23: "Dark Aqua Metal", 24: "Dark Blue Metal", 25: "Dark Copper Metal",
+    26: "Dark Gold Metal", 27: "Dark Green Metal", 28: "Dark Purple Metal",
+    29: "Dark Red Metal", 30: "Dark Silver Metal", 31: "Light Aqua Metal",
+    32: "Light Blue Metal", 33: "Light Copper Metal", 34: "Light Gold Metal",
+    35: "Light Green Metal", 36: "Light Purple Metal", 37: "Light Red Metal",
+    38: "Light Silver Metal", 39: "Black", 40: "Bronze", 41: "Sandy Yellow",
+    42: "Dark Brown", 43: "Light Brown", 44: "Tan Red", 45: "Pale Green",
+    46: "Tan", 47: "Pasty Yellow", 48: "Snowy White", 49: "Ruddy Yellow",
+    50: "Ruddier Yellow", 51: "Mid Grey", 52: "Dark Grey",
+    53: "Blue Dull Silver", 54: "Yellow Pale Silver", 55: "Brown Blue Dark",
+    56: "Brown Blue Med", 57: "Green Silver", 58: "Brown Green",
+    59: "Yellow Green", 60: "Pale Purple", 61: "White", 62: "Red Brown",
+    63: "Green Brown", 64: "Orange Brown", 65: "Pale Green Brown",
+    66: "Pale Orange", 67: "Green Slime", 68: "Blue Slime", 69: "Yellow Slime",
+    70: "Purple Slime", 71: "Dull Red", 72: "Grey White", 73: "Medium Grey",
+    74: "Dull Green", 75: "Olive Green", 76: "Orange", 77: "Blue Green",
+    78: "Olive", 79: "Lead", 80: "Iron", 81: "Lite Green", 82: "Pink Purple",
+    83: "Amber", 84: "Dye Dark Green", 85: "Dye Dark Red",
+    86: "Dye Dark Yellow", 87: "Dye Botched", 88: "Dye Winter Blue",
+    89: "Dye Winter Green", 90: "Dye Winter Silver", 91: "Dye Spring Blue",
+    92: "Dye Spring Purple", 93: "Dye Spring Black",
+}
+
+
+def parse_clothing_subpal_all(db: DatDatabase,
+                              clothing_id: int) -> Dict[int, list]:
+    """Every SubPalEffect in a ClothingTable: {template: [(palset, ranges)]}.
+
+    The keys are exactly the PaletteTemplates this item can be dyed to — an
+    item cannot take a color it has no subpal effect for.
+    """
+    data = db.read_file(clothing_id)
+    if not data or len(data) < 8:
+        return {}
+    try:
+        nbe, _b = struct.unpack_from("<HH", data, 4)
+        off = 8
+        for _ in range(nbe):                       # skip ClothingBaseEffects
+            off += 4
+            nobj, = struct.unpack_from("<I", data, off); off += 4
+            for _ in range(nobj):
+                off += 8
+                ntex, = struct.unpack_from("<I", data, off); off += 4 + 8 * ntex
+        nsp, _b2 = struct.unpack_from("<HH", data, off); off += 4
+        out: Dict[int, list] = {}
+        for _ in range(nsp):
+            key, off = _u32(data, off)
+            _icon, off = _u32(data, off)
+            nsub, = struct.unpack_from("<i", data, off); off += 4
+            subs = []
+            for _ in range(nsub):
+                nr, = struct.unpack_from("<i", data, off); off += 4
+                ranges = []
+                for _ in range(nr):
+                    o_, n_ = struct.unpack_from("<II", data, off); off += 8
+                    ranges.append((o_, n_))
+                palset, off = _u32(data, off)
+                subs.append((palset, ranges))
+            out[key] = subs
+        return out
+    except Exception:
+        return {}
+
+
+def paletteset_shades(db: DatDatabase, pid: int) -> int:
+    """How many distinct shades a PaletteSet (0x0F) offers. 1 for a raw Palette."""
+    if (pid >> 24) != 0x0F:
+        return 1
+    data = db.read_file(pid)
+    if not data or len(data) < 8:
+        return 0
+    try:
+        count, = struct.unpack_from("<I", data, 4)
+        return max(0, count)
+    except Exception:
+        return 0
+
+
+def list_clothing_palettes(db: DatDatabase, clothing_id: int) -> List[dict]:
+    """Dye options for one item: [{template, name, shades, swatches:[#rrggbb]}].
+
+    A template's *first* subpalette is the primary — it is the one whose
+    PaletteSet changes from template to template, i.e. the item's actual
+    colour. Later subpalettes are shared across every template (trim, straps)
+    and must not drive the swatch or the shade count: the secondary often has
+    far more shades than the primary, and keying the slider off it would
+    produce runs of identical steps.
+    """
+    subpals = parse_clothing_subpal_all(db, clothing_id)
+    if not subpals:
+        return []
+
+    pal_cache: Dict[int, Optional[List[int]]] = {}
+
+    def _pal(pid):
+        if pid not in pal_cache:
+            pal_cache[pid] = parse_palette(db, pid)
+        return pal_cache[pid]
+
+    def _swatch(colors, ranges):
+        """A representative colour for a dye ramp.
+
+        Palette ramps run from near-black shadow to the lit hue, so the mean
+        (and the midpoint index) both come out muddy or plain black. Take the
+        75th-percentile-by-luminance colour instead — that lands on the lit
+        body of the material, which is what the eye reads as "its colour".
+        """
+        vals = []
+        for off, cnt in ranges:
+            for k in range(off, min(off + cnt, len(colors))):
+                c = colors[k]
+                r, g, b = (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF
+                vals.append((0.2126 * r + 0.7152 * g + 0.0722 * b, r, g, b))
+        if not vals:
+            return "#808080"
+        vals.sort(key=lambda v: v[0])
+        _lum, r, g, b = vals[min(int(len(vals) * 0.75), len(vals) - 1)]
+        return "#%02X%02X%02X" % (r, g, b)
+
+    out = []
+    for tpl in sorted(subpals):
+        subs = subpals[tpl]
+        if not subs or not subs[0][1]:
+            continue
+        ps, ranges = subs[0]                       # primary subpalette
+        shades = max(1, min(paletteset_shades(db, ps), 64))
+        swatches = []
+        for i in range(shades):
+            shade = (i + 0.5) / shades             # centre of each shade bucket
+            pid = resolve_palette_id(db, ps, shade)
+            colors = _pal(pid) if pid else None
+            swatches.append(_swatch(colors, ranges) if colors else "#808080")
+        out.append({
+            "template": tpl,
+            "name": PALETTE_TEMPLATE_NAMES.get(tpl, f"Template {tpl}"),
+            "shades": shades,
+            "swatches": swatches,
+        })
+    return out
 
 
 def resolve_palette_id(db: DatDatabase, pid: int, shade: float) -> int:
@@ -1224,7 +1551,8 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
                      clothing_id: int = 0,
                      motion_id: int = 0,
                      palette_template: int = 0,
-                     shade: float = 0.0) -> Optional[bytes]:
+                     shade: float = 0.0,
+                     outfit: Optional[List[dict]] = None) -> Optional[bytes]:
     """
     Read a Setup + its GfxObjs + textures from the DAT and return GLB bytes.
     Returns None if the setup is not found or has no renderable geometry.
@@ -1232,6 +1560,11 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
     clothing_id: optional ClothingTable (0x10xxxxxx). Armor/clothing weenies
     point their Setup at the base body parts; the ClothingTable swaps each
     covered part's GfxObj for the armor version and overrides its textures.
+
+    outfit: optional list of item dicts (see order_outfit) to composite onto a
+    body setup — the "doll". Supersedes clothing_id/palette_template/shade.
+    Items are ordered per ACE and applied in sequence, so a later item's parts
+    and dyes overwrite an earlier one's wherever they overlap.
     """
     raw = db.read_file(setup_id)
     if not raw:
@@ -1241,20 +1574,50 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
     if not setup or not setup.parts:
         return None
 
-    clo_parts = parse_clothing_base_effect(db, clothing_id, setup_id) if clothing_id else None
+    # Normalize the single-item call into a one-item outfit so there is only
+    # one compositing path. The single-item path keeps its stricter subpal
+    # lookup (no fallback) to preserve existing item-preview behavior.
+    if outfit is None:
+        outfit = ([{"clothing_id": clothing_id,
+                    "palette_template": palette_template,
+                    "shade": shade,
+                    "_subpal_fallback": False}]
+                  if clothing_id else [])
+        ordered = outfit
+    else:
+        ordered = order_outfit(db, outfit)
 
     # Palette dye: the ClothingTable's SubPalEffects for the weenie's
     # PaletteTemplate overwrite ranges of the texture palettes with colors from
     # a PaletteSet resolved by Shade. This is what turns the shared human body
     # models into Shadows (full 2048-color palette replacement) and drives all
     # armor dye colors.
+    # ACE tries the real setup first, then an aliased body, because alternate
+    # setups (Anakshay, barber/no-crown variants) have no ClothingTable entries.
+    _alias = resolve_body_setup(setup_id)
+
+    clo_parts: Dict[int, Tuple[int, Dict[int, int]]] = {}
     pal_overrides = []
-    if clothing_id and palette_template:
-        for palset, ranges in parse_clothing_subpals(db, clothing_id, palette_template):
-            src_id = resolve_palette_id(db, palset, shade)
-            src = parse_palette(db, src_id) if src_id else None
-            if src and ranges:
-                pal_overrides.append((src, ranges))
+    for _it in ordered:
+        _cid = _it.get("clothing_id") or 0
+        if not _cid:
+            continue
+        _parts = parse_clothing_base_effect(db, _cid, setup_id)
+        if not _parts and _alias != setup_id:
+            _parts = parse_clothing_base_effect(db, _cid, _alias)
+        if _parts:
+            clo_parts.update(_parts)       # later item wins on shared parts
+        _pt = int(_it.get("palette_template") or 0)
+        _sh = float(_it.get("shade") or 0.0)
+        _fb = _it.get("_subpal_fallback", True)
+        if _pt or _fb:
+            for palset, ranges in parse_clothing_subpals(db, _cid, _pt,
+                                                         fallback_first=_fb):
+                src_id = resolve_palette_id(db, palset, _sh)
+                src = parse_palette(db, src_id) if src_id else None
+                if src and ranges:
+                    pal_overrides.append((src, ranges))
+    clo_parts = clo_parts or None
 
     # Ambient particle emitters come from the setup's DefaultScript (0x33) —
     # the last five dwords of a Setup are DefaultAnimation, DefaultScript,
@@ -1791,7 +2154,7 @@ def _rgba_to_png(rgba: bytes, w: int, h: int) -> bytes:
 # ── Cache helpers (used by app_api.py) ───────────────────────────────────────
 
 # Increment this when parse logic changes — forces cache invalidation
-_PARSER_VERSION = "v19"
+_PARSER_VERSION = "v20"
 
 def get_cache_dir() -> Path:
     appdata = os.environ.get("APPDATA", str(Path.home()))
@@ -1800,14 +2163,38 @@ def get_cache_dir() -> Path:
     return d
 
 
+def outfit_key(outfit: List[dict]) -> str:
+    """Stable short hash of an outfit for the GLB cache filename.
+
+    Order-sensitive on purpose — two outfits with the same items in a
+    different layer order can render differently.
+    """
+    import hashlib
+    sig = "|".join(
+        f"{int(i.get('clothing_id') or 0):08X}"
+        f":{int(i.get('palette_template') or 0)}"
+        f":{int(float(i.get('shade') or 0.0) * 1000)}"
+        f":{int(i.get('item_type') or 0)}"
+        f":{int(i.get('valid_locations') or 0)}"
+        f":{int(i.get('clothing_priority') or 0)}"
+        f":{i.get('top_layer')}"
+        for i in outfit
+    )
+    return hashlib.sha1(sig.encode()).hexdigest()[:12]
+
+
 def cached_glb_path(setup_id: int, clothing_id: int = 0,
                     motion_id: int = 0, palette_template: int = 0,
-                    shade: float = 0.0) -> Path:
+                    shade: float = 0.0,
+                    outfit: Optional[List[dict]] = None) -> Path:
     # Version in filename forces re-parse when parser changes; clothing id
     # distinguishes the same body setup dressed in different armor, motion id
     # distinguishes animated vs static, and palette/shade distinguish dyes.
-    clo = f"_C{clothing_id:08X}" if clothing_id else ""
+    # An outfit hashes the whole ensemble instead of a single clothing id.
     mot = f"_M{motion_id:08X}" if motion_id else ""
+    if outfit:
+        return get_cache_dir() / f"{setup_id:08X}_D{outfit_key(outfit)}{mot}_{_PARSER_VERSION}.glb"
+    clo = f"_C{clothing_id:08X}" if clothing_id else ""
     dye = f"_P{palette_template}S{int(shade*1000)}" if palette_template else ""
     return get_cache_dir() / f"{setup_id:08X}{clo}{mot}{dye}_{_PARSER_VERSION}.glb"
 
@@ -1816,14 +2203,17 @@ def get_or_export_glb(db: DatDatabase, setup_id: int,
                       clothing_id: int = 0,
                       motion_id: int = 0,
                       palette_template: int = 0,
-                      shade: float = 0.0) -> Optional[Path]:
+                      shade: float = 0.0,
+                      outfit: Optional[List[dict]] = None) -> Optional[Path]:
     """Return path to cached GLB, exporting from DAT if needed."""
-    p = cached_glb_path(setup_id, clothing_id, motion_id, palette_template, shade)
+    p = cached_glb_path(setup_id, clothing_id, motion_id, palette_template,
+                        shade, outfit)
     if p.exists():
         return p
     glb = export_setup_glb(db, setup_id, clothing_id=clothing_id,
                            motion_id=motion_id,
-                           palette_template=palette_template, shade=shade)
+                           palette_template=palette_template, shade=shade,
+                           outfit=outfit)
     if glb is None:
         return None
     p.write_bytes(glb)

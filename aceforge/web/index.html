@@ -47,6 +47,7 @@ html,body{height:100%;overflow:hidden;font-family:'Inter',-apple-system,sans-ser
 .top-btn.danger:hover{border-color:var(--crimson);color:var(--crimson)}
 .mode-tabs{display:flex;border-bottom:2px solid var(--border);background:var(--parch-lt);padding:0 20px;flex-shrink:0}
 .mode-tab{font-family:var(--ui-font);font-size:13px;font-weight:600;letter-spacing:0;padding:13px 20px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--ink-dim);background:none;border-top:none;border-left:none;border-right:none;display:flex;align-items:center;gap:7px;transition:all .15s}
+.mode-tab img{width:18px;height:18px;object-fit:contain;image-rendering:pixelated;flex-shrink:0}
 .mode-tab:hover{color:var(--ink)}
 .mode-tab.active{color:var(--crimson);border-bottom-color:var(--crimson)}
 .app{display:flex;flex-direction:column;height:100vh;padding-bottom:44px;box-sizing:border-box}
@@ -375,10 +376,11 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
 
 <!-- MODE TABS -->
 <div class="mode-tabs">
-  <button class="mode-tab active" onclick="switchMode('manual',this)">&#x1F528; WeenieForge</button>
-  <button class="mode-tab" onclick="switchMode('ai',this)">&#x2728; QuestForge</button>
-  <button class="mode-tab" onclick="switchMode('lore',this)">&#x1F4D6; LoreForge</button>
-  <button class="mode-tab" onclick="switchMode('gear',this)">&#x2694;&#xFE0F; GearForge</button>
+  <button class="mode-tab active" onclick="switchMode('manual',this)"><img src="https://raw.githubusercontent.com/shemtar-90/aceforge-icons/main/icons/06003781.png" onerror="this.style.display='none'">WeenieForge</button>
+  <button class="mode-tab" onclick="switchMode('ai',this)"><img src="https://raw.githubusercontent.com/shemtar-90/aceforge-icons/main/icons/0600314F.png" onerror="this.style.display='none'">QuestForge</button>
+  <button class="mode-tab" onclick="switchMode('lore',this)"><img src="https://raw.githubusercontent.com/shemtar-90/aceforge-icons/main/icons/060026AD.png" onerror="this.style.display='none'">LoreForge</button>
+  <button class="mode-tab" onclick="switchMode('gear',this)"><img src="https://raw.githubusercontent.com/shemtar-90/aceforge-icons/main/icons/06003029.png" onerror="this.style.display='none'">GearForge</button>
+  <button class="mode-tab" onclick="switchMode('town',this)"><img src="https://raw.githubusercontent.com/shemtar-90/aceforge-icons/main/icons/0600106B.png" onerror="this.style.display='none'">Town Network</button>
 </div>
 
 
@@ -530,6 +532,23 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
   </div>
 </div>
 
+<!-- TOWN NETWORK WORKSPACE -->
+<div class="workspace" id="townWS" style="flex-direction:column">
+  <div style="flex:1;overflow-y:auto;padding:18px 26px 40px">
+    <div style="max-width:1100px;margin:0 auto">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:10px;border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:6px">
+        <div>
+          <div style="font-family:var(--ui-font);font-size:14px;font-weight:700;letter-spacing:.12em;color:var(--crimson);display:flex;align-items:center;gap:8px"><img src="https://raw.githubusercontent.com/shemtar-90/aceforge-icons/main/icons/0600106B.png" style="width:22px;height:22px;object-fit:contain;image-rendering:pixelated" onerror="this.style.display='none'">TOWN NETWORK</div>
+          <div style="font-family:var(--ui-font);font-style:italic;font-size:11px;color:var(--ink-faint);margin-top:3px">Tools, plugins, editors, and resources contributed by the Asheron's Call community. All links open in your browser.</div>
+        </div>
+        <input type="text" id="townSearch" placeholder="&#x1F50D; Filter tools, authors, tags…" oninput="townRender()" style="width:260px;box-sizing:border-box">
+      </div>
+      <div id="townCatBar" style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px"></div>
+      <div id="townList"></div>
+    </div>
+  </div>
+</div>
+
 <!-- GEARFORGE WORKSPACE -->
 <div class="workspace" id="gearWS" style="flex-direction:row">
   <div class="form-panel" style="flex:0 0 280px;border-right:1px solid var(--border)">
@@ -558,6 +577,7 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
     <div class="sql-hdr">
       <div class="sql-title">Generated Items</div>
       <div class="sql-btns">
+        <button class="sql-btn" onclick="gearOpenDoll()" title="Show these items worn on a character model">&#x1F9CD; Doll</button>
         <button class="sql-btn" onclick="gearImportItems()" title="Import one or more armor/clothing/weapon SQL files to edit">&#x2B06; Import</button>
         <button class="sql-btn" onclick="gearOpenBulkEdit()" title="Edit a property across all generated items at once">&#x2261; Bulk Edit</button>
         <button class="sql-btn" onclick="gearClearAllItems()">&#x2715; Clear All</button>
@@ -6559,32 +6579,22 @@ function buildCreateListTab(){
       +'<select onchange="createList['+i+'].dest=parseInt(this.value);rebuildPanel(\'properties\')" style="font-family:var(--ui-font);font-size:10px;padding:3px 4px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink)">'+
       DEST_OPTS.replace('value="'+r.dest+'"','value="'+r.dest+'" selected')+
       '</select>'
-      +'<input type="number" id="cl_wcid_'+i+'" value="'+(r.wcid||0)+'" placeholder="WCID" oninput="createList['+i+'].wcid=parseInt(this.value)||0;regen()" style="'+IST+'">'
+      +'<input type="number" id="cl_wcid_'+i+'" value="'+(r.wcid||0)+'" placeholder="WCID" oninput="createList['+i+'].wcid=parseInt(this.value)||0;regen();_clEnsurePalettes()" style="'+IST+'">'
       +'<input type="number" value="'+(r.stack||1)+'" placeholder="Stack" oninput="createList['+i+'].stack=parseInt(this.value)||1;regen()" style="'+IST+'">'
       +'<input type="text" value="'+(r.prob!==undefined?r.prob:1)+'" placeholder="Prob" oninput="createList['+i+'].prob=parseFloat(this.value)||1;regen()" style="'+IST+'">'
       +'<button onclick="createList.splice('+i+',1);rebuildPanel(\'properties\')" style="font-family:var(--ui-font);font-size:10px;padding:2px 8px;border:1px solid var(--border);background:transparent;color:var(--crimson);cursor:pointer">✕</button>'
       +'</div>';
-    // Palette + Shade sub-row (applies to items with a ClothingBase — armor/clothing/weapons)
+    // Palette + Shade sub-row. Both are driven by the item's real ClothingBase
+    // ramp from the DAT (see _clShadeUI) rather than a synthetic gradient:
+    // Shade is a quantised index into a PaletteSet, not a continuous darkener.
     var _pal=(typeof PALETTE_COLORS!=='undefined')?PALETTE_COLORS.find(function(p){return p[0]===(parseInt(r.palette)||0);}):null;
-    var _sw=(_pal&&_pal[2])?_pal[2]:null;
-    var _shv=(parseFloat(r.shade)||0);
     var ps = '<div style="display:flex;align-items:center;gap:14px;margin:5px 0 2px 0;flex-wrap:wrap">'
       +'<div style="display:flex;align-items:center;gap:5px">'
         +'<span style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--ink-dim)">PALETTE</span>'
-        +'<input type="number" value="'+(parseInt(r.palette)||0)+'" oninput="createList['+i+'].palette=parseInt(this.value)||0;regen()" style="width:52px;'+IST+'">'
+        +'<input type="number" value="'+(parseInt(r.palette)||0)+'" oninput="createList['+i+'].palette=parseInt(this.value)||0;_clSyncShade('+i+');rebuildPanel(\'properties\')" style="width:52px;'+IST+'">'
         +'<button onclick="_clPickPalette('+i+')" title="'+((_pal&&_pal[1])?_pal[1].replace(/"/g,"&quot;"):'')+'" style="padding:3px 8px;font-family:var(--ui-font);font-size:9px;font-weight:700;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer;white-space:nowrap">&#x1F3A8; Pick</button>'
-        +(_sw?'<span style="width:15px;height:15px;border-radius:3px;border:1px solid rgba(0,0,0,.35);background:'+_sw+'"></span>':'')
       +'</div>'
-      +'<div style="display:flex;align-items:center;gap:6px">'
-        +'<span style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--ink-dim)">SHADE</span>'
-        +'<input type="range" min="0" max="1" step="0.02" value="'+_shv+'" oninput="_clApplyShade('+i+',this.value)" style="width:90px;accent-color:var(--gold)">'
-        +'<span id="cl_shade_'+i+'" style="width:30px;text-align:right;font-family:JetBrains Mono,monospace;font-size:11px;font-weight:600;color:var(--ink)">'+_shv.toFixed(2)+'</span>'
-        // shade strip: base color (0.0) → darkened end (1.0), with a live marker
-        +'<div style="position:relative;width:110px;height:14px;border:1px solid var(--border);border-radius:3px;background:linear-gradient(to right,'+_clShadeBase(r.palette)+','+_clShadeRgb(_clShadeBase(r.palette),1)+')" title="Shade darkens the palette color from 0.0 (left) to 1.0 (right)">'
-          +'<div id="cl_shade_mk_'+i+'" style="position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff;box-shadow:0 0 2px #000;left:'+(_shv*100)+'%"></div>'
-        +'</div>'
-        +'<span id="cl_shade_sw_'+i+'" style="width:15px;height:15px;flex-shrink:0;border-radius:3px;border:1px solid rgba(0,0,0,.35);background:'+_clShadeRgb(_clShadeBase(r.palette),_shv)+'" title="Resulting shaded color"></span>'
-      +'</div>'
+      + _clShadeUI(i, r)
       +'</div>';
     // Every row gets a name/WCID search that fills the WCID — matches your own
     // saved items (★) first, then base-game wieldables.
@@ -6608,6 +6618,8 @@ function buildCreateListTab(){
     +'<div style="margin-top:10px;display:flex;gap:8px">'
     +'<button onclick="createList.push({dest:0,wcid:0,stack:1,prob:1});rebuildPanel(\'properties\')" style="'+BTN+'">+ Add Row</button>'
     +'<button onclick="clOpenArmorSetModal()" style="'+BTN+';border-color:var(--gold);color:var(--gold)">+ Add Armor Set</button>'
+    +'<button onclick="weenieOpenDoll()" title="Dress this creature on a 3D doll, then wield the result"'
+    +' style="'+BTN+';border-color:var(--crimson);color:var(--crimson)">&#x1F9CD; Dress on Doll</button>'
     +'</div></div>';
 }
 
@@ -6668,30 +6680,125 @@ function _clPickPalette(i){
     if(createList[i]){ createList[i].palette = val; rebuildPanel('properties'); }
   });
 }
-// ── Create Items: shade preview helpers ──────────────────────────────────
-// The base swatch for a PaletteTemplate number (falls back to neutral when the
-// sheet had no colour on file for that entry).
-function _clShadeBase(paletteNum){
-  var p=(typeof PALETTE_COLORS!=='undefined')
-    ? PALETTE_COLORS.find(function(x){return x[0]===(parseInt(paletteNum)||0);}) : null;
-  return (p && p[2]) ? p[2] : '#9a9aa0';
+// ── Create Items: shade UI, driven by the item's real palette ramp ────────
+// Shade is NOT a brightness dial. It is a fraction into the item's PaletteSet,
+// quantised to that set's size (idx = int(shade*count)), and across ~100% of
+// AC armor ramps it gets LIGHTER as it rises. The count varies per item AND
+// per PaletteTemplate (1, 4, 6, 7, 8, 14, 15, 56 all occur) — and where it is
+// 1, shade does nothing at all. So the only honest UI is the item's own
+// swatches, stepped to its own bucket count.
+var _clPalCache   = {};      // wcid -> {clothing_id, palettes:[{template,name,shades,swatches}]}
+var _clPalPending = false;
+
+function _clPalFor(wcid){
+  var e=_clPalCache[parseInt(wcid)||0];
+  return (e && e.palettes) ? e.palettes : null;
 }
-// Darken a hex colour toward ~25% brightness as shade goes 0 → 1, matching how
-// AC's Shade slides a palette toward its darker sub-range end.
-function _clShadeRgb(hex, shade){
-  hex=String(hex).replace('#','');
-  var r=parseInt(hex.substr(0,2),16), g=parseInt(hex.substr(2,2),16), b=parseInt(hex.substr(4,2),16);
-  var f=1-(parseFloat(shade)||0)*0.75;
-  return 'rgb('+Math.round(r*f)+','+Math.round(g*f)+','+Math.round(b*f)+')';
+function _clEntryFor(wcid, tpl){
+  var pals=_clPalFor(wcid);
+  if(!pals) return null;
+  for(var i=0;i<pals.length;i++) if(pals[i].template===(parseInt(tpl)||0)) return pals[i];
+  return null;
 }
-function _clApplyShade(i, val){
-  var v=parseFloat(val)||0;
-  if(createList[i]) createList[i].shade=v;
-  var base=_clShadeBase(createList[i]?createList[i].palette:0);
-  var t =document.getElementById('cl_shade_'+i);    if(t)  t.textContent=v.toFixed(2);
-  var mk=document.getElementById('cl_shade_mk_'+i); if(mk) mk.style.left=(v*100)+'%';
-  var sw=document.getElementById('cl_shade_sw_'+i); if(sw) sw.style.background=_clShadeRgb(base,v);
-  regen();
+function _clShadeIdx(shade, shades){
+  return Math.max(0, Math.min(Math.floor((parseFloat(shade)||0)*shades), shades-1));
+}
+
+// Fetch every create-list row's ramp in ONE batched call, then redraw once.
+function _clEnsurePalettes(){
+  if(_clPalPending || !window.pywebview || typeof createList==='undefined') return;
+  var need=[];
+  createList.forEach(function(r){
+    var w=parseInt(r && r.wcid)||0;
+    if(w && _clPalCache[w]===undefined && need.indexOf(w)<0) need.push(w);
+  });
+  if(!need.length) return;
+  _clPalPending=true;
+  need.forEach(function(w){ _clPalCache[w]=null; });   // mark in-flight
+  window.pywebview.api.weenie_palette_options_batch(need).then(function(r){
+    need.forEach(function(w){
+      var e=(r && r.items) ? r.items[String(w)] : null;
+      _clPalCache[w]= e || {clothing_id:'', palettes:[]};
+    });
+    _clPalPending=false;
+    if(typeof rebuildPanel==='function') rebuildPanel('properties');
+  }).catch(function(){
+    need.forEach(function(w){ _clPalCache[w]={clothing_id:'',palettes:[]}; });
+    _clPalPending=false;
+  });
+}
+
+var _CL_LBL='font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--ink-dim)';
+var _CL_NOTE='font-family:var(--ui-font);font-size:9px;font-style:italic;color:var(--ink-faint)';
+
+function _clShadeUI(i, r){
+  var wcid=parseInt(r.wcid)||0;
+  var tpl =parseInt(r.palette)||0;
+  var shv =parseFloat(r.shade)||0;
+  var wrap=function(inner){
+    return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+      +'<span style="'+_CL_LBL+'">SHADE</span>'+inner+'</div>';
+  };
+  if(!wcid) return wrap('<span style="'+_CL_NOTE+'">pick an item first</span>');
+  var pals=_clPalFor(wcid);
+  if(pals===null){
+    _clEnsurePalettes();
+    return wrap('<span style="'+_CL_NOTE+'">loading palette data…</span>');
+  }
+  if(!pals.length){
+    return wrap('<span style="'+_CL_NOTE+'">this item has no ClothingBase — '
+      +'palette and shade have no effect</span>');
+  }
+  var e=_clEntryFor(wcid, tpl);
+  if(!e){
+    var names=pals.slice(0,6).map(function(p){return p.template+'='+p.name;}).join(', ');
+    return wrap('<span style="'+_CL_NOTE+';color:var(--crimson)">palette '+tpl
+      +' isn\'t supported by this item — shade will do nothing. Try: '
+      +escHtml(names)+(pals.length>6?', …':'')+'</span>');
+  }
+  var idx=_clShadeIdx(shv, e.shades);
+  var chip=function(c){ return '<span style="width:15px;height:15px;flex-shrink:0;border-radius:3px;'
+    +'border:1px solid rgba(0,0,0,.35);background:'+c+'"></span>'; };
+  if(e.shades<=1){
+    return wrap(chip(e.swatches[0]||'#808080')
+      +'<span style="'+_CL_NOTE+'">'+escHtml(e.name)+' has a single shade — '
+      +'the slider would do nothing</span>');
+  }
+  // The real ramp, as discrete stops: what you see is what renders.
+  var strip=e.swatches.map(function(c,k){
+    return '<span onclick="_clApplyShade('+i+','+k+')" title="shade '+k+' of '+e.shades+'"'
+      +' style="flex:1;min-width:5px;height:14px;cursor:pointer;background:'+c+';'
+      +(k===idx?'outline:2px solid var(--gold);outline-offset:-2px;z-index:1;':'')+'"></span>';
+  }).join('');
+  return wrap(
+     '<input type="range" min="0" max="'+(e.shades-1)+'" step="1" value="'+idx+'"'
+    +' oninput="_clApplyShade('+i+',this.value)" style="width:80px;accent-color:var(--gold)">'
+    +'<span id="cl_shade_'+i+'" style="width:34px;text-align:right;font-family:JetBrains Mono,monospace;'
+    +'font-size:10px;font-weight:600;color:var(--ink)">'+(idx+1)+'/'+e.shades+'</span>'
+    +'<span style="display:flex;width:110px;height:14px;border:1px solid var(--border);'
+    +'border-radius:3px;overflow:hidden" title="'+escHtml(e.name)+' ramp — click a stop">'+strip+'</span>'
+    +chip(e.swatches[idx]||'#808080'));
+}
+
+// Slider/strip give a bucket index; store the bucket centre so the value can't
+// sit on a boundary. 4dp keeps SQL readable (see the Doll's _dollSetShade).
+function _clApplyShade(i, idx){
+  var r=createList[i]; if(!r) return;
+  var e=_clEntryFor(r.wcid, r.palette);
+  var n=e?e.shades:1;
+  var k=Math.max(0, Math.min(parseInt(idx)||0, n-1));
+  r.shade=Math.round(((k+0.5)/n)*10000)/10000;
+  rebuildPanel('properties');
+}
+
+// Changing the palette can change the bucket count, so re-seat shade into the
+// equivalent position in the new ramp instead of leaving a stale value.
+function _clSyncShade(i){
+  var r=createList[i]; if(!r) return;
+  var e=_clEntryFor(r.wcid, r.palette);
+  if(!e || e.shades<=1){ return; }
+  var k=_clShadeIdx(r.shade, e.shades);
+  r.shade=Math.round(((k+0.5)/e.shades)*10000)/10000;
 }
 
 // ── Create Items: Add Armor Set modal (reuses GearForge suit data + icons) ────
@@ -7174,8 +7281,11 @@ function switchMode(mode,btn){
   if(loreWS) loreWS.classList.toggle('active', mode==='lore');
   const gearWS=document.getElementById('gearWS');
   if(gearWS) gearWS.classList.toggle('active', mode==='gear');
+  const townWS=document.getElementById('townWS');
+  if(townWS) townWS.classList.toggle('active', mode==='town');
   if(mode==='lore') loreInit();
   if(mode==='gear') gearInit();
+  if(mode==='town') townInit();
 }
 
 
@@ -14360,7 +14470,12 @@ function gearGenerationForm(kind){
   </div>
   <p style="font-family:var(--ui-font);font-style:italic;font-size:11px;color:var(--ink-faint);margin-bottom:10px">
     Palette, Shade, Value, and ${kind==='armor'?'Armor Level':'Damage'} are edited per-item after generation.</p>
-  <button class="gen-btn" onclick="gearGenerateNow()" style="margin-bottom:10px">▶ Generate</button>`;
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+    <button class="gen-btn" onclick="gearGenerateNow()" style="margin-bottom:0">▶ Generate</button>
+    ${kind==='armor' ? `<button class="gen-btn" onclick="gearOpenDoll()"
+      title="Preview the selected pieces worn on a character — no need to generate first"
+      style="margin-bottom:0;background:transparent;border:1px solid var(--crimson);color:var(--crimson)">🧍 Doll</button>` : ''}
+  </div>`;
 }
 
 function escHtml(s){
@@ -15590,7 +15705,15 @@ function openModelPreview(setup_id_hex, label, opts){
     return;
   }
 
-  window.pywebview.api.get_model_glb(setup_id_hex, _cloHex, _motHex, _palTpl, _shade).then(function(r){
+  // Doll mode composites N ClothingBases onto a body setup server-side; every
+  // other caller previews a single model. Both return the same GLB envelope,
+  // so the parse/WebGL/2D-fallback path below is shared.
+  _mpRenderDollBar(opts);
+  var _req = (opts && opts.doll)
+    ? window.pywebview.api.get_doll_glb(setup_id_hex, opts.doll, _motHex)
+    : window.pywebview.api.get_model_glb(setup_id_hex, _cloHex, _motHex, _palTpl, _shade);
+
+  _req.then(function(r){
     // Always show status in msg first
     if(!r.success){
       msg.style.color='rgba(255,150,150,.9)';
@@ -15601,6 +15724,13 @@ function openModelPreview(setup_id_hex, label, opts){
 
     var b64len = r.data_b64 ? r.data_b64.length : 0;
     console.log('[3D] GLB received: '+b64len+' b64 chars, info: '+(r.info||'n/a'));
+    if(opts && opts.doll){
+      // "pieces" is always returned; "layers" only on a fresh (uncached) build.
+      var _n=(r.pieces!=null)?r.pieces:(r.layers?r.layers.length:0);
+      var _di=document.getElementById('mpDollInfo');
+      if(_di) _di.textContent=_n+' layer'+(_n!==1?'s':'');
+      if(r.layers) console.log('[Doll] layer order (innermost first): '+r.layers.join(' → '));
+    }
 
     // Step 1: parse GLB header to check validity
     var ok=false, meshCount=0, triCount=0, errMsg='';
@@ -15683,8 +15813,701 @@ function openModelPreview(setup_id_hex, label, opts){
   });
 }
 
+// ── GearForge Doll ────────────────────────────────────────────────────────
+// Renders the generated items worn on a character body instead of lying on the
+// ground. The heavy lifting is server-side: get_doll_glb composites every
+// item's ClothingBase onto the body setup in ACE's layering order.
+var _dollBodies = null;      // [{id,name}] from get_body_setups, fetched once
+var _dollOutfit = null;      // pieces currently being worn (ACTIVE mode only)
+var _dollCurBody = null;     // body setup the active mode is dressing
+
+// GearForge and WeenieForge each get their OWN doll. They dress different
+// things — an armor set you're authoring vs. a specific creature's wield list
+// — so sharing outfit/dye/body between them leaks one into the other. Only the
+// immutable DAT/catalog caches (_dollPalCache, _dollBodies, _dollBaseClothing)
+// and the panel size are shared, because those aren't per-doll state.
+var _dollSaved = {
+  gear:   {outfit:null, clothing:null, body:null},
+  weenie: {outfit:null, clothing:null, body:null}
+};
+
+function _dollDefaultClothing(){ return {on:true, template:4}; }  // 4 = Brown
+
+function _dollEnterMode(mode){
+  if(_dollMode === mode) return;
+  _dollSaved[_dollMode] = {outfit:_dollOutfit, clothing:_dollClothing, body:_dollCurBody};
+  var s = _dollSaved[mode] || {};
+  _dollOutfit   = s.outfit || null;
+  _dollClothing = s.clothing || _dollDefaultClothing();
+  _dollCurBody  = s.body || null;
+  _dollMode     = mode;
+}
+
+function _gearProp(it, sec, key){
+  var v = ((it||{})[sec]||{})[key];
+  return (v && v.value !== undefined) ? v.value : null;
+}
+
+// A gear item can only be worn if it has a ClothingBase — that table is what
+// maps the item onto body parts. Weapons/jewelry without one are skipped.
+function _gearItemToDollPiece(it){
+  var cb = _gearProp(it, 'did', 'ClothingBase');
+  if(!cb) return null;
+  var tl = _gearProp(it, 'bool', 'TopLayerPriority');
+  var _i = function(k){ return parseInt(_gearProp(it,'int',k) || 0) || 0; };
+  return {
+    name:              ((it.string||{}).Name||{}).value || it.class_name || ('wcid ' + it.wcid),
+    // Track the catalog weenie, not the generated one: a generated wcid is new
+    // and absent from the catalog, so re-generating from it would find nothing.
+    wcid:              it.source_wcid || it.wcid,
+    slot:              '',
+    clothing_id:       String(cb),
+    palette_template:  _i('PaletteTemplate'),
+    shade:             parseFloat(_gearProp(it,'float','Shade') || 0) || 0,
+    item_type:         _i('ItemType'),
+    valid_locations:   _i('ValidLocations'),
+    clothing_priority: _i('ClothingPriority'),
+    top_layer:         (tl === null || tl === undefined)
+                         ? null
+                         : (String(tl) === '1' || String(tl).toLowerCase() === 'true')
+  };
+}
+
+var _dollPalCache = {};      // clothing_id -> [{template,name,shades,swatches}]
+var _dollSearchTimer = null;
+var _dollResultCache = [];   // last search hits, indexed by the result rows
+
+// Normalize a catalog/API record into a worn piece.
+function _dollPieceFromRecord(r){
+  return {
+    name:              r.name || r.class_name || ('wcid ' + r.wcid),
+    wcid:              r.wcid,
+    slot:              r.slot || '',
+    clothing_id:       String(r.clothing_id),
+    palette_template:  parseInt(r.palette_template || 0) || 0,
+    shade:             parseFloat(r.shade || 0) || 0,
+    item_type:         parseInt(r.item_type || 0) || 0,
+    valid_locations:   parseInt(r.valid_locations || 0) || 0,
+    clothing_priority: parseInt(r.clothing_priority || 0) || 0,
+    top_layer:         (r.top_layer === true || r.top_layer === false) ? r.top_layer : null
+  };
+}
+
+// Identity of an outfit, by source piece. Used to tell "same set, reopened —
+// keep the dyes the user picked" from "different set — start fresh".
+function _dollSeedKey(pieces){
+  return (pieces || []).map(function(p){ return p.wcid; })
+                       .filter(Boolean).sort(function(a,b){return a-b;}).join(',');
+}
+
+// Open the Doll. Seeds from whatever the user is working on, in order of
+// intent: generated items (the live working set — they carry the dyes) >
+// pieces ticked in the set picker (pre-generate) > empty. Either way the
+// wardrobe is editable afterwards.
+function gearOpenDoll(){
+  if(!window.pywebview){ toast('The Doll needs the desktop app.', 3000); return; }
+  var selWcids = Object.keys(_gearSelectedPieces || {}).map(Number);
+
+  _dollEnterMode('gear');
+  var ready = function(pieces, note){
+    // Reopening the same set must not wipe the dyes. Only re-seed when the
+    // set actually changed — otherwise keep the doll exactly as it was.
+    var incoming = pieces || [];
+    if(_dollOutfit && _dollOutfit.length &&
+       _dollSeedKey(_dollOutfit) === _dollSeedKey(incoming)){
+      note = '';
+    } else {
+      _dollOutfit = incoming;
+    }
+    if(note) toast(note, 3200);
+    var go = function(){
+      _dollLoadClothing(function(){
+        _dollFetchPalettes(function(){ _mpOpenDoll(_dollPickBody()); });
+      });
+    };
+    if(_dollBodies){ go(); return; }
+    window.pywebview.api.get_body_setups().then(function(r){
+      _dollBodies = (r && r.bodies && r.bodies.length)
+                      ? r.bodies : [{id:'0x02000001', name:'Human Male'}];
+      go();
+    }).catch(function(){
+      _dollBodies = [{id:'0x02000001', name:'Human Male'}];
+      go();
+    });
+  };
+
+  // Generated items win over the ticked selection: once you've generated, THEY
+  // are the working set and they carry the palette/shade you chose. Seeding
+  // from the selection instead would re-read catalog defaults and silently
+  // throw those dyes away.
+  var gen = (_gearGeneratedItems || []).map(_gearItemToDollPiece).filter(Boolean);
+  if(gen.length){ ready(gen); return; }
+
+  if(selWcids.length){
+    // Pre-generate path: look the ticked source pieces up in the catalog.
+    window.pywebview.api.doll_items_by_wcid(selWcids).then(function(r){
+      var pieces = ((r && r.items) || []).map(_dollPieceFromRecord);
+      var miss = (r && r.missing) ? r.missing.length : 0;
+      ready(pieces, miss ? (miss + ' selected piece' + (miss!==1?'s':'') +
+        ' can\'t be worn (weapons or no ClothingBase) and were skipped.') : '');
+    }).catch(function(e){ toast('Could not load selection: ' + e, 4000); });
+    return;
+  }
+
+  ready([], 'Nothing selected — search to add armor pieces.');
+}
+
+// Per-mode, NOT read off the <select> — the picker is shared DOM, so reading
+// it would carry WeenieForge's creature body into GearForge's doll.
+function _dollPickBody(){ return _dollCurBody || '0x02000001'; }
+
+function _mpOpenDoll(bodyHex){
+  _dollCurBody = bodyHex || _dollCurBody || '0x02000001';
+  var n = _dollOutfit ? _dollOutfit.length : 0;
+  openModelPreview(_dollCurBody, 'DOLL — ' + n + ' piece' + (n !== 1 ? 's' : ''),
+                   {doll: _dollFullOutfit()});
+}
+
+function _mpDollRerender(){
+  var sel = document.getElementById('mpDollBody');
+  _mpOpenDoll(sel && sel.value ? sel.value : _dollPickBody());
+}
+
+// Re-render the 3D without rebuilding the whole panel chrome.
+function _dollRefresh(){
+  _dollRenderWorn();
+  _mpOpenDoll(_dollPickBody());
+}
+
+// Doll panel size, persisted for the session so a resize survives re-renders
+// (every dye tweak re-opens the preview).
+var _dollSize = {w: 1060, h: 520};
+var _MP_BASE = {w: 480, h: 340, cw: 478, ch: 338};
+
+// Keep the panel inside the window — the default is bigger than some app
+// windows, and a resize can be stranded off-screen if the user shrinks the app.
+function _mpClampDollSize(){
+  _dollSize.w = Math.max(720, Math.min(_dollSize.w, window.innerWidth  - 40));
+  _dollSize.h = Math.max(300, Math.min(_dollSize.h, window.innerHeight - 150));
+}
+
+function _mpApplyDollSize(on){
+  var panel=document.getElementById('modelPreviewPanel');
+  var vp   =document.getElementById('mpViewport');
+  var wr   =document.getElementById('mpWardrobe');
+  var cv   =document.getElementById('modelPreviewCanvas');
+  var grip =document.getElementById('mpResizeGrip');
+  if(!panel) return;
+  if(on) _mpClampDollSize();
+  if(grip) grip.style.display = on ? '' : 'none';
+  panel.style.width = (on ? _dollSize.w : _MP_BASE.w) + 'px';
+  if(vp) vp.style.height = (on ? _dollSize.h : _MP_BASE.h) + 'px';
+  if(wr) wr.style.height = (on ? _dollSize.h : _MP_BASE.h) + 'px';
+  if(!cv) return;
+  if(on){
+    // Match the GL drawing buffer to the on-screen viewport, else the model
+    // stretches: _mpDraw derives its aspect from gl.canvas.width/height.
+    var r = vp ? vp.getBoundingClientRect() : null;
+    if(r && r.width > 1 && r.height > 1){
+      cv.width = Math.round(r.width); cv.height = Math.round(r.height);
+    }
+  } else {
+    cv.width = _MP_BASE.cw; cv.height = _MP_BASE.ch;
+  }
+  if(window._mp && _mp.gl && ((_mp.meshes&&_mp.meshes.length)||(_mp.emitters&&_mp.emitters.length))){
+    try{ _mpDraw(); }catch(e){}
+  }
+}
+
+function _mpResizeInit(){
+  var grip =document.getElementById('mpResizeGrip');
+  var panel=document.getElementById('modelPreviewPanel');
+  if(!grip || !panel || grip._wired) return;
+  grip._wired = true;
+  var rs=null;
+  grip.addEventListener('mousedown', function(ev){
+    var r=panel.getBoundingClientRect();
+    // Pin the panel the same way dragging does, so it grows from the corner
+    // instead of expanding around its centre.
+    panel.style.transform='none'; panel.style.left=r.left+'px'; panel.style.top=r.top+'px';
+    rs={x:ev.clientX, y:ev.clientY, w:_dollSize.w, h:_dollSize.h};
+    ev.preventDefault(); ev.stopPropagation();
+  });
+  window.addEventListener('mousemove', function(ev){
+    if(!rs) return;
+    _dollSize.w = rs.w + (ev.clientX - rs.x);
+    _dollSize.h = rs.h + (ev.clientY - rs.y);
+    _mpApplyDollSize(true);            // clamps
+  });
+  window.addEventListener('mouseup', function(){ rs=null; });
+}
+
+function _mpRenderDollBar(opts){
+  var bar   = document.getElementById('mpDollBar');
+  var wr    = document.getElementById('mpWardrobe');
+  if(!bar) return;
+  var on = !!(opts && opts.doll);
+  bar.style.display = on ? 'flex' : 'none';
+  if(wr) wr.style.display = on ? 'flex' : 'none';
+  // The wardrobe needs room; every other preview keeps the original size.
+  _mpResizeInit();
+  _mpApplyDollSize(on);
+  if(!on) return;
+  var sel = document.getElementById('mpDollBody');
+  if(sel && _dollBodies && !sel.options.length){
+    sel.innerHTML = _dollBodies.map(function(b){
+      return '<option value="'+b.id+'">'+b.name+'</option>';
+    }).join('');
+  }
+  if(sel && _mp.setupHex) sel.value = _mp.setupHex;
+  _dollRenderClothingRow();
+  _dollRenderFooter();
+  _dollRenderWorn();
+}
+
+// ── Wardrobe: search ──────────────────────────────────────────────────────
+function _dollSearchDebounced(q){
+  if(_dollSearchTimer) clearTimeout(_dollSearchTimer);
+  _dollSearchTimer = setTimeout(function(){ _dollSearch(q); }, 180);
+}
+
+function _dollSearch(q){
+  var box = document.getElementById('dollResults');
+  if(!box) return;
+  if(!q || !q.trim()){ box.style.display='none'; box.innerHTML=''; return; }
+  window.pywebview.api.doll_search_items(q, 40).then(function(r){
+    _dollResultCache = (r && r.items) || [];
+    if(!_dollResultCache.length){
+      box.style.display='';
+      box.innerHTML='<div style="padding:8px;font-family:var(--ui-font);font-size:10px;'+
+        'font-style:italic;color:var(--ink-faint)">No wearable armor matches.</div>';
+      return;
+    }
+    box.style.display='';
+    box.innerHTML = _dollResultCache.map(function(it, i){
+      return '<div onclick="_dollAdd('+i+')" title="wcid '+it.wcid+'"'+
+        ' style="padding:5px 8px;cursor:pointer;border-bottom:1px solid var(--border-lt);'+
+        'display:flex;justify-content:space-between;gap:6px;align-items:baseline"'+
+        ' onmouseover="this.style.background=\'var(--parch-dk)\'"'+
+        ' onmouseout="this.style.background=\'transparent\'">'+
+        '<span style="font-family:var(--ui-font);font-size:11px;color:var(--ink);'+
+        'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(it.name)+'</span>'+
+        '<span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint);'+
+        'flex:0 0 auto">'+escHtml(it.slot||'')+'</span></div>';
+    }).join('');
+  }).catch(function(e){ console.error('[Doll] search failed', e); });
+}
+
+function _dollAdd(i){
+  var rec = _dollResultCache[i];
+  if(!rec) return;
+  _dollOutfit = _dollOutfit || [];
+  _dollOutfit.push(_dollPieceFromRecord(rec));
+  var box=document.getElementById('dollResults');
+  var si =document.getElementById('dollSearch');
+  if(box){ box.style.display='none'; box.innerHTML=''; }
+  if(si) si.value='';
+  _dollFetchPalettes(_dollRefresh);
+}
+
+function _dollRemove(i){
+  if(!_dollOutfit) return;
+  _dollOutfit.splice(i, 1);
+  _dollRefresh();
+}
+
+function _dollClear(){
+  _dollOutfit = [];
+  _dollRefresh();
+}
+
+// ── Wardrobe: dyes ────────────────────────────────────────────────────────
+// One batched call keeps the DAT open once for every uncached piece.
+function _dollFetchPalettes(done){
+  var need = (_dollOutfit||[]).map(function(p){ return p.clothing_id; })
+              .filter(function(c){ return c && !_dollPalCache[c]; });
+  if(!need.length){ if(done) done(); return; }
+  window.pywebview.api.doll_item_palettes_batch(need).then(function(r){
+    if(r && r.success && r.palettes){
+      Object.keys(r.palettes).forEach(function(k){ _dollPalCache[k] = r.palettes[k]; });
+      // Key back by whatever string the piece carries (e.g. "0x1000003A").
+      need.forEach(function(c){
+        if(!_dollPalCache[c]){
+          var norm = '0x' + (parseInt(c,16)>>>0).toString(16).toUpperCase().padStart(8,'0');
+          if(r.palettes[norm]) _dollPalCache[c] = r.palettes[norm];
+        }
+      });
+    }
+    if(done) done();
+  }).catch(function(e){ console.error('[Doll] palette fetch failed', e); if(done) done(); });
+}
+
+// ── Underclothes ──────────────────────────────────────────────────────────
+// Armor and clothing write DISJOINT palette ranges (Pants writes 128 indices
+// that Platemail Leggings never touches), so the shirt/pants ranges show
+// through the armor's own texture. With no clothing layer they keep the
+// texture default and read as white. Palette only — no shade, per design.
+var _dollBaseClothing = null;    // {shirt:{...}, pants:{...}} from the catalog
+var _dollClothing = _dollDefaultClothing();   // ACTIVE mode's underclothes
+
+function _dollLoadClothing(done){
+  if(_dollBaseClothing){ if(done) done(); return; }
+  window.pywebview.api.doll_base_clothing().then(function(r){
+    _dollBaseClothing = (r && r.clothing) || {};
+    var ids = ['shirt','pants'].map(function(k){
+      return _dollBaseClothing[k] && _dollBaseClothing[k].clothing_id;
+    }).filter(Boolean);
+    if(!ids.length){ if(done) done(); return; }
+    window.pywebview.api.doll_item_palettes_batch(ids).then(function(pr){
+      if(pr && pr.palettes){
+        Object.keys(pr.palettes).forEach(function(k){ _dollPalCache[k]=pr.palettes[k]; });
+      }
+      if(done) done();
+    }).catch(function(){ if(done) done(); });
+  }).catch(function(){ _dollBaseClothing = {}; if(done) done(); });
+}
+
+// The shirt/pants pieces to composite under the worn armor. item_type 4 +
+// non-armor ValidLocations make order_outfit sort these first, so armor
+// overrides their models while their palette ranges survive.
+function _dollClothingPieces(){
+  if(!_dollClothing.on || !_dollBaseClothing) return [];
+  return ['shirt','pants'].map(function(k){
+    var c=_dollBaseClothing[k];
+    if(!c) return null;
+    return {
+      name: c.name, wcid: c.wcid, slot: c.slot, clothing_id: c.clothing_id,
+      palette_template: _dollClothing.template, shade: 0,
+      item_type: c.item_type, valid_locations: c.valid_locations,
+      clothing_priority: c.clothing_priority, top_layer: c.top_layer
+    };
+  }).filter(Boolean);
+}
+
+// What actually gets rendered: underclothes first, then everything worn.
+function _dollFullOutfit(){
+  return _dollClothingPieces().concat(_dollOutfit || []);
+}
+
+function _dollToggleClothing(){
+  var cb=document.getElementById('dollClothingOn');
+  _dollClothing.on = !!(cb && cb.checked);
+  _dollRefresh();
+}
+
+function _dollSetClothingPal(tpl){
+  _dollClothing.template = parseInt(tpl) || 0;
+  _dollRefresh();
+}
+
+function _dollRenderClothingRow(){
+  var sel=document.getElementById('dollClothingPal');
+  var sw =document.getElementById('dollClothingSw');
+  var cb =document.getElementById('dollClothingOn');
+  if(!sel) return;
+  if(cb) cb.checked = !!_dollClothing.on;
+  var shirt=_dollBaseClothing && _dollBaseClothing.shirt;
+  var pals =shirt ? (_dollPalCache[shirt.clothing_id]||[]) : [];
+  if(pals.length && !sel.options.length){
+    sel.innerHTML = pals.map(function(p){
+      return '<option value="'+p.template+'">'+escHtml(p.name)+'</option>';
+    }).join('');
+  }
+  if(pals.length){
+    // Fall back to the first available template if the default isn't offered.
+    var has = pals.some(function(p){ return p.template===_dollClothing.template; });
+    if(!has) _dollClothing.template = pals[0].template;
+    sel.value = String(_dollClothing.template);
+    var e = pals.filter(function(p){ return p.template===_dollClothing.template; })[0];
+    if(sw) sw.style.background = (e && e.swatches && e.swatches[0]) ? e.swatches[0] : '#808080';
+  }
+  sel.disabled = !_dollClothing.on;
+  sel.style.opacity = _dollClothing.on ? '1' : '.5';
+}
+
+// ── Footer action: Generate (GearForge) vs Apply (WeenieForge creature) ────
+var _dollMode = 'gear';    // 'gear' | 'weenie'
+
+function _dollRenderFooter(){
+  var btn=document.getElementById('dollActionBtn');
+  var gf =document.getElementById('dollGearFooter');
+  if(!btn) return;
+  var weenie = _dollMode === 'weenie';
+  if(gf) gf.style.display = weenie ? 'none' : 'flex';
+  btn.innerHTML = weenie ? '&#11015; APPLY TO CREATE ITEMS' : '&#9654; GENERATE';
+  btn.title = weenie
+    ? 'Add every worn piece to this weenie\'s Create Items list as Wield, with its colour'
+    : 'Create editable items from the worn pieces, keeping each dye';
+}
+
+function _dollAction(){
+  if(_dollMode === 'weenie') _dollApplyToCreateList();
+  else _dollGenerate();
+}
+
+// Generate real gear items from what's on the doll, keeping each piece's dye.
+// Underclothes are preview-only here — you're generating an armor set, not a
+// shirt — so they're excluded.
+function _dollGenerate(){
+  var out = _dollOutfit || [];
+  if(!out.length){ toast('Nothing worn to generate.', 3000); return; }
+  var el    = document.getElementById('dollStartWcid');
+  var gsw   = document.getElementById('gearStartWcid');
+  var start = (el && el.value) || (gsw && gsw.value) || '';
+  if(!start){
+    toast('Enter a Start WCID first.', 3000);
+    if(el) el.focus();
+    return;
+  }
+  var dpfx = document.getElementById('dollNamePrefix');
+  var gpfx = document.getElementById('gearNamePrefix');
+  var prefix = (dpfx && dpfx.value.trim()) || (gpfx && gpfx.value.trim()) || '';
+  var pieces = out.map(function(p){
+    return {wcid: p.wcid, name: p.name,
+            palette_template: p.palette_template, shade: p.shade};
+  });
+  window.pywebview.api.doll_generate_items(pieces, {
+    start_wcid: start, name_prefix: prefix
+  }).then(function(r){
+    if(!r.success){ toast('✗ ' + r.error, 4500); return; }
+    _gearGeneratedItems = r.items;
+    _gearEditingItemIdx = null;
+    if(typeof gearRenderItemsList === 'function') gearRenderItemsList();
+    if(typeof gearRenderMainPanel === 'function') gearRenderMainPanel();
+    if(el && r.next_wcid) el.value = r.next_wcid;   // ready for the next batch
+    var msg = 'Generated ' + r.items.length + ' item' +
+              (r.items.length !== 1 ? 's' : '') + ' with the Doll\'s colors';
+    if(!prefix) msg += ' — no name prefix, so these keep the original names';
+    if(r.skipped && r.skipped.length){
+      msg += ' — ' + r.skipped.length + ' skipped (already generated, ' +
+             'no source weenie)';
+    }
+    toast(msg, 4500);
+  }).catch(function(e){ toast('Generate failed: ' + e, 4000); });
+}
+
+// ── WeenieForge: dress a creature ─────────────────────────────────────────
+// Applies the doll straight onto the weenie's Create Items list as Wield
+// rows against the SOURCE wcids, with the palette/shade chosen here — which
+// is exactly how AC dresses an NPC (wield base item + palette override).
+function _dollApplyToCreateList(){
+  var pieces = _dollFullOutfit().filter(function(p){ return p.wcid; });
+  if(!pieces.length){ toast('Nothing worn to apply.', 3000); return; }
+  if(typeof createList === 'undefined'){
+    toast('Create Items list unavailable.', 3000); return;
+  }
+  var added=0, updated=0;
+  pieces.forEach(function(p){
+    var existing=null;
+    for(var i=0;i<createList.length;i++){
+      if(createList[i] && parseInt(createList[i].wcid)===parseInt(p.wcid)
+         && parseInt(createList[i].dest)===2){ existing=createList[i]; break; }
+    }
+    if(existing){
+      existing.palette = p.palette_template; existing.shade = p.shade;
+      updated++;
+    } else {
+      createList.push({dest:2, wcid:p.wcid, stack:1, prob:1,
+                       palette:p.palette_template, shade:p.shade});
+      added++;
+    }
+  });
+  if(typeof rebuildPanel==='function') rebuildPanel('properties');
+  else if(typeof regen==='function') regen();
+  var msg='Wielding '+added+' piece'+(added!==1?'s':'');
+  if(updated) msg+=' ('+updated+' already listed — colour updated)';
+  toast(msg, 4000);
+}
+
+// Open the Doll for the creature currently in the WeenieForge editor.
+function weenieOpenDoll(){
+  if(!window.pywebview){ toast('The Doll needs the desktop app.', 3000); return; }
+  var sRow=(typeof extraDID!=='undefined'?extraDID:[]).filter(function(x){
+    return parseInt(x.type)===1; })[0];
+  var setupHex=sRow?String(sRow.value||''):'';
+  if(!setupHex){ toast('This weenie has no Setup DID to dress.', 3500); return; }
+  window.pywebview.api.doll_resolve_body(setupHex).then(function(r){
+    if(!r || !r.eligible){
+      toast('Setup '+setupHex+' isn\'t a wearable body — the Doll only '+
+            'dresses the human-shaped setups armor is authored for.', 5000);
+      return;
+    }
+    _dollEnterMode('weenie');
+    var open=function(){
+      var go=function(){ _dollFetchPalettes(function(){ _mpOpenDoll(r.body); }); };
+      if(_dollBodies){ go(); return; }
+      window.pywebview.api.get_body_setups().then(function(b){
+        _dollBodies=(b&&b.bodies&&b.bodies.length)?b.bodies:[{id:r.body,name:r.name}];
+        go();
+      }).catch(function(){ _dollBodies=[{id:r.body,name:r.name}]; go(); });
+    };
+    // Clothing must load first — seeding needs it to tell a wielded shirt/pants
+    // (which belongs in UNDERCLOTHES) from real armor.
+    _dollLoadClothing(function(){ _dollSeedFromWielded(open); });
+  }).catch(function(e){ toast('Could not check the body: '+e, 4000); });
+}
+
+// Load whatever this weenie already wields onto the doll, so the user edits
+// their existing outfit instead of starting from nothing and clobbering it.
+// The row's own palette/shade win over the catalog defaults — that's the
+// dressing the user already saved.
+function _dollSeedFromWielded(done){
+  var rows = (typeof createList!=='undefined' ? createList : []).filter(function(x){
+    return x && parseInt(x.dest)===2 && parseInt(x.wcid);
+  });
+  if(!rows.length){ _dollOutfit=[]; done(); return; }
+  var wcids = rows.map(function(x){ return parseInt(x.wcid); });
+  window.pywebview.api.doll_items_by_wcid(wcids).then(function(res){
+    var recs=(res && res.items) || [];
+    var worn=[];
+    recs.forEach(function(rec){
+      var row=null;
+      for(var i=0;i<rows.length;i++){
+        if(parseInt(rows[i].wcid)===rec.wcid){ row=rows[i]; break; }
+      }
+      var p=_dollPieceFromRecord(rec);
+      if(row){
+        if(row.palette !== undefined && row.palette !== null && row.palette !== '')
+          p.palette_template = parseInt(row.palette)||0;
+        if(row.shade !== undefined && row.shade !== null && row.shade !== '')
+          p.shade = parseFloat(row.shade)||0;
+      }
+      // A wielded shirt/pants belongs in the UNDERCLOTHES control, not WORN.
+      if(_dollIsBaseClothingWcid(rec.wcid)){
+        _dollClothing.on = true;
+        _dollClothing.template = p.palette_template;
+      } else {
+        worn.push(p);
+      }
+    });
+    _dollOutfit = worn;
+    var skipped = (res && res.missing) ? res.missing.length : 0;
+    if(worn.length || skipped){
+      toast('Loaded ' + worn.length + ' wielded piece' + (worn.length!==1?'s':'') +
+            (skipped ? ' — ' + skipped + ' not wearable (weapons/jewelry), left as-is' : ''),
+            3500);
+    }
+    done();
+  }).catch(function(e){
+    console.error('[Doll] could not read wielded items', e);
+    _dollOutfit=[]; done();
+  });
+}
+
+function _dollIsBaseClothingWcid(wcid){
+  if(!_dollBaseClothing) return false;
+  return ['shirt','pants'].some(function(k){
+    return _dollBaseClothing[k] && _dollBaseClothing[k].wcid === wcid;
+  });
+}
+
+function _dollPalsFor(p){ return _dollPalCache[p.clothing_id] || []; }
+
+function _dollEntryFor(p){
+  var pals = _dollPalsFor(p);
+  for(var i=0;i<pals.length;i++) if(pals[i].template === p.palette_template) return pals[i];
+  return null;
+}
+
+// Shade float -> bucket index, mirroring PaletteSet.GetPaletteID(shade).
+function _dollShadeIdx(p, entry){
+  var n = entry ? entry.shades : 1;
+  return Math.max(0, Math.min(Math.floor((p.shade||0) * n), n-1));
+}
+
+function _dollSetTemplate(i, tpl){
+  var p=_dollOutfit[i]; if(!p) return;
+  p.palette_template = parseInt(tpl)||0;
+  // Ramps differ in length between templates (Purple 14, Green 8…). Shade is a
+  // fraction, so the relative position already carries over — but re-seat it on
+  // the new ramp's bucket centre so the stored value stays clean, matching
+  // Create Items' _clSyncShade.
+  var e=_dollEntryFor(p);
+  if(e && e.shades>1){
+    var k=_dollShadeIdx(p, e);
+    p.shade=Math.round(((k+0.5)/e.shades)*10000)/10000;
+  }
+  _dollRefresh();
+}
+
+function _dollSetShade(i, idx){
+  var p=_dollOutfit[i]; if(!p) return;
+  var e=_dollEntryFor(p); var n=e?e.shades:1;
+  // Centre of the bucket, so the value lands mid-step rather than on a boundary.
+  // Rounded to 4dp to keep generated SQL readable — the smallest bucket's
+  // half-width (1/128 ≈ 0.0078) dwarfs the ≤0.00005 rounding shift, so this
+  // can never fall into a neighbouring bucket.
+  var s = (Math.max(0,Math.min(parseInt(idx)||0, n-1)) + 0.5) / n;
+  p.shade = Math.round(s * 10000) / 10000;
+  _dollRefresh();
+}
+
+function _dollRenderWorn(){
+  var box=document.getElementById('dollWorn');
+  var hdr=document.getElementById('dollWornHdr');
+  if(!box) return;
+  var out=_dollOutfit||[];
+  if(hdr) hdr.textContent='WORN ('+out.length+')';
+  if(!out.length){
+    box.innerHTML='<div style="padding:14px 4px;font-family:var(--ui-font);font-size:10px;'+
+      'font-style:italic;color:var(--ink-faint);text-align:center">Nothing worn yet.<br>'+
+      'Search above to add armor.</div>';
+    return;
+  }
+  box.innerHTML = out.map(function(p,i){
+    var pals=_dollPalsFor(p), e=_dollEntryFor(p);
+    var idx=_dollShadeIdx(p,e);
+    var sw =(e&&e.swatches&&e.swatches[idx])?e.swatches[idx]:'#808080';
+    var canDye = pals.length>1;
+    // An item with a single template has no real choice — show it, disabled.
+    var opts = pals.map(function(x){
+      return '<option value="'+x.template+'"'+(x.template===p.palette_template?' selected':'')+
+             '>'+escHtml(x.name)+'</option>';
+    }).join('');
+    if(e===null && p.palette_template){
+      opts = '<option value="'+p.palette_template+'" selected>Template '+p.palette_template+
+             ' (unsupported)</option>' + opts;
+    }
+    var shadeRow = (e && e.shades>1)
+      ? '<input type="range" min="0" max="'+(e.shades-1)+'" value="'+idx+'"'+
+        ' oninput="_dollSetShade('+i+',this.value)" title="Shade"'+
+        ' style="flex:1;min-width:0;height:14px">'+
+        '<span style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);'+
+        'flex:0 0 auto;width:30px;text-align:right">'+(idx+1)+'/'+e.shades+'</span>'
+      : '<span style="font-family:var(--ui-font);font-size:8px;font-style:italic;'+
+        'color:var(--ink-faint);flex:1">no shades</span>';
+    return '<div style="border:1px solid var(--border);background:var(--parch-dk);'+
+      'padding:6px 7px;margin-top:6px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">'+
+        '<span title="'+escHtml(p.name)+'" style="font-family:var(--ui-font);font-size:11px;'+
+        'font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;'+
+        'white-space:nowrap">'+escHtml(p.name)+'</span>'+
+        '<button onclick="_dollRemove('+i+')" title="Remove"'+
+        ' style="background:none;border:none;color:var(--ink-faint);cursor:pointer;'+
+        'font-size:13px;line-height:1;padding:0;flex:0 0 auto">&times;</button>'+
+      '</div>'+
+      '<div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);'+
+      'margin:1px 0 5px">'+escHtml(p.slot||'')+(p.wcid?('  ·  wcid '+p.wcid):'')+'</div>'+
+      '<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">'+
+        '<span style="flex:0 0 auto;width:14px;height:14px;border:1px solid var(--border);'+
+        'background:'+sw+'"></span>'+
+        (pals.length
+          ? '<select onchange="_dollSetTemplate('+i+',this.value)"'+(canDye?'':' disabled')+
+            ' style="flex:1;min-width:0;font-family:var(--ui-font);font-size:10px;padding:2px 3px;'+
+            'background:var(--parch);border:1px solid var(--border);color:var(--ink)'+
+            (canDye?'':';opacity:.6')+'">'+opts+'</select>'
+          : '<span style="flex:1;font-family:var(--ui-font);font-size:9px;font-style:italic;'+
+            'color:var(--ink-faint)">no dye options</span>')+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:5px">'+shadeRow+'</div>'+
+    '</div>';
+  }).join('');
+}
+
 function closeModelPreview(){
   var panel=document.getElementById('modelPreviewPanel');
+  var _db=document.getElementById('mpDollBar');
+  if(_db) _db.style.display='none';
   if(panel) panel.style.display='none';
   if(_mp.animFrame){ cancelAnimationFrame(_mp.animFrame); _mp.animFrame=null; }
   _mp.nav=null;
@@ -16035,6 +16858,16 @@ document.addEventListener('DOMContentLoaded', function(){
         font-size:16px;cursor:pointer;color:var(--ink-dim);line-height:1">&times;</button>
     </div>
   </div>
+  <div id="mpDollBar" style="display:none;padding:7px 14px;border-bottom:1px solid var(--border-lt);
+    align-items:center;gap:8px">
+    <label style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;
+      color:var(--ink-dim);white-space:nowrap">BODY</label>
+    <select id="mpDollBody" onchange="_mpDollRerender()"
+      style="flex:1;min-width:0;font-family:var(--ui-font);font-size:11px;padding:3px 6px;
+      background:var(--parch-dk);border:1px solid var(--border);color:var(--ink)"></select>
+    <span id="mpDollInfo" title="Layer order, innermost first"
+      style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint);white-space:nowrap"></span>
+  </div>
   <div id="mpSearchWrap" style="display:none;position:relative;padding:8px 14px;border-bottom:1px solid var(--border-lt)">
     <input id="mpSearchInput" type="text" placeholder="&#x1F50D; Search models by name…" autocomplete="off"
       oninput="_mpSearch(this.value)" onfocus="_mpSearch(this.value)"
@@ -16045,7 +16878,8 @@ document.addEventListener('DOMContentLoaded', function(){
       max-height:220px;overflow-y:auto;background:var(--parch);border:1px solid var(--border);
       border-top:none;border-radius:0 0 3px 3px;box-shadow:0 6px 20px rgba(0,0,0,.35)"></div>
   </div>
-  <div style="position:relative;background:#111;height:340px">
+  <div id="mpBodyRow" style="display:flex">
+  <div id="mpViewport" style="position:relative;background:#111;height:340px;flex:1;min-width:0">
     <canvas id="modelPreviewCanvas" width="478" height="338"
       style="display:block;width:100%;height:100%"></canvas>
     <div id="modelPreviewMsg" style="position:absolute;inset:0;display:flex;
@@ -16068,6 +16902,65 @@ document.addEventListener('DOMContentLoaded', function(){
     <div style="position:absolute;bottom:6px;right:8px;font-family:var(--ui-font);
       font-size:9px;color:rgba(255,255,255,.3)">Drag to rotate &bull; Scroll to zoom</div>
   </div>
+
+  <!-- DOLL WARDROBE (doll mode only) -->
+  <div id="mpWardrobe" style="display:none;flex:0 0 360px;width:360px;height:340px;
+    border-left:1px solid var(--border);background:var(--parch);flex-direction:column;overflow:hidden">
+    <div style="padding:7px 9px;border-bottom:1px solid var(--border-lt)">
+      <input id="dollSearch" type="text" autocomplete="off"
+        placeholder="&#x1F50D; Add armor by name or WCID…" oninput="_dollSearchDebounced(this.value)"
+        style="width:100%;box-sizing:border-box;font-family:var(--ui-font);font-size:11px;
+        padding:5px 8px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink)">
+      <div id="dollResults" style="display:none;max-height:132px;overflow-y:auto;
+        margin-top:6px;border:1px solid var(--border)"></div>
+    </div>
+    <!-- Underclothes: armor and clothing paint disjoint palette ranges, so the
+         shirt/pants ranges show through armor. Without them they read white. -->
+    <div style="padding:6px 9px;border-bottom:1px solid var(--border-lt);display:flex;
+      align-items:center;gap:6px">
+      <label title="Colour the shirt/pants areas that show through armor"
+        style="display:flex;align-items:center;gap:4px;font-family:var(--ui-font);font-size:9px;
+        font-weight:700;letter-spacing:.06em;color:var(--ink-dim);cursor:pointer;white-space:nowrap">
+        <input type="checkbox" id="dollClothingOn" checked onchange="_dollToggleClothing()"
+          style="margin:0">UNDERCLOTHES</label>
+      <span id="dollClothingSw" style="flex:0 0 auto;width:14px;height:14px;
+        border:1px solid var(--border);background:#808080"></span>
+      <select id="dollClothingPal" onchange="_dollSetClothingPal(this.value)"
+        title="Shirt and pants colour (no shade — AC clothing dyes are palette-only here)"
+        style="flex:1;min-width:0;font-family:var(--ui-font);font-size:10px;padding:2px 3px;
+        background:var(--parch);border:1px solid var(--border);color:var(--ink)"></select>
+    </div>
+    <div style="padding:6px 9px 4px;font-family:var(--ui-font);font-size:9px;font-weight:700;
+      letter-spacing:.08em;color:var(--crimson);display:flex;justify-content:space-between;align-items:center">
+      <span id="dollWornHdr">WORN</span>
+      <button onclick="_dollClear()" title="Remove all pieces"
+        style="background:none;border:none;font-family:var(--ui-font);font-size:9px;
+        color:var(--ink-faint);cursor:pointer;padding:0">CLEAR</button>
+    </div>
+    <div id="dollWorn" style="flex:1;overflow-y:auto;padding:0 9px 9px"></div>
+    <div id="dollFooter" style="border-top:1px solid var(--border);padding:7px 9px;
+      display:flex;flex-direction:column;gap:5px">
+      <div id="dollGearFooter" style="display:flex;gap:5px;align-items:center">
+        <input id="dollNamePrefix" type="text" placeholder="Name prefix"
+          title="Renames each generated piece, e.g. “Doomforged” → “Doomforged Basinet”. Without it you just clone the existing set."
+          style="flex:1;min-width:0;box-sizing:border-box;font-family:var(--ui-font);font-size:10px;
+          padding:4px 6px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink)">
+        <input id="dollStartWcid" type="number" placeholder="Start WCID"
+          title="First WCID to assign; each piece takes the next one"
+          style="flex:0 0 92px;box-sizing:border-box;font-family:var(--ui-font);font-size:10px;
+          padding:4px 6px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink)">
+      </div>
+      <button id="dollActionBtn" onclick="_dollAction()"
+        style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;
+        padding:6px 10px;border:1px solid var(--crimson);background:var(--crimson);color:#fff;
+        cursor:pointer;width:100%">&#9654; GENERATE</button>
+    </div>
+  </div>
+  </div>
+  <div id="mpResizeGrip" title="Drag to resize"
+    style="display:none;position:absolute;right:0;bottom:0;width:16px;height:16px;
+    cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,var(--border) 50%,
+    var(--border) 60%,transparent 60%,transparent 72%,var(--border) 72%,var(--border) 82%,transparent 82%)"></div>
 </div>
 
 
@@ -17530,6 +18423,132 @@ function bd(key, val){
 }
 
 })(); // end IIFE
+</script>
+
+<script>
+// ── Town Network: community tools directory ────────────────────────────────
+// Curated from ACCPP (accpp.net), GitHub (asherons-call topic), emulator.ac,
+// and community sites. Entries: n=name, a=author(s), d=description, u=url, t=tags.
+const TOWN_CATEGORIES = [
+  { id:'framework', icon:'\u{1F9F0}', label:'Frameworks & Launchers' },
+  { id:'plugin',    icon:'\u{1F50C}', label:'Decal Plugins' },
+  { id:'server',    icon:'\u{1F5A5}️', label:'Server Emulators & Mods' },
+  { id:'content',   icon:'\u{1F3D7}️', label:'Content Creation & World Building' },
+  { id:'dat',       icon:'\u{1F4E6}', label:'DAT & Asset Tools' },
+  { id:'web',       icon:'\u{1F310}', label:'Websites & Community Resources' },
+];
+const TOWN_TOOLS = [
+  // ── Frameworks & Launchers ──
+  { c:'framework', n:'Decal', a:'Decal Dev Team', d:'The third-party plugin framework for Asheron’s Call. Nearly every client-side tool below runs on it; updated with a public beta in 2021 after 8 years.', u:'https://www.decaldev.com/', t:['framework','client','essential'] },
+  { c:'framework', n:'ThwargLauncher', a:'Thwargle', d:'Emulator launcher with profile-based multi-account launching, server list management, and Decal injection. The standard way to log in to emu servers.', u:'https://github.com/Thwargle/ThwargLauncher', t:['launcher','multi-account','essential'] },
+  { c:'framework', n:'ThwargZone', a:'Thwargle', d:'Nostalgic MSN Gaming Zone-styled launcher (.NET 8) for connecting to multiple servers, managing accounts, and launching with optional Decal injection.', u:'https://github.com/Thwargle/ThwargZone', t:['launcher'] },
+  { c:'framework', n:'ACCPP Batch Install', a:'ACCPP', d:'One-shot automated installer for the AC client, ThwargLauncher, Decal, and common plugins — the fastest path from zero to in-game.', u:'https://www.accpp.net/resources/batch-install', t:['installer','setup','essential'] },
+
+  // ── Decal Plugins ──
+  { c:'plugin', n:'Full ACCPP Plugin Archive (120+)', a:'AC Community Preservation Project', d:'The complete preserved archive of every known Decal plugin — VirindiTank, UtilityBelt, Mag-Tools, GoArrow, and 120+ more. Browse it all on ACCPP.', u:'https://www.accpp.net/latest-decal-plugins', t:['archive','directory','essential'] },
+
+  // ── Server Emulators & Mods ──
+  { c:'server', n:'ACEmulator (ACE)', a:'ACEmulator Team', d:'The open-source, from-scratch C#/MySQL server emulator that powers most modern AC servers — including the one ACEForge targets.', u:'https://github.com/ACEmulator/ACE', t:['emulator','essential'] },
+  { c:'server', n:'GDLEnhanced (GDLE)', a:'GDLE Team', d:'Open-source AC emulator descended from the leaked GDL codebase; the other major server option.', u:'https://gitlab.com/Scribble/gdlenhanced', t:['emulator'] },
+  { c:'server', n:'ACE-World-16PY-Patches', a:'ACEmulator Team', d:'The community-patched end-of-retail world database for ACE — the baseline content most servers start from.', u:'https://github.com/ACEmulator/ACE-World-16PY-Patches', t:['database','content'] },
+  { c:'server', n:'CustomClothingBase', a:'OptimShi', d:'ACE server mod enabling fully custom colors/appearances on equippable items via JSON ClothingBase overrides — no client dat patching needed.', u:'https://github.com/OptimShi/CustomClothingBase', t:['mod','clothing','appearance'] },
+  { c:'server', n:'CustomAetheria', a:'OptimShi', d:'ACE mod allowing custom Aetheria definitions.', u:'https://github.com/OptimShi/CustomAetheria', t:['mod'] },
+  { c:'server', n:'AutoLoot', a:'Raajik', d:'ACE server mod for automatic corpse looting.', u:'https://github.com/Raajik/AutoLoot', t:['mod','looting'] },
+  { c:'server', n:'Loremaster', a:'Raajik', d:'ACE mod adding bonus XP quest points.', u:'https://github.com/Raajik/Loremaster', t:['mod','xp'] },
+  { c:'server', n:'ACE-SinglePlayer', a:'titaniumweiner', d:'Windows single-player launcher bundling ACE with a local MariaDB world — solo Dereth in one download.', u:'https://github.com/titaniumweiner/ACE-SinglePlayer', t:['emulator','singleplayer'] },
+
+  // ── Content Creation & World Building ──
+  { c:'content', n:'WorldBuilder — ACME Edition', a:'Vanquish-6', d:'World building tool: edit terrain, dungeons, spells, skills and more, exporting directly to DAT files. Requires Windows 10/11 + .NET 8.', u:'https://github.com/Vanquish-6/WorldBuilder-ACME-Edition', t:['world-editor','dat','essential'] },
+  { c:'content', n:'ACViewerCloComp (ClothingBase Editor)', a:'Derpy McGavin', d:'ACViewer-based ClothingBase editor for designing item appearances — palettes, textures, and model swaps with live preview.', u:'https://github.com/derpymcgavn/ACViewerCloComp', t:['clothing','appearance','editor'] },
+  { c:'content', n:'AChard Custom Content', a:'Ftuoil Xelrash', d:'Custom content collection for the ACE emulator.', u:'https://github.com/FtuoilXelrash/AChard.Custom.Content', t:['content','custom'] },
+
+  // ── DAT & Asset Tools ──
+  { c:'dat', n:'ACViewer', a:'ACEmulator Team', d:'Viewer/utility for the client DAT files — browse models, textures, environments, particle effects, and animations.', u:'https://github.com/ACEmulator/ACViewer', t:['dat','viewer','essential'] },
+  { c:'dat', n:'DatHammer-Console', a:'LingradAC', d:'Console-driven DAT data-editing utility.', u:'https://github.com/LingradAC/DatHammer-Console', t:['dat','editor'] },
+  { c:'dat', n:'asheron-rs', a:'amoeba', d:'Rust crates and CLI tools for the AC protocol and game data formats.', u:'https://github.com/amoeba/asheron-rs', t:['library','protocol'] },
+  { c:'dat', n:'ace-to-sqlite', a:'amoeba', d:'Automated export of the ACE world database to SQLite for easy querying and analysis.', u:'https://github.com/amoeba/ace-to-sqlite', t:['database','tooling'] },
+
+  // ── Websites & Community Resources ──
+  { c:'web', n:'ACCPP — AC Community Preservation Project', a:'ACCPP Team', d:'The community archive: preserved plugins, tools, articles, artwork, and installers. The definitive download hub.', u:'https://www.accpp.net/', t:['archive','downloads','essential'] },
+  { c:'web', n:'ACEmulator.ac', a:'ACEmulator Team', d:'Official ACEmulator site — how-to-play guides, blog, and project news.', u:'https://emulator.ac/', t:['official','guides'] },
+  { c:'web', n:'TreeStats.net', a:'amoeba', d:'Web player tracking: character stats, planner files, dungeon maps, and a server uptime monitor.', u:'https://treestats.net/', t:['stats','characters'] },
+  { c:'web', n:'ODACCP Character Planner', a:'amoeba', d:'The Overly-Detailed Asheron’s Call Character Planner — plan builds and XP spending in the browser.', u:'https://planner.treestats.net/', t:['planner','characters'] },
+  { c:'web', n:'AC Server Monitor', a:'amoeba', d:'Live status and uptime tracking across community servers.', u:'https://github.com/amoeba/ac-server-monitor', t:['servers','status'] },
+  { c:'web', n:'ACPedia', a:'Community', d:'The AC community wiki — quests, items, lore, and mechanics.', u:'https://acpedia.org/wiki/Home', t:['wiki','reference'] },
+  { c:'web', n:'Asheron’s Call Fandom Wiki', a:'Community', d:'The long-running Fandom wiki with deep retail-era quest and item documentation.', u:'https://asheron.fandom.com/', t:['wiki','reference'] },
+  { c:'web', n:'Immortal Bob’s Forum', a:'Immortal Bob', d:'AC utilities and community boards — dungeon maps and tools.', u:'https://www.immortalbob.com/', t:['forum','maps'] },
+  { c:'web', n:'r/AsheronsCall', a:'Community', d:'The Asheron’s Call subreddit — news, server announcements, and discussion.', u:'https://www.reddit.com/r/AsheronsCall/', t:['forum','news'] },
+];
+
+let townActiveCat = 'all';
+let townInitDone = false;
+
+function townEsc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function townOpen(url){
+  if(window.pywebview && window.pywebview.api && window.pywebview.api.open_url){
+    window.pywebview.api.open_url(url);
+  } else {
+    window.open(url,'_blank');
+  }
+}
+
+function townSetCat(id,btn){
+  townActiveCat = id;
+  document.querySelectorAll('#townCatBar .town-cat-btn').forEach(b=>{
+    b.style.background = 'transparent';
+    b.style.color = 'var(--ink-dim)';
+  });
+  if(btn){ btn.style.background='var(--crimson)'; btn.style.color='#fff'; }
+  townRender();
+}
+
+function townInit(){
+  if(townInitDone) return;
+  townInitDone = true;
+  const bar = document.getElementById('townCatBar');
+  const cats = [{id:'all',icon:'✦',label:'All'}].concat(TOWN_CATEGORIES);
+  bar.innerHTML = cats.map(c=>
+    '<button class="town-cat-btn" onclick="townSetCat(\''+c.id+'\',this)" style="font-family:var(--ui-font);font-size:10px;font-weight:700;letter-spacing:.06em;padding:5px 10px;border:1px solid var(--border);background:transparent;color:var(--ink-dim);cursor:pointer">'+c.icon+' '+c.label.toUpperCase()+'</button>'
+  ).join('');
+  townSetCat('all', bar.querySelector('.town-cat-btn'));
+}
+
+function townRender(){
+  const q = (document.getElementById('townSearch').value||'').toLowerCase().trim();
+  const list = document.getElementById('townList');
+  let html = '';
+  TOWN_CATEGORIES.forEach(cat=>{
+    if(townActiveCat!=='all' && townActiveCat!==cat.id) return;
+    const items = TOWN_TOOLS.filter(t=>{
+      if(t.c!==cat.id) return false;
+      if(!q) return true;
+      return (t.n+' '+t.a+' '+t.d+' '+t.t.join(' ')).toLowerCase().includes(q);
+    });
+    if(!items.length) return;
+    html += '<div style="margin-top:18px">'
+      + '<div style="font-family:var(--ui-font);font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--crimson);border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:10px">'
+      + cat.icon+' '+cat.label.toUpperCase()+' <span style="color:var(--ink-faint);font-weight:400">('+items.length+')</span></div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px">';
+    items.forEach(t=>{
+      html += '<div onclick="townOpen(\''+t.u.replace(/'/g,"\\'")+'\')" title="'+townEsc(t.u)+'"'
+        + ' style="border:1px solid var(--border);background:var(--parch-dk);padding:11px 13px;cursor:pointer;display:flex;flex-direction:column;gap:5px"'
+        + ' onmouseover="this.style.borderColor=\'var(--crimson)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'
+        + '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">'
+        +   '<span style="font-family:var(--ui-font);font-size:12px;font-weight:700;color:var(--ink)">'+townEsc(t.n)+'</span>'
+        +   '<span style="font-size:12px;color:var(--ink-faint);flex:0 0 auto">↗</span>'
+        + '</div>'
+        + '<div style="font-family:var(--ui-font);font-size:10px;font-style:italic;color:var(--ink-faint)">by '+townEsc(t.a)+'</div>'
+        + '<div style="font-size:11px;color:var(--ink-dim);line-height:1.45">'+townEsc(t.d)+'</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px">'
+        +   t.t.map(tag=>'<span style="font-family:var(--ui-font);font-size:8px;font-weight:700;letter-spacing:.06em;padding:2px 6px;border:1px solid var(--border);color:var(--ink-faint)">'+townEsc(tag.toUpperCase())+'</span>').join('')
+        + '</div></div>';
+    });
+    html += '</div></div>';
+  });
+  if(!html) html = '<div style="padding:40px;text-align:center;font-family:var(--ui-font);font-style:italic;font-size:12px;color:var(--ink-faint)">No tools match your filter.</div>';
+  list.innerHTML = html;
+}
 </script>
 
 </body>
