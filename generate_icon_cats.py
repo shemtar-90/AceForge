@@ -63,18 +63,18 @@ def load_spell_icons():
     spells_json = os.path.join(HERE, 'aceforge', 'web', 'spells.json')
     if not dat or not os.path.isfile(spells_json):
         print("  (SpellTable skipped - portal.dat or spells.json not found)")
-        return {}
+        return {}, {}
     sys.path.insert(0, os.path.join(HERE, 'aceforge'))
     try:
         from dat_loader import DatDatabase
     except Exception as e:
         print(f"  (SpellTable skipped - dat_loader import failed: {e})")
-        return {}
+        return {}, {}
 
     blob = DatDatabase(dat).read_file(0x0E00000E)
     if not blob:
         print("  (SpellTable skipped - 0x0E00000E not in DAT)")
-        return {}
+        return {}, {}
 
     def nibswap(b): return bytes(((c >> 4) | (c << 4)) & 0xFF for c in b)
     def align4(o):  return (o + 3) & ~3
@@ -84,7 +84,7 @@ def load_spell_icons():
         return align4(o + ln)  # we only need the offset past the string
 
     spells = json.load(open(spells_json, encoding='utf-8'))
-    out, seen = {}, set()
+    out, names, seen = {}, collections.defaultdict(set), set()
     for sid, name in spells:
         anchor = (struct.pack('<I', sid) + struct.pack('<H', len(name))
                   + nibswap(name.encode('latin-1', 'replace')))
@@ -99,8 +99,10 @@ def load_spell_icons():
         did = f"{icon:08X}"
         seen.add(did)
         out.setdefault(did, 'Spells/' + SCHOOL.get(school, 'Other'))
+        if name:
+            names[did].add(name.lower())
     print(f"  SpellTable: {len(seen)} unique spell icons")
-    return out
+    return out, names
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -320,8 +322,10 @@ def categorize(itype, name, top):
 
 
 def load_weenie_cats():
-    """Return {icon_hex: Counter(category -> weenie count)}."""
+    """Return ({icon_hex: Counter(category -> weenie count)},
+              {icon_hex: set(lowercased weenie names)})."""
     icon_cats = collections.defaultdict(collections.Counter)
+    icon_names = collections.defaultdict(set)
     scanned = 0
     for dp, _, fs in os.walk(WEENIE_ROOT):
         for fn in fs:
@@ -340,19 +344,26 @@ def load_weenie_cats():
             name = nm.group(1).decode('latin-1') if nm else ''
             did = ic.group(1).decode().upper()
             icon_cats[did][categorize(itype, name, top)] += 1
+            if name:
+                icon_names[did].add(name.lower())
             scanned += 1
     print(f"  Weenie library: {scanned} icon references, "
           f"{len(icon_cats)} unique icons")
-    return icon_cats
+    return icon_cats, icon_names
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. Merge + emit
 # ─────────────────────────────────────────────────────────────────────────────
+# Max unique names kept per icon (a handful of DIDs are reused by hundreds of
+# weenies; capping keeps icon_names.js compact without hurting searchability).
+MAX_NAMES_PER_ICON = 40
+
+
 def build_map():
     print("Building icon category map...")
-    spell_icons = load_spell_icons()
-    icon_cats = load_weenie_cats()
+    spell_icons, spell_names = load_spell_icons()
+    icon_cats, weenie_names = load_weenie_cats()
 
     resolved = {}
     for did, counter in icon_cats.items():
@@ -364,7 +375,19 @@ def build_map():
     cat_map = collections.defaultdict(list)
     for did, cat in resolved.items():
         cat_map[cat].append(did)
-    return {k: sorted(v) for k, v in sorted(cat_map.items())}
+
+    # Merge name sources -> {did: "space-joined unique lowercased names"}.
+    names = collections.defaultdict(set)
+    for src in (weenie_names, spell_names):
+        for did, ns in src.items():
+            names[did].update(ns)
+    name_map = {}
+    for did, ns in names.items():
+        picked = sorted(ns)[:MAX_NAMES_PER_ICON]
+        name_map[did] = ' '.join(picked)
+
+    return ({k: sorted(v) for k, v in sorted(cat_map.items())},
+            dict(sorted(name_map.items())))
 
 
 def print_tree(cat_map):
@@ -382,26 +405,51 @@ def print_tree(cat_map):
             print(f"      {sub:<28} {c:>4}")
 
 
-def inject(cat_map):
+def inject(cat_map, name_map):
+    """Inject both maps INLINE into index.html.
+
+    Both are inlined (not sibling .js files) because the packaged pywebview app
+    reliably executes inline <script> consts but does not always serve sibling
+    static .js files — an external icon_names.js silently 404s at runtime while
+    the inline ICON_CATEGORY_MAP works. Keeping them together guarantees the
+    icon picker's name search has its data.
+    """
     src = open(INDEX_HTML, encoding='utf-8').read()
-    payload = json.dumps(cat_map, separators=(',', ':'))
-    new_line = f"const ICON_CATEGORY_MAP = {payload};"
-    pat = re.compile(r'const ICON_CATEGORY_MAP = \{.*?\};', re.DOTALL)
-    if not pat.search(src):
+
+    cat_payload  = json.dumps(cat_map,  separators=(',', ':'))
+    name_payload = json.dumps(name_map, separators=(',', ':'), ensure_ascii=False)
+    cat_line  = f"const ICON_CATEGORY_MAP = {cat_payload};"
+    name_line = f"const ICON_NAMES = {name_payload};"
+
+    cat_pat = re.compile(r'const ICON_CATEGORY_MAP = \{.*?\};', re.DOTALL)
+    if not cat_pat.search(src):
         print("ERROR: could not find ICON_CATEGORY_MAP in index.html")
         sys.exit(1)
-    src = pat.sub(lambda m: new_line, src, count=1)
+    src = cat_pat.sub(lambda m: cat_line, src, count=1)
+
+    # Match the whole ICON_NAMES single line (no DOTALL: '.' stops at newline, so
+    # a name value containing '};' can't truncate the match). Replace if present,
+    # otherwise insert right after the category map.
+    name_pat = re.compile(r'const ICON_NAMES = \{.*\};')
+    if name_pat.search(src):
+        src = name_pat.sub(lambda m: name_line, src, count=1)
+    else:
+        src = cat_pat.sub(lambda m: cat_line + "\n" + name_line, src, count=1)
+
     open(INDEX_HTML, 'w', encoding='utf-8').write(src)
-    print(f"\nInjected new map into {INDEX_HTML} ({len(payload)/1024:.1f} KB)")
+    print(f"\nInjected maps into {INDEX_HTML} "
+          f"(categories {len(cat_payload)/1024:.1f} KB, "
+          f"names {len(name_payload)/1024:.1f} KB, {len(name_map)} named icons)")
 
 
 def main():
-    cat_map = build_map()
+    cat_map, name_map = build_map()
     print_tree(cat_map)
     if '--dry-run' in sys.argv:
-        print("\n(dry run - index.html not modified)")
+        print(f"\n(dry run - index.html not modified; "
+              f"{len(name_map)} named icons)")
     else:
-        inject(cat_map)
+        inject(cat_map, name_map)
 
 
 if __name__ == '__main__':

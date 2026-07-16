@@ -1296,6 +1296,382 @@ Start with: /* ===== FILE: {fname} ===== */
             return {"success": False, "error": str(e), "files": [],
                     "traceback": traceback.format_exc()}
 
+    # ── "What Do You Want?" — natural-language → structured quest params ──────
+    # Creature types the batch/turn-in forms understand, as "Label (int)".
+    _CREATURE_TYPES = [
+        'Olthoi (1)', 'Banderling (2)', 'Drudge (3)', 'Mosswart (4)',
+        'Lugian (5)', 'Tumerok (6)', 'Mite (7)', 'Tusker (8)', 'Golem (13)',
+        'Undead (14)', 'Gromnie (15)', 'Reedshark (16)', 'Armoredillo (17)',
+        'Fae (18)', 'Virindi (19)', 'Wisp (20)', 'Shadow (22)', 'Mattekar (23)',
+        'Monouga (28)', 'Zefir (29)', 'Skeleton (30)', 'Human (31)',
+        'Shreth (32)', 'FireElemental (38)', 'Snowman (39)', 'Grievver (44)',
+        'Ursuin (46)', 'AcidElemental (60)', 'FrostElemental (61)', 'Burun (75)',
+        'GearKnight (99)', 'Gurog (100)', 'Anekshay (101)',
+    ]
+    _LOOT_TIERS = ['None (0)', 'T4 (3101)', 'T5 (3102)', 'T6 (3103)',
+                   'T7 (3104)', 'T8 (3105)']
+
+    def _ct_label(self, name: str) -> str:
+        """Map a loose creature-type name ('tumerok', 'Tumerok (6)', 'undead')
+        to the canonical 'Label (int)' string. Returns '' if unrecognized."""
+        if not name:
+            return ''
+        key = re.sub(r'\s*\(\d+\)\s*$', '', str(name)).strip().lower()
+        for lbl in self._CREATURE_TYPES:
+            if lbl.split(' (')[0].lower() == key:
+                return lbl
+        return ''
+
+    def _lt_label(self, name: str) -> str:
+        """Map a loose loot-tier value ('t6', 'tier 8', '8', '3103') → 'Label (int)'."""
+        s = str(name or '').strip().lower()
+        s = s.replace('lootgen', '').replace('tier', '').strip()
+        if not s or s in ('none', '0', 'no', 'false', ''):
+            return 'None (0)'
+        if s in ('4', '5', '6', '7', '8'):     # bare tier number → t4..t8
+            s = 't' + s
+        for lbl in self._LOOT_TIERS:
+            base = lbl.split(' (')[0].lower()          # 't6'
+            num = lbl.split('(')[1].rstrip(')')        # '3103'
+            if s == base or s == num or s == '(' + num + ')':
+                return lbl
+        return 'None (0)'
+
+    def plan_quest_from_prompt(self, prompt: str, quest_kind: str) -> dict:
+        """Turn a free-text prompt into structured quest-form parameters.
+
+        The LLM is used ONLY as a parameter extractor — it never writes SQL.
+        It reads the prompt and emits a small JSON object of field values, which
+        the frontend loads into the existing quest form for review. The proven
+        deterministic engine then builds the SQL when the user hits Generate.
+
+        quest_kind: 'kill_task' | 'item_turnin' | 'delivery'
+        Returns {success, kind, shared?, rows?, form?, notes, error, raw?}.
+        """
+        prompt = (prompt or '').strip()
+        if not prompt:
+            return {"success": False, "error": "Please describe what you want."}
+        kind = (quest_kind or 'kill_task').strip()
+        if kind not in ('kill_task', 'item_turnin', 'delivery'):
+            return {"success": False, "error": f"Unknown quest kind: {kind}"}
+
+        system_prompt = self._build_quest_plan_system_prompt(kind)
+        res = self._ai_generate_sync(system_prompt, prompt,
+                                     temperature=0.6, timeout=90.0)
+        if not res.get("success"):
+            return {"success": False, "error": res.get("error", "AI request failed")}
+
+        raw = res.get("text", "")
+        data = self._extract_json_object(raw)
+        if data is None:
+            return {"success": False,
+                    "error": "The AI response could not be parsed as JSON.",
+                    "raw": raw[:1200]}
+
+        try:
+            plan = self._normalize_quest_plan(kind, data)
+        except Exception as e:
+            return {"success": False, "error": f"Could not build plan: {e}",
+                    "raw": raw[:1200]}
+        plan.update({"success": True, "error": None})
+        return plan
+
+    def _extract_json_object(self, text: str):
+        """Best-effort extraction of the first JSON object from an LLM reply
+        (tolerates ```json fences and trailing prose)."""
+        if not text:
+            return None
+        cleaned = re.sub(r'```(?:json)?', '', text, flags=re.IGNORECASE).replace('```', '').strip()
+        start = cleaned.find('{')
+        end = cleaned.rfind('}')
+        if start < 0 or end <= start:
+            return None
+        try:
+            return json.loads(cleaned[start:end + 1])
+        except Exception:
+            return None
+
+    def _build_quest_plan_system_prompt(self, kind: str) -> str:
+        """System prompt instructing the model to emit structured JSON params.
+        Encodes the app's default rules (blank reward unless asked, XP/Lum off
+        unless asked, random creature types unless specified, creative fill)."""
+        types = ", ".join(t.split(' (')[0] for t in self._CREATURE_TYPES)
+        rules = (
+            "You convert a content builder's request into JSON parameters for an "
+            "Asheron's Call quest generator. Follow every rule exactly.\n\n"
+            "OUTPUT: Return ONLY one JSON object — no prose, no markdown, no code fences.\n\n"
+            "CREATIVITY — whenever a detail is not given, invent a good one in "
+            "Asheron's Call style. Be evocative, never generic:\n"
+            "- Creature NAMES must be distinctive proper names, NEVER the bare type word. "
+            "Do not name a creature \"Mite\", \"Lugian\", \"Mosswart\", or \"Undead\". "
+            "Build an epithet + noun (optionally a rank/title). Examples: "
+            "Mite -> \"Gloomfang Skitterling\"; Lugian -> \"Ironbrow Marauder\"; "
+            "Mosswart -> \"Bogrot Witchdoctor\"; Undead -> \"Ashen Revenant\"; "
+            "Golem -> \"Riftborn Sentinel\"; Tumerok -> \"Crimson Warband Reaver\"; "
+            "Virindi -> \"Whispering Arbiter\". Every creature gets its OWN distinct name.\n"
+            "- NPC names have character: a name plus a fitting title or epithet, e.g. "
+            "\"Ulgrim the Unpleasant\", \"Nantesa, Keeper of Relics\", \"Sergeant Boruq\".\n"
+            "- ITEM names are flavorful and specific (\"Sealed Tumerok War-Missive\", "
+            "not \"Quest Item\").\n"
+            "- PERSONALITIES/descriptions are a short vivid phrase (\"gruff, battle-scarred "
+            "veteran\"; \"nervous archivist who hoards secrets\").\n\n"
+            "CREATURE TYPES: only use names from this list; if the user does not specify, "
+            "pick a DIFFERENT fitting type for each creature: " + types + ".\n\n"
+            "REWARDS default to OFF unless the user asks:\n"
+            "- No reward item mentioned -> leave reward item fields blank.\n"
+            "- No XP mentioned -> reward_xp 0, omit xp_type.\n"
+            "- No Luminance mentioned -> reward_luminance 0.\n\n"
+            "XP AWARD TYPE — infer it from the wording:\n"
+            "- A flat XP number (\"5 million xp\") -> xp_type \"AwardXP\", reward_xp = that number.\n"
+            "- \"unshared\"/\"no share\"/\"per player\" XP -> xp_type \"AwardNoShareXP\", reward_xp = number.\n"
+            "- A PERCENTAGE or \"level proportional\" XP (\"25%\", \"0.25\", \"scale to level\") -> "
+            "xp_type \"AwardLevelProportionalXP\" and xp_percent as a DECIMAL (25% -> 0.25); "
+            "in this case DO NOT set a flat reward_xp.\n"
+        )
+        if kind == 'kill_task':
+            return rules + (
+                "\nTASK: Build one or more KILL TASK quests (one per creature requested; "
+                "default 1). Use the item-giver method unless the user clearly wants an NPC "
+                "giver. Return JSON of this exact shape:\n"
+                "{\n"
+                '  "shared": { "repeat_hours": 20 },\n'
+                '  "tasks": [\n'
+                "    {\n"
+                '      "creature_name": "distinctive proper name (NOT the type word)",\n'
+                '      "creature_type": "one type name from the list",\n'
+                '      "creature_level": 150,\n'
+                '      "kill_count": 25,\n'
+                '      "spawn_count": 5,                // creatures the generator spawns at once\n'
+                '      "giver": "item",                 // "item" or "npc"\n'
+                '      "item_name": "giver item name (if giver=item)",\n'
+                '      "npc_name": "giver NPC name (if giver=npc)",\n'
+                '      "npc_description": "giver personality (optional)",\n'
+                '      "loot_tier": "None",             // None or T4..T8\n'
+                '      "reward_item": "",               // blank unless user asked\n'
+                '      "reward_xp": 0,                  // flat XP; 0 unless asked\n'
+                '      "xp_type": "AwardXP",            // AwardXP | AwardNoShareXP | AwardLevelProportionalXP\n'
+                '      "xp_percent": 0,                 // DECIMAL, only for AwardLevelProportionalXP (0.25 = 25%)\n'
+                '      "reward_luminance": 0            // 0 unless asked\n'
+                "    }\n"
+                "  ]\n"
+                "}\n\n"
+                "PER-TASK VALUES ARE INDEPENDENT. creature_level, kill_count, spawn_count, "
+                "loot_tier, xp_percent (or reward_xp), and reward_luminance belong to EACH "
+                "task separately — put them ON EACH TASK, never only in \"shared\". When the "
+                "user describes groups of tasks with different stats, every task in a group "
+                "repeats that group's exact numbers, and different groups keep DIFFERENT "
+                "numbers. Do not copy one group's values onto another.\n"
+                "EXAMPLE — \"3 tasks at level 275, 15% xp, 25000 luminance, kill 50, spawn 5; "
+                "then 3 at level 350, 25% xp, 50000 luminance, kill 1, spawn 1\" -> 6 tasks: "
+                "the first three each have creature_level 275, xp_percent 0.15, "
+                "reward_luminance 25000, kill_count 50, spawn_count 5; the next three each "
+                "have creature_level 350, xp_percent 0.25, reward_luminance 50000, "
+                "kill_count 1, spawn_count 1.\n\n"
+                "NAMING: If the user says the giver items are called e.g. \"Commissions\", set "
+                'each item_name to "<Creature Name> Commission".'
+            )
+        if kind == 'item_turnin':
+            return rules + (
+                "\nTASK: Build one ITEM TURN-IN quest (collect an item, hand it to an NPC).\n"
+                "Return JSON with these fields (omit or blank any not implied):\n"
+                "{\n"
+                '  "quest_prefix": "ShortNoSpaces",\n'
+                '  "npc_name": "quest giver NPC (with a title/epithet)",\n'
+                '  "npc_description": "vivid personality phrase",\n'
+                '  "item_name": "flavorful item to collect",\n'
+                '  "item_description": "one-line lore",\n'
+                '  "multi_item_count": 1,\n'
+                '  "item_drop_creature": "distinctive creature that drops it (optional)",\n'
+                '  "item_drop_creature_type": "type name (optional)",\n'
+                '  "item_drop_level": 150,\n'
+                '  "item_drop_loot_tier": "None",\n'
+                '  "reward_xp": 0,                  // flat XP; 0 unless asked\n'
+                '  "xp_type": "AwardXP",            // AwardXP | AwardNoShareXP | AwardLevelProportionalXP\n'
+                '  "xp_percent": 0,                 // DECIMAL, only for AwardLevelProportionalXP\n'
+                '  "reward_luminance": 0,           // 0 unless asked\n'
+                '  "reward_pyreals": 0,\n'
+                '  "repeat_hours": 20,\n'
+                '  "reward_item_name": "",          // blank unless user asked\n'
+                '  "reward_item_description": ""\n'
+                "}"
+            )
+        # delivery
+        return rules + (
+            "\nTASK: Build one DELIVERY quest (carry an item from NPC A to NPC B, "
+            "optionally chaining to C and D).\n"
+            "Return JSON with these fields (omit NPC C/D unless a longer chain is implied):\n"
+            "{\n"
+            '  "quest_prefix": "ShortNoSpaces",\n'
+            '  "item_name": "flavorful item to carry",\n'
+            '  "item_description": "one-line lore",\n'
+            '  "item_count": 1,\n'
+            '  "npc_a_name": "quest giver (with title/epithet)",\n'
+            '  "npc_a_description": "vivid personality phrase",\n'
+            '  "npc_b_name": "recipient (with title/epithet)",\n'
+            '  "npc_b_description": "vivid personality phrase",\n'
+            '  "npc_c_name": "",\n'
+            '  "npc_d_name": "",\n'
+            '  "reward_xp": 0,                  // flat XP; 0 unless asked\n'
+            '  "xp_type": "AwardXP",            // AwardXP | AwardNoShareXP | AwardLevelProportionalXP\n'
+            '  "xp_percent": 0,                 // DECIMAL, only for AwardLevelProportionalXP\n'
+            '  "reward_luminance": 0,           // 0 unless asked\n'
+            '  "reward_pyreals": 0,\n'
+            '  "repeat_hours": 20\n'
+            "}"
+        )
+
+    @staticmethod
+    def _xp_plan(src: dict) -> dict:
+        """Resolve XP-reward fields from a dict of LLM values.
+
+        Distinguishes a flat XP award from a level-proportional (percentage) one,
+        and normalizes the award type. Returns:
+          {use:'yes'|'no', xp_type, reward_xp:str, xp_percent:str}
+        """
+        def _amt(v):
+            try: return int(float(str(v).strip() or 0))
+            except Exception: return 0
+        def _pct(v):
+            try: return float(str(v).strip() or 0)
+            except Exception: return 0.0
+        raw_type = str(src.get('xp_type') or '').strip().lower()
+        pct = _pct(src.get('xp_percent'))
+        if pct > 1:                      # "25" meaning 25% -> 0.25
+            pct = pct / 100.0
+        flat = _amt(src.get('reward_xp'))
+        proportional = ('proportion' in raw_type or 'level' in raw_type or pct > 0)
+        noshare = ('noshare' in raw_type or 'no share' in raw_type
+                   or 'no-share' in raw_type or 'unshared' in raw_type)
+        if proportional:
+            if pct <= 0:
+                pct = 0.25
+            return {"use": "yes", "xp_type": "AwardLevelProportionalXP",
+                    "reward_xp": "", "xp_percent": f"{pct:g}"}
+        if flat > 0:
+            return {"use": "yes",
+                    "xp_type": "AwardNoShareXP" if noshare else "AwardXP",
+                    "reward_xp": str(flat), "xp_percent": ""}
+        return {"use": "no", "xp_type": "AwardXP", "reward_xp": "", "xp_percent": ""}
+
+    def _normalize_quest_plan(self, kind: str, data: dict) -> dict:
+        """Convert the LLM's JSON into the exact shape the frontend forms load."""
+        def _amt(v):
+            try:
+                n = int(float(str(v).strip() or 0)); return n
+            except Exception:
+                return 0
+        def _prefix(name: str, suffix: str) -> str:
+            return re.sub(r'[^A-Za-z0-9]', '', str(name or '')) + suffix
+
+        if kind == 'kill_task':
+            shared_in = data.get('shared') or {}
+            tasks = data.get('tasks') or data.get('rows') or []
+            if isinstance(tasks, dict):
+                tasks = list(tasks.values())
+            tasks = [t for t in tasks if isinstance(t, dict)]
+            if not tasks:
+                raise ValueError("no tasks produced")
+
+            # Resolve XP per task (shared XP hints apply to any task that omits them).
+            xp_per = [self._xp_plan({**shared_in, **t}) for t in tasks]
+            xp_types = [x["xp_type"] for x in xp_per if x["use"] == "yes"]
+            if any(x == "AwardLevelProportionalXP" for x in xp_types):
+                shared_xp_type = "AwardLevelProportionalXP"
+            elif any(x == "AwardNoShareXP" for x in xp_types):
+                shared_xp_type = "AwardNoShareXP"
+            else:
+                shared_xp_type = "AwardXP"
+            any_xp = any(x["use"] == "yes" for x in xp_per)
+            proportional = (shared_xp_type == "AwardLevelProportionalXP")
+
+            rows = []
+            any_lum = False
+            for t, xp in zip(tasks, xp_per):
+                cname = str(t.get('creature_name') or '').strip() or 'Unknown Creature'
+                giver = str(t.get('giver') or 'item').strip().lower()
+                giver = 'npc' if giver == 'npc' else 'item'
+                rlum = _amt(t.get('reward_luminance'))
+                any_lum = any_lum or rlum > 0
+                # Batch form: one shared xp_type; per-row reward_xp or xp_percent.
+                row_xp = '' if proportional else xp["reward_xp"]
+                row_pct = (xp["xp_percent"] or '0.25') if proportional else '0.25'
+                rows.append({
+                    "prefix": _prefix(cname, "KT"),
+                    "giver_type": giver,
+                    "item_name": str(t.get('item_name') or '').strip(),
+                    "npc_name": str(t.get('npc_name') or '').strip(),
+                    "npc_description": str(t.get('npc_description') or '').strip(),
+                    "creature_name": cname,
+                    "creature_type": self._ct_label(t.get('creature_type')) or 'Tumerok (6)',
+                    "creature_level": str(_amt(t.get('creature_level')) or 150),
+                    "kill_count": str(_amt(t.get('kill_count')) or 25),
+                    "spawn_count": str(_amt(t.get('spawn_count')) or 5),
+                    "loot_tier": self._lt_label(t.get('loot_tier')),
+                    "reward_xp": row_xp,
+                    "xp_percent": row_pct,
+                    "reward_luminance": str(rlum) if rlum > 0 else '',
+                    "reward_name": str(t.get('reward_item') or '').strip(),
+                    "reward_wcid": '',
+                })
+            shared = {
+                "repeat_hours": str(_amt(shared_in.get('repeat_hours')) or 20),
+                "xp_type": shared_xp_type,
+                "use_reward_xp": "yes" if any_xp else "no",
+                "use_reward_lum": "yes" if any_lum else "no",
+            }
+            return {"kind": "batch_kill_task", "shared": shared, "rows": rows,
+                    "notes": f"{len(rows)} kill task(s) drafted — review and Generate."}
+
+        # Simple single-form templates (item_turnin / delivery)
+        form = {}
+        def put(fid, val):
+            v = str(val).strip() if val is not None else ''
+            if v:
+                form[fid] = v
+
+        # Shared XP + Luminance handling for both simple templates.
+        xp = self._xp_plan(data)
+        toggles = {"use_reward_xp": xp["use"]}
+        if xp["use"] == "yes":
+            put('xp_type', xp["xp_type"])          # set BEFORE amount so the
+            if xp["reward_xp"]:                     # right field is visible for
+                put('reward_xp', xp["reward_xp"])   # collection (showWhen).
+            if xp["xp_percent"]:
+                put('xp_percent', xp["xp_percent"])
+        rlum = _amt(data.get('reward_luminance'))
+        if rlum > 0:
+            toggles["use_reward_lum"] = "yes"
+            put('reward_luminance', rlum)
+
+        if kind == 'item_turnin':
+            name = data.get('npc_name') or data.get('item_name') or 'Quest'
+            put('quest_prefix', data.get('quest_prefix') or _prefix(name, 'Quest'))
+            for fid in ('npc_name', 'npc_description', 'item_name',
+                        'item_description', 'multi_item_count',
+                        'item_drop_creature', 'item_drop_level',
+                        'reward_pyreals', 'repeat_hours',
+                        'reward_item_name', 'reward_item_description'):
+                put(fid, data.get(fid))
+            ct = self._ct_label(data.get('item_drop_creature_type'))
+            if ct:
+                put('item_drop_creature_type', ct)
+            lt = data.get('item_drop_loot_tier')
+            if lt:
+                put('item_drop_loot_tier', self._lt_label(lt))
+            return {"kind": "item_turnin", "form": form, "toggles": toggles,
+                    "notes": "Turn-in quest drafted — review and Generate."}
+
+        # delivery
+        put('quest_prefix', data.get('quest_prefix') or _prefix(
+            data.get('item_name') or 'Delivery', 'Run'))
+        for fid in ('item_name', 'item_description', 'item_count',
+                    'npc_a_name', 'npc_a_description', 'npc_b_name',
+                    'npc_b_description', 'npc_c_name', 'npc_c_description',
+                    'npc_d_name', 'reward_pyreals', 'repeat_hours'):
+            put(fid, data.get(fid))
+        return {"kind": "delivery", "form": form, "toggles": toggles,
+                "notes": "Delivery quest drafted — review and Generate."}
+
     # Dialogue action types whose `message` text should be rewritten in the
     # NPC's personality. Other emote actions (Give, AwardLuminance, Goto,
     # etc.) are structural and never touched.
