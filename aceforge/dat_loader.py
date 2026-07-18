@@ -22,6 +22,7 @@ Usage:
 
 from __future__ import annotations
 
+import copy
 import io
 import json
 import math
@@ -783,6 +784,31 @@ _PART_COVERAGE = {
     16: _CM_HEAD,
 }
 
+# Setup part index → human-readable body region. Grounded in _PART_COVERAGE
+# (itself ported from ACE's GetVisualPriority), so these are the regions the
+# game itself assigns, not guesses. Paired indices are the left/right halves of
+# one region — which side is which isn't recoverable from the static mesh (AC
+# mirrors them at runtime) and doesn't matter for texturing: across the retail
+# DAT the two halves carry the *same* texture swap ~97% of the time.
+BODY_PART_NAMES = {
+    0:  "Girth",       # abdomen — the belt/waist band, not a separate "back"
+    1:  "Upper Legs",  5:  "Upper Legs",
+    2:  "Lower Legs",  6:  "Lower Legs",
+    3:  "Feet",        4:  "Feet",  7: "Feet",  8: "Feet",
+    9:  "Chest",       # the whole torso mesh — front AND back are one part
+    10: "Upper Arms",  13: "Upper Arms",
+    11: "Lower Arms",  14: "Lower Arms",
+    12: "Hands",       15: "Hands",
+    16: "Head",
+}
+
+
+def body_part_name(index: int) -> str:
+    """Body region for a Setup part index, or 'Part N' for the rare extras
+    (index ≥ 17 — headgear/hair underlays a handful of items add)."""
+    return BODY_PART_NAMES.get(index, f"Part {index}")
+
+
 # EquipMask (ACE.Entity.Enum.EquipMask)
 EQUIP_ARMOR     = 0x00007F00   # Chest/Abdomen/UpperArm/LowerArm/UpperLeg/LowerLeg/Foot armor
 EQUIP_EXTREMITY = 0x00000121   # HeadWear | HandWear | FootWear
@@ -929,6 +955,509 @@ def parse_clothing_subpal_all(db: DatDatabase,
         return out
     except Exception:
         return {}
+
+
+def parse_clothing_table_full(db: DatDatabase,
+                              clothing_id: int) -> Optional[dict]:
+    """Parse a whole ClothingTable (0x10xxxxxx) losslessly.
+
+    The other ClothingTable parsers here are each lossy on purpose:
+    parse_clothing_base_effect keeps one setup and drops the rest, and
+    parse_clothing_subpal_all skips the base effects blind to reach the
+    palettes. An editor needs both halves at once, in order, so this is the
+    one reader that keeps everything — including the CloSubPalEffect Icon,
+    which the subpal parsers read and throw away.
+
+    Returns the canonical dict used by clothing_json:
+      {"id": int,
+       "base_effects":   {setup_id: [{"index", "model_id",
+                                      "tex_effects": [{"old", "new"}]}]},
+       "subpal_effects": {template: {"icon",
+                                     "subpals": [{"paletteset",
+                                                  "ranges": [{"offset",
+                                                              "num_colors"}]}]}}}
+
+    CloObjectEffects stay a list rather than the {part_index: ...} dict the
+    render path uses: the on-disk order is the file's own, and a table may
+    legally repeat an index. Round-tripping has to preserve both.
+    Returns None if the file is missing or malformed.
+    """
+    data = db.read_file(clothing_id)
+    if not data or len(data) < 8:
+        return None
+    try:
+        file_id, off = _u32(data, 0)
+        nbe, off = _u16(data, off)
+        _buckets, off = _u16(data, off)
+
+        base_effects: Dict[int, list] = {}
+        for _ in range(nbe):
+            setup_id, off = _u32(data, off)
+            nobj, off = _u32(data, off)
+            objs = []
+            for _ in range(nobj):
+                pidx, off = _u32(data, off)
+                model, off = _u32(data, off)
+                ntex, off = _u32(data, off)
+                tex = []
+                for _ in range(ntex):
+                    old_t, off = _u32(data, off)
+                    new_t, off = _u32(data, off)
+                    tex.append({"old": old_t, "new": new_t})
+                objs.append({"index": pidx, "model_id": model,
+                             "tex_effects": tex})
+            base_effects[setup_id] = objs
+
+        nsp, off = _u16(data, off)
+        _b2, off = _u16(data, off)
+
+        subpal_effects: Dict[int, dict] = {}
+        for _ in range(nsp):
+            key, off = _u32(data, off)
+            icon, off = _u32(data, off)
+            nsub, = struct.unpack_from("<i", data, off); off += 4
+            subs = []
+            for _ in range(nsub):
+                nr, = struct.unpack_from("<i", data, off); off += 4
+                ranges = []
+                for _ in range(nr):
+                    o_, n_ = struct.unpack_from("<II", data, off); off += 8
+                    ranges.append({"offset": o_, "num_colors": n_})
+                palset, off = _u32(data, off)
+                subs.append({"paletteset": palset, "ranges": ranges})
+            subpal_effects[key] = {"icon": icon, "subpals": subs}
+
+        return {"id": file_id, "base_effects": base_effects,
+                "subpal_effects": subpal_effects}
+    except Exception:
+        return None
+
+
+def render_surface_texture_png(db: DatDatabase, st_id: int,
+                               max_size: int = 64) -> Optional[Tuple[bytes, int, int]]:
+    """A SurfaceTexture (0x05) or Texture (0x06) as PNG bytes, for the texture
+    picker. Returns (png, orig_w, orig_h), or None if it can't be read.
+
+    Box-downscaled to max_size so a picker grid stays cheap to ship over the
+    pywebview bridge — a full 256×256 texture is ~50KB of PNG, and a grid wants
+    hundreds of them. Pass max_size=0 for the texture at native size.
+    """
+    tex_id = st_id if (st_id >> 24) == 0x06 else parse_surface_texture(db, st_id)
+    if not tex_id:
+        return None
+    tex = parse_texture(db, tex_id)
+    if not tex or not tex.width or not tex.height:
+        return None
+    pal = parse_palette(db, tex.palette_id) if tex.palette_id else None
+    try:
+        rgba = tex.to_rgba(pal)
+    except Exception:
+        return None
+    if not rgba:
+        return None
+
+    w, h = tex.width, tex.height
+    if max_size and (w > max_size or h > max_size):
+        scale = max(w, h) / float(max_size)
+        nw, nh = max(1, int(w / scale)), max(1, int(h / scale))
+        # Average each source box — nearest-neighbour on AC's noisy armor
+        # textures aliases into unreadable speckle at thumbnail size.
+        #
+        # Sample at most SAMP² pixels per box rather than all of them: a 512²
+        # terrain texture into a 48px thumb is a ~10×10 box per output pixel,
+        # and averaging all 100 costs ~9s for a terrain grid in pure Python.
+        # 4×4 spread across the box is visually indistinguishable here and cuts
+        # that by roughly an order of magnitude.
+        SAMP = 4
+        out = bytearray(nw * nh * 4)
+        for y in range(nh):
+            y0, y1 = int(y * h / nh), max(int(y * h / nh) + 1, int((y + 1) * h / nh))
+            ys = range(y0, y1) if (y1 - y0) <= SAMP else [
+                y0 + (i * (y1 - y0)) // SAMP for i in range(SAMP)]
+            for x in range(nw):
+                x0, x1 = int(x * w / nw), max(int(x * w / nw) + 1, int((x + 1) * w / nw))
+                xs = range(x0, x1) if (x1 - x0) <= SAMP else [
+                    x0 + (i * (x1 - x0)) // SAMP for i in range(SAMP)]
+                r = g = b = a = n = 0
+                for sy in ys:
+                    row = sy * w
+                    for sx in xs:
+                        p = (row + sx) * 4
+                        r += rgba[p]; g += rgba[p+1]; b += rgba[p+2]; a += rgba[p+3]
+                        n += 1
+                p = (y * nw + x) * 4
+                out[p:p+4] = (r // n, g // n, b // n, a // n)
+        return _rgba_to_png(bytes(out), nw, nh), w, h
+    return _rgba_to_png(rgba, w, h), w, h
+
+
+REGION_ID = 0x13000000     # exactly one Region file in client_portal.dat
+
+
+def _pstring(data: bytes, off: int) -> Tuple[str, int]:
+    """AC PString: u16 length, bytes, then align to a 4-byte boundary."""
+    ln, off = _u16(data, off)
+    s = data[off:off + ln].decode("latin-1")
+    off += ln
+    if off % 4:
+        off += 4 - (off % 4)
+    return s, off
+
+
+def parse_terrain_textures(db: DatDatabase) -> List[dict]:
+    """The DAT's only *named* textures: [{name, texture, index}].
+
+    Nothing else in the DAT names a SurfaceTexture, so these 32 are the only
+    ones a user can search for by word — and they include the good ones
+    (Volcano1/2, SeaSlime, ObsidianPlain, BlueIce, olthoi).
+
+    The Region's TerrainDesc sits behind LandDefs/GameTime/SkyDesc/SoundDesc/
+    SceneDesc, all of which would have to be parsed to reach it sequentially.
+    Instead we anchor on the TMTerrainDesc list, which is unmistakable — a run
+    of 44-byte records whose first field counts 0,1,2… and whose second is
+    always a 0x05 SurfaceTexture — then read the TerrainTypes name list that
+    precedes it. The read is checked: the name list must end exactly on
+    LandSurf.Type == 0, which a misparse would not.
+
+    Returns [] rather than raising if anything looks wrong.
+    """
+    data = db.read_file(REGION_ID)
+    if not data or len(data) < 64:
+        return []
+    try:
+        def entry_at(p):
+            if p + 48 > len(data):
+                return None
+            v0, v1 = struct.unpack_from("<II", data, p)
+            return (v0, v1) if (v1 >> 24) == 0x05 and v0 < 64 else None
+
+        # An entry is only real if its successor 44 bytes on continues the
+        # count — DetailTexGID also looks like (small int, 0x05 id) on its own.
+        start = None
+        for p in range(0, len(data) - 48, 4):
+            a, b = entry_at(p), entry_at(p + 44)
+            if a and b and b[0] == a[0] + 1:
+                start = p
+                break
+        if start is None:
+            return []
+        while start - 44 >= 0:
+            prev, cur = entry_at(start - 44), entry_at(start)
+            if not prev or prev[0] != cur[0] - 1:
+                break
+            start -= 44
+
+        count, _ = _u32(data, start - 4)
+        tex_by_index = {}
+        p = start
+        for i in range(count):
+            e = entry_at(p)
+            if not e or e[0] != i:
+                break
+            tex_by_index[i] = e[1]
+            p += 44
+
+        # TerrainTypes: u32 count, then count × (PString, align, colour u32,
+        # SceneTypes list), followed immediately by LandSurf.
+        #
+        # Search backwards from the TMTerrainDesc anchor, not forwards from the
+        # file start: the GameTime block ("Darktide", "Dawnsong", the month
+        # names) is also a count-then-PString list and would match first.
+        def read_names(p):
+            n, p = _u32(data, p)
+            if not 1 <= n <= 64:
+                return None
+            names = []
+            for _ in range(n):
+                s, p = _pstring(data, p)
+                if not s or not all(32 <= ord(c) < 127 for c in s):
+                    return None
+                _color, p = _u32(data, p)
+                ns, p = _u32(data, p)
+                if ns > 4096:
+                    return None
+                p += 4 * ns
+                names.append(s)
+            return names, p
+
+        # Take the *longest* validating candidate, not the first found. Every
+        # suffix of the real list also ends on LandSurf — a 1-element list
+        # holding just the last name validates too — so "closest to the anchor"
+        # finds a single name. The true list start is the earliest one whose
+        # count field happens to agree, i.e. the longest.
+        names = None
+        for p0 in range(start - 4, max(0, start - 16384), -4):
+            try:
+                got = read_names(p0)
+            except Exception:
+                continue
+            if not got:
+                continue
+            cand, end = got
+            # A correct read lands exactly on LandSurf.Type, always 0, a short
+            # hop before the TMTerrainDesc list. A misparse does not.
+            if (end < start and (start - end) < 1024
+                    and _u32(data, end)[0] == 0
+                    and (names is None or len(cand) > len(names))):
+                names = cand
+        if names is None:
+            return []
+
+        return [{"index": i, "name": nm, "texture": tex_by_index[i]}
+                for i, nm in enumerate(names) if i in tex_by_index]
+    except Exception:
+        return []
+
+
+def clothing_texture_index(db: DatDatabase) -> dict:
+    """Every texture the retail ClothingTables actually use, indexed by where.
+
+    A raw list of the DAT's ~thousands of SurfaceTextures is a useless picker —
+    most are terrain, UI, or sky. What an armor author wants is "what textures
+    does other armor use on this body part", so this walks all 0x10 tables and
+    records, per (setup, part index), the NewTexture values seen there. Those
+    are textures already proven to work as clothing skins on that part.
+
+    Returns {"by_part": {(setup, part): [tex ids]}, "all": [tex ids],
+             "users": {tex_id: n}} with ids as ints.
+    """
+    by_part: Dict[Tuple[int, int], set] = {}
+    users: Dict[int, int] = {}
+    for cid in db.files_by_type(0x10):
+        t = parse_clothing_table_full(db, cid)
+        if not t:
+            continue
+        for setup, objs in t["base_effects"].items():
+            for o in objs:
+                for e in o.get("tex_effects", []):
+                    nt = e["new"]
+                    if not nt:
+                        continue
+                    by_part.setdefault((setup, o["index"]), set()).add(nt)
+                    users[nt] = users.get(nt, 0) + 1
+    return {"by_part": {k: sorted(v) for k, v in by_part.items()},
+            "all": sorted(users),
+            "users": users}
+
+
+PALETTE_SPACE = 2048       # colours in a body/armor palette; every range fits here
+
+
+def palette_strip(db: DatDatabase, palset_id: int, shade: float,
+                  offset: int = 0, num_colors: int = 0,
+                  samples: int = 24) -> List[str]:
+    """The colours a subpalette actually paints, as ['#rrggbb', ...].
+
+    Resolves PaletteSet → Palette by shade the way the render path does, then
+    samples evenly across [offset, offset+num_colors) — that slice is what the
+    subpalette writes over the texture palette, so it is the only part worth
+    showing as a swatch. A raw Palette (0x04) is accepted: the mod allows one
+    wherever a PaletteSet is expected.
+    """
+    pid = resolve_palette_id(db, palset_id, shade)
+    if not pid:
+        return []
+    cols = parse_palette(db, pid)
+    if not cols:
+        return []
+    lo = max(0, min(offset, len(cols)))
+    hi = min(len(cols), lo + num_colors) if num_colors else len(cols)
+    span = cols[lo:hi]
+    if not span:
+        return []
+    n = min(samples, len(span))
+    out = []
+    for i in range(n):
+        c = span[int(i * len(span) / n)]
+        out.append("#%02X%02X%02X" % ((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF))
+    return out
+
+
+def clothing_paletteset_index(db: DatDatabase) -> dict:
+    """PaletteSets the retail ClothingTables actually dye with.
+
+    Same reasoning as clothing_texture_index: the DAT holds far more palettes
+    than are usable as clothing dyes, and the ones already in use are the ones
+    known to work. Returns {"all": [ids], "users": {id: n}}.
+    """
+    users: Dict[int, int] = {}
+    for cid in db.files_by_type(0x10):
+        t = parse_clothing_table_full(db, cid)
+        if not t:
+            continue
+        for eff in t["subpal_effects"].values():
+            for sp in eff.get("subpals", []):
+                ps = sp["paletteset"]
+                if ps:
+                    users[ps] = users.get(ps, 0) + 1
+    return {"all": sorted(users), "users": users}
+
+
+def _surface_texture_id(db: DatDatabase, surface_id: int) -> Optional[int]:
+    """The SurfaceTexture (0x05) a Surface (0x08) draws, or None for a solid
+    colour / unreadable surface. Layout matches material_for_surface: Surface
+    files carry no leading Id; [Type][TexId|Color][PalId]..."""
+    surf = db.read_file(surface_id)
+    if not surf or len(surf) < 8:
+        return None
+    stype, _ = _u32(surf, 0)
+    if stype & 0x6:              # ST_BASE1_IMAGE (0x2) | ST_BASE1_CLIPMAP (0x4)
+        tid, _ = _u32(surf, 4)
+        return tid if (tid >> 24) == 0x05 else None
+    return None
+
+
+def setup_part_textures(db: DatDatabase, setup_id: int) -> Dict[int, dict]:
+    """A Setup's parts as {part_index: {"model": gfxobj_id, "textures": [0x05...]}}.
+
+    The textures are the SurfaceTexture ids each part currently draws — the
+    identity "old" values a ClothingBase texture effect swaps *from*. This is
+    what lets a creature with no ClothingBase be edited: read its real parts,
+    then treat each as a swappable texture slot.
+    """
+    raw = db.read_file(setup_id)
+    setup = parse_setup(raw) if raw else None
+    if not setup:
+        return {}
+    out: Dict[int, dict] = {}
+    for i, part in enumerate(setup.parts):
+        gfx = parse_gfxobj(db.read_file(part.gfxobj_id))
+        if not gfx or not gfx.surfaces:
+            continue
+        texs, seen = [], set()
+        for sid in gfx.surfaces:
+            t = _surface_texture_id(db, sid)
+            if t and t not in seen:
+                seen.add(t)
+                texs.append(t)
+        if texs:
+            out[i] = {"model": part.gfxobj_id, "textures": texs}
+    return out
+
+
+def synthesize_clothing_table_from_setup(db: DatDatabase, setup_id: int,
+                                         clothing_id: int) -> Optional[dict]:
+    """Build an editable ClothingTable for a creature that has none.
+
+    Every part becomes an identity texture effect (old == new == the part's
+    real texture), so rendering setup+this table is identical to the bare setup
+    until the user swaps something. Exported under a new id, the mod stubs it in
+    and the weenie points its DID 7 at it — no DAT patch, no client download.
+    Returns None if the setup has no textured parts.
+    """
+    parts = setup_part_textures(db, setup_id)
+    if not parts:
+        return None
+    objs = [{"index": idx, "model_id": info["model"],
+             "tex_effects": [{"old": t, "new": t} for t in info["textures"]]}
+            for idx, info in sorted(parts.items())]
+    return {"id": clothing_id, "base_effects": {setup_id: objs},
+            "subpal_effects": {}}
+
+
+def texture_used_indices(db: DatDatabase, tex_id: int) -> Optional[set]:
+    """The set of palette indices a texture actually samples.
+
+    Only meaningful for indexed formats (P8 / INDEX16), where each pixel byte
+    (or u16) is a palette index. Returns None for non-indexed or unreadable
+    textures. Accepts a SurfaceTexture (0x05, resolved to its 0x06) or a raw
+    Texture (0x06).
+
+    This is what lets the Colors tab say which body part a dye touches: a dye
+    overwrites palette range [offset, offset+num); a part is affected iff its
+    texture samples an index in that range. AC clothing textures index into the
+    part's palette in the same space the subpalette offsets address, so the
+    overlap is a real answer, not an approximation.
+    """
+    tid = tex_id if (tex_id >> 24) == 0x06 else parse_surface_texture(db, tex_id)
+    if not tid:
+        return None
+    tx = parse_texture(db, tid)
+    if not tx or not tx.data:
+        return None
+    if tx.fmt == PFID_P8:
+        return set(tx.data)
+    if tx.fmt == PFID_INDEX16:
+        import array
+        a = array.array("H")               # native u16; AC is LE, Windows is LE
+        n = (len(tx.data) // 2) * 2
+        a.frombytes(tx.data[:n])
+        return set(a)
+    return None
+
+
+def indices_to_runs(indices) -> List[List[int]]:
+    """Sorted index set → compact [[start, end], ...] contiguous runs."""
+    if not indices:
+        return []
+    s = sorted(indices)
+    runs = [[s[0], s[0]]]
+    for v in s[1:]:
+        if v <= runs[-1][1] + 1:
+            runs[-1][1] = v
+        else:
+            runs.append([v, v])
+    return runs
+
+
+def merge_clothing_table(base: Optional[dict],
+                         override: Optional[dict]) -> Optional[dict]:
+    """Merge an override table over a DAT table the way the server will.
+
+    Mirrors CustomClothingBase's MergeClothingTable: each key is replaced
+    *wholesale*, never deep-merged — an override's base effect for a setup, or
+    subpal effect for a template, substitutes the DAT's entire entry. Keys the
+    override does not mention are left alone.
+
+    The consequence worth knowing when previewing: an override cannot *remove*
+    a setup that exists in the DAT. Omitting a key means "leave it", not
+    "delete it". Reproducing that here means the preview shows what the server
+    will actually render rather than what the JSON file looks like in isolation.
+    """
+    if override is None:
+        return base
+    if base is None:
+        return copy.deepcopy(override)
+    out = copy.deepcopy(base)
+    out["base_effects"].update(copy.deepcopy(override.get("base_effects") or {}))
+    out["subpal_effects"].update(copy.deepcopy(override.get("subpal_effects") or {}))
+    return out
+
+
+def clothing_table_base_effect(table: dict, setup_id: int
+                               ) -> Optional[Dict[int, Tuple[int, Dict[int, int]]]]:
+    """One setup's base effect from a canonical table, in the shape the render
+    path wants: {part_index: (model_id, {old_tex: new_tex})}.
+
+    Equivalent to parse_clothing_base_effect but reading an in-memory table.
+    A repeated part index collapses last-wins, matching that function.
+    """
+    objs = (table.get("base_effects") or {}).get(setup_id)
+    if objs is None:
+        return None
+    return {o["index"]: (o["model_id"],
+                         {t["old"]: t["new"] for t in o.get("tex_effects", [])})
+            for o in objs}
+
+
+def clothing_table_subpals(table: dict, palette_template: int,
+                           fallback_first: bool = False) -> list:
+    """One template's subpalettes from a canonical table, in the render path's
+    shape: [(palette_or_paletteset_id, [(offset, num_colors), ...]), ...].
+
+    Equivalent to parse_clothing_subpals over an in-memory table, including the
+    fallback_first behavior (ACE's "Keys.ElementAt(0)") — the canonical table
+    preserves file order, so the first entry here is the first on disk.
+    """
+    effects = table.get("subpal_effects") or {}
+    eff = effects.get(palette_template)
+    if eff is None:
+        if not (fallback_first and effects):
+            return []
+        eff = next(iter(effects.values()))
+    return [(sp["paletteset"],
+             [(r["offset"], r["num_colors"]) for r in sp.get("ranges", [])])
+            for sp in eff.get("subpals", [])]
 
 
 def paletteset_shades(db: DatDatabase, pid: int) -> int:
@@ -1552,7 +2081,8 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
                      motion_id: int = 0,
                      palette_template: int = 0,
                      shade: float = 0.0,
-                     outfit: Optional[List[dict]] = None) -> Optional[bytes]:
+                     outfit: Optional[List[dict]] = None,
+                     overrides: Optional[Dict[int, dict]] = None) -> Optional[bytes]:
     """
     Read a Setup + its GfxObjs + textures from the DAT and return GLB bytes.
     Returns None if the setup is not found or has no renderable geometry.
@@ -1565,6 +2095,12 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
     body setup — the "doll". Supersedes clothing_id/palette_template/shade.
     Items are ordered per ACE and applied in sequence, so a later item's parts
     and dyes overwrite an earlier one's wherever they overlap.
+
+    overrides: {clothing_id: canonical table dict} of edited ClothingTables to
+    render instead of the DAT's — the ClothingBase editor's live preview. Each
+    is merged over the DAT entry exactly as the CustomClothingBase server mod
+    would (see merge_clothing_table), so what you see here is what the server
+    will send. A clothing id absent from this map reads from the DAT unchanged.
     """
     raw = db.read_file(setup_id)
     if not raw:
@@ -1602,17 +2138,32 @@ def export_setup_glb(db: DatDatabase, setup_id: int,
         _cid = _it.get("clothing_id") or 0
         if not _cid:
             continue
-        _parts = parse_clothing_base_effect(db, _cid, setup_id)
-        if not _parts and _alias != setup_id:
-            _parts = parse_clothing_base_effect(db, _cid, _alias)
+        # An edited table goes through the in-memory path, merged over the DAT
+        # the way the server merges it. Everything else keeps the original
+        # two-read path, so the shipped doll's behavior is untouched.
+        _ov = (overrides or {}).get(_cid)
+        _tbl = (merge_clothing_table(parse_clothing_table_full(db, _cid), _ov)
+                if _ov is not None else None)
+
+        if _tbl is not None:
+            _parts = clothing_table_base_effect(_tbl, setup_id)
+            if not _parts and _alias != setup_id:
+                _parts = clothing_table_base_effect(_tbl, _alias)
+        else:
+            _parts = parse_clothing_base_effect(db, _cid, setup_id)
+            if not _parts and _alias != setup_id:
+                _parts = parse_clothing_base_effect(db, _cid, _alias)
         if _parts:
             clo_parts.update(_parts)       # later item wins on shared parts
         _pt = int(_it.get("palette_template") or 0)
         _sh = float(_it.get("shade") or 0.0)
         _fb = _it.get("_subpal_fallback", True)
         if _pt or _fb:
-            for palset, ranges in parse_clothing_subpals(db, _cid, _pt,
-                                                         fallback_first=_fb):
+            _subs = (clothing_table_subpals(_tbl, _pt, fallback_first=_fb)
+                     if _tbl is not None
+                     else parse_clothing_subpals(db, _cid, _pt,
+                                                 fallback_first=_fb))
+            for palset, ranges in _subs:
                 src_id = resolve_palette_id(db, palset, _sh)
                 src = parse_palette(db, src_id) if src_id else None
                 if src and ranges:
@@ -2183,20 +2734,40 @@ def outfit_key(outfit: List[dict]) -> str:
     return hashlib.sha1(sig.encode()).hexdigest()[:12]
 
 
+def overrides_key(overrides: Optional[Dict[int, dict]]) -> str:
+    """Stable short hash of edited ClothingTables for the GLB cache filename.
+
+    Hashes table *content*, not ids. Every other component of the cache key is
+    an id, which is safe only because DAT contents never change under us — an
+    edited table breaks that assumption: 0x10000900 means something different
+    after each edit, so keying on the id alone would serve a stale GLB.
+    """
+    if not overrides:
+        return ""
+    import hashlib
+    sig = json.dumps({f"{cid:08X}": t for cid, t in overrides.items()},
+                     sort_keys=True, separators=(",", ":"))
+    return hashlib.sha1(sig.encode()).hexdigest()[:12]
+
+
 def cached_glb_path(setup_id: int, clothing_id: int = 0,
                     motion_id: int = 0, palette_template: int = 0,
                     shade: float = 0.0,
-                    outfit: Optional[List[dict]] = None) -> Path:
+                    outfit: Optional[List[dict]] = None,
+                    overrides: Optional[Dict[int, dict]] = None) -> Path:
     # Version in filename forces re-parse when parser changes; clothing id
     # distinguishes the same body setup dressed in different armor, motion id
     # distinguishes animated vs static, and palette/shade distinguish dyes.
     # An outfit hashes the whole ensemble instead of a single clothing id.
+    # An override hashes the edited table's contents — see overrides_key.
     mot = f"_M{motion_id:08X}" if motion_id else ""
+    ovk = overrides_key(overrides)
+    ov = f"_O{ovk}" if ovk else ""
     if outfit:
-        return get_cache_dir() / f"{setup_id:08X}_D{outfit_key(outfit)}{mot}_{_PARSER_VERSION}.glb"
+        return get_cache_dir() / f"{setup_id:08X}_D{outfit_key(outfit)}{mot}{ov}_{_PARSER_VERSION}.glb"
     clo = f"_C{clothing_id:08X}" if clothing_id else ""
     dye = f"_P{palette_template}S{int(shade*1000)}" if palette_template else ""
-    return get_cache_dir() / f"{setup_id:08X}{clo}{mot}{dye}_{_PARSER_VERSION}.glb"
+    return get_cache_dir() / f"{setup_id:08X}{clo}{mot}{dye}{ov}_{_PARSER_VERSION}.glb"
 
 
 def get_or_export_glb(db: DatDatabase, setup_id: int,
@@ -2204,16 +2775,22 @@ def get_or_export_glb(db: DatDatabase, setup_id: int,
                       motion_id: int = 0,
                       palette_template: int = 0,
                       shade: float = 0.0,
-                      outfit: Optional[List[dict]] = None) -> Optional[Path]:
-    """Return path to cached GLB, exporting from DAT if needed."""
+                      outfit: Optional[List[dict]] = None,
+                      overrides: Optional[Dict[int, dict]] = None) -> Optional[Path]:
+    """Return path to cached GLB, exporting from DAT if needed.
+
+    Only for tables that are settled — a saved custom ClothingBase. Live
+    editing should call export_setup_glb directly: every keystroke would
+    otherwise leave a ~1MB GLB behind in the cache dir forever.
+    """
     p = cached_glb_path(setup_id, clothing_id, motion_id, palette_template,
-                        shade, outfit)
+                        shade, outfit, overrides)
     if p.exists():
         return p
     glb = export_setup_glb(db, setup_id, clothing_id=clothing_id,
                            motion_id=motion_id,
                            palette_template=palette_template, shade=shade,
-                           outfit=outfit)
+                           outfit=outfit, overrides=overrides)
     if glb is None:
         return None
     p.write_bytes(glb)

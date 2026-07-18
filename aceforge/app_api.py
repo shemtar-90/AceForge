@@ -59,6 +59,7 @@ class AppAPI(LoreMixin):
             "recipe_output_dir": self.config.get("recipe_output_dir", ""),
             "quest_output_dir":  self.config.get("quest_output_dir", ""),
             "event_output_dir":  self.config.get("event_output_dir", ""),
+            "clothingbase_output_dir": self.config.get("clothingbase_output_dir", ""),
             "wcid_ranges":  self.config.get_wcid_ranges(),
             "base_wcid_ranges": self.config.get_base_wcid_ranges(),
             "auto_open_folder": self.config.get("auto_open_folder", True),
@@ -77,7 +78,8 @@ class AppAPI(LoreMixin):
             if "author"      in data: self.config.set("author", data["author"])
             if "output_dir"  in data: self.config.output_dir  = data["output_dir"]
             for _k in ("weenie_output_dir", "recipe_output_dir",
-                       "quest_output_dir", "event_output_dir"):
+                       "quest_output_dir", "event_output_dir",
+                       "clothingbase_output_dir"):
                 if _k in data:
                     self.config.set(_k, str(data[_k] or "").strip())
             if "api_key" in data and data["api_key"]:
@@ -3161,8 +3163,805 @@ Start with: /* ===== FILE: {fname} ===== */
         return {"success": True, "clothing_id": f"0x{cid:08X}",
                 "palettes": r["palettes"].get(f"0x{cid:08X}", [])}
 
+    def _parse_cb_overrides(self, overrides) -> tuple:
+        """[CustomClothingBase JSON obj|text] → ({clothing_id: table}, errors).
+
+        The editor's live document is already in the mod's export format, so it
+        comes over the wire as-is — preview and export therefore cannot drift.
+        """
+        from aceforge import clothing_json as cj
+
+        out, errs = {}, []
+        for i, o in enumerate(overrides or []):
+            try:
+                t = (cj.table_from_json(o) if isinstance(o, str)
+                     else cj.table_from_obj(o))
+            except cj.ClothingJsonError as e:
+                errs.append(f"override[{i}]: {e}")
+                continue
+            if (t["id"] >> 24) != 0x10:
+                errs.append(f"override[{i}]: Id 0x{t['id']:08X} is not a "
+                            f"ClothingTable")
+                continue
+            out[t["id"]] = t
+        return out, errs
+
+    def clothingbase_load(self, clothing_id_hex: str) -> dict:
+        """Read a ClothingBase from the DAT as CustomClothingBase JSON text.
+
+        The editor's "open" — the returned text is a valid mod file as-is, and
+        is what the mod's own /clothingbase-export command would write.
+        """
+        from pathlib import Path
+        from aceforge.dat_loader import DatDatabase, parse_clothing_table_full
+        from aceforge import clothing_json as cj
+
+        s = str(clothing_id_hex or "").strip()
+        try:
+            cid = int(s, 16) if s.lower().startswith("0x") else int(s, 10)
+        except (ValueError, TypeError):
+            return {"success": False, "error": f"Invalid ClothingBase id: {s!r}"}
+        if (cid >> 24) != 0x10:
+            return {"success": False,
+                    "error": f"0x{cid:08X} is not a ClothingTable (0x10......)"}
+
+        path = self._resolve_portal_dat()
+        if not path or not Path(path).exists():
+            return {"success": False, "error": "client_portal.dat not configured"}
+
+        db = None
+        try:
+            db = DatDatabase(path)
+            table = parse_clothing_table_full(db, cid)
+            if table is None:
+                return {"success": False,
+                        "error": f"ClothingBase 0x{cid:08X} not found in the DAT"}
+            return {"success": True,
+                    "json": cj.table_to_json(table),
+                    "filename": cj.json_filename(cid),
+                    "setups": [f"0x{s:08X}" for s in sorted(table["base_effects"])],
+                    "templates": sorted(table["subpal_effects"]),
+                    "warnings": cj.validate_table(table)}
+        except Exception as e:
+            return {"success": False, "error": f"Exception: {e}"}
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
+    def _cb_texture_index(self):
+        """Memoized texture index — ~0.2s to build, so build it once.
+
+        Holds the clothing-usage index, every SurfaceTexture in the DAT, and
+        the named terrain textures.
+        """
+        if getattr(self, "_cb_tex_idx", None) is None:
+            from pathlib import Path
+            from aceforge.dat_loader import (DatDatabase, clothing_texture_index,
+                                             parse_terrain_textures)
+            path = self._resolve_portal_dat()
+            if not path or not Path(path).exists():
+                return None
+            db = None
+            try:
+                db = DatDatabase(path)
+                idx = clothing_texture_index(db)
+                idx["every"] = sorted(db.files_by_type(0x05))
+                idx["terrain"] = parse_terrain_textures(db)
+                self._cb_tex_idx = idx
+            finally:
+                if db is not None:
+                    try:
+                        db.close()
+                    except Exception:
+                        pass
+        return self._cb_tex_idx
+
+    def clothingbase_textures_for_part(self, setup_hex: str, part_index: int) -> dict:
+        """Textures other armor uses on this (setup, part) — the picker's list.
+
+        The DAT has ~7240 SurfaceTextures, but only ~2038 are used by clothing
+        at all, and only a handful on any given part. Offering the part's own
+        list first is the difference between a usable picker and a haystack.
+        """
+        idx = self._cb_texture_index()
+        if idx is None:
+            return {"success": False, "error": "client_portal.dat not configured"}
+        try:
+            setup = int(str(setup_hex), 16) if str(setup_hex).lower().startswith("0x") \
+                else int(str(setup_hex), 10)
+            part = int(part_index)
+        except (ValueError, TypeError):
+            return {"success": False, "error": "Invalid setup or part index"}
+
+        here = idx["by_part"].get((setup, part), [])
+        # Terrain first among the "fun" sets: they are the only named textures
+        # in the DAT, so they are the only ones anyone can go looking for.
+        terrain = [{"id": f"0x{t['texture']:08X}", "name": t["name"]}
+                   for t in idx["terrain"]]
+        return {"success": True,
+                "for_part": [f"0x{i:08X}" for i in here],
+                "all_clothing": [f"0x{i:08X}" for i in idx["all"]],
+                "terrain": terrain,
+                "every": [f"0x{i:08X}" for i in idx["every"]],
+                "users": {f"0x{i:08X}": idx["users"][i] for i in here}}
+
+    def clothingbase_texture_thumbs(self, ids: list, size: int = 64) -> dict:
+        """Batch SurfaceTexture → base64 PNG thumbnails, disk-cached.
+
+        Batched because opening the DAT costs ~700ms; the doll's palette API
+        learned the same lesson. Disk-cached because the box filter is ~25ms
+        per texture in pure Python and the picker re-renders the same grid.
+        """
+        import base64
+        from pathlib import Path
+        from aceforge.dat_loader import (DatDatabase, get_cache_dir,
+                                         render_surface_texture_png)
+
+        try:
+            size = max(8, min(int(size), 256))
+        except (ValueError, TypeError):
+            size = 64
+
+        want = []
+        for raw in (ids or []):
+            s = str(raw or "").strip()
+            try:
+                want.append(int(s, 16) if s.lower().startswith("0x") else int(s, 10))
+            except (ValueError, TypeError):
+                continue
+
+        cdir = get_cache_dir().parent / "tex_cache"
+        cdir.mkdir(parents=True, exist_ok=True)
+        out, missing = {}, []
+        for tid in want:
+            p = cdir / f"{tid:08X}_{size}.png"
+            if p.exists():
+                out[f"0x{tid:08X}"] = base64.b64encode(p.read_bytes()).decode()
+            else:
+                missing.append((tid, p))
+
+        if missing:
+            path = self._resolve_portal_dat()
+            if not path or not Path(path).exists():
+                return {"success": False, "error": "client_portal.dat not configured"}
+            db = None
+            try:
+                db = DatDatabase(path)
+                for tid, p in missing:
+                    r = render_surface_texture_png(db, tid, size)
+                    if r is None:
+                        continue
+                    png = r[0]
+                    try:
+                        p.write_bytes(png)
+                    except OSError:
+                        pass          # a failed cache write must not fail the render
+                    out[f"0x{tid:08X}"] = base64.b64encode(png).decode()
+            except Exception as e:
+                return {"success": False, "error": f"Exception: {e}"}
+            finally:
+                if db is not None:
+                    try:
+                        db.close()
+                    except Exception:
+                        pass
+
+        return {"success": True, "thumbs": out,
+                "missing": [f"0x{t:08X}" for t in want
+                            if f"0x{t:08X}" not in out]}
+
+    def clothingbase_parts(self, clothing_id_hex: str, setup_hex: str) -> dict:
+        """The editable rows for one (ClothingBase, setup): each part's model
+        and its old→new texture effects, plus which bodies the table covers.
+
+        The coverage list matters: a ClothingBase only applies to setups it
+        explicitly names, so armor customized for Human Male renders untouched
+        on an Umbraen unless that setup gets its own base effect. Surfacing it
+        here keeps that from reading as a bug.
+        """
+        from pathlib import Path
+        from aceforge.dat_loader import (DatDatabase, parse_clothing_table_full,
+                                         BODY_SETUPS, body_part_name)
+
+        def _id(s, default=0):
+            s = str(s or "").strip()
+            try:
+                return int(s, 16) if s.lower().startswith("0x") else int(s, 10)
+            except (ValueError, TypeError):
+                return default
+
+        cid, setup = _id(clothing_id_hex), _id(setup_hex)
+        if (cid >> 24) != 0x10:
+            return {"success": False, "error": "Not a ClothingTable id"}
+
+        path = self._resolve_portal_dat()
+        if not path or not Path(path).exists():
+            return {"success": False, "error": "client_portal.dat not configured"}
+        db = None
+        try:
+            db = DatDatabase(path)
+            t = parse_clothing_table_full(db, cid)
+            if t is None:
+                return {"success": False, "error": f"0x{cid:08X} not found"}
+            covers = sorted(t["base_effects"])
+            rows = [{
+                "part": o["index"],
+                "part_name": body_part_name(o["index"]),
+                "model_id": f"0x{o['model_id']:08X}",
+                "textures": [{"old": f"0x{e['old']:08X}",
+                              "new": f"0x{e['new']:08X}",
+                              "changed": e["old"] != e["new"]}
+                             for e in o.get("tex_effects", [])],
+            } for o in t["base_effects"].get(setup, [])]
+            return {"success": True,
+                    "parts": rows,
+                    "covers": [{"setup": f"0x{s:08X}",
+                                "name": BODY_SETUPS.get(s, f"Setup 0x{s:08X}"),
+                                "is_body": s in BODY_SETUPS} for s in covers],
+                    "missing_bodies": [{"setup": f"0x{s:08X}", "name": n}
+                                       for s, n in sorted(BODY_SETUPS.items())
+                                       if s not in t["base_effects"]]}
+        except Exception as e:
+            return {"success": False, "error": f"Exception: {e}"}
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
+    def clothingbase_synthesize(self, setup_hex: str, new_id_hex: str = "") -> dict:
+        """Build an editable ClothingBase from a creature's bare Setup.
+
+        For the ~28% of creatures that have no ClothingBase: read the Setup's
+        real parts as identity texture slots so the editor can swap them, then
+        export under a new id the weenie's DID 7 will point at. Returns the same
+        shape as clothingbase_load so the editor opens it identically.
+        """
+        from pathlib import Path
+        from aceforge.dat_loader import (DatDatabase,
+                                         synthesize_clothing_table_from_setup,
+                                         BODY_SETUPS)
+        from aceforge import clothing_json as cj
+
+        def _id(s, d=0):
+            s = str(s or "").strip()
+            try:
+                return int(s, 16) if s.lower().startswith("0x") else int(s, 10)
+            except (ValueError, TypeError):
+                return d
+
+        setup = _id(setup_hex)
+        if (setup >> 24) != 0x02:
+            return {"success": False, "error": "Not a Setup id (0x02......)"}
+
+        # Pick a free custom id unless the caller supplied one.
+        new_id = _id(new_id_hex)
+        if not new_id:
+            sug = self.clothingbase_suggest_id()
+            if not sug.get("success"):
+                return sug
+            new_id = _id(sug["id"])
+        if not cj.range_ok(new_id):
+            return {"success": False,
+                    "error": f"0x{new_id:08X} is outside the ClothingBase range."}
+
+        path = self._resolve_portal_dat()
+        if not path or not Path(path).exists():
+            return {"success": False, "error": "client_portal.dat not configured"}
+        db = None
+        try:
+            db = DatDatabase(path)
+            table = synthesize_clothing_table_from_setup(db, setup, new_id)
+            if table is None:
+                return {"success": False,
+                        "error": f"Setup 0x{setup:08X} has no textured parts."}
+            return {"success": True,
+                    "json": cj.table_to_json(table),
+                    "filename": cj.json_filename(new_id),
+                    "id": f"0x{new_id:08X}",
+                    "setups": [f"0x{setup:08X}"],
+                    "templates": [],
+                    "humanoid": setup in BODY_SETUPS,
+                    "synthesized": True,
+                    "warnings": cj.validate_table(table)}
+        except Exception as e:
+            return {"success": False, "error": f"Exception: {e}"}
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
+    def clothingbase_creature_load(self, setup_hex: str, cb_hex: str = "") -> dict:
+        """Load a creature for editing with its WHOLE body reachable.
+
+        A creature's ClothingBase usually covers only a few parts (a Virindi's
+        cb touches just the head), so loading the cb alone leaves most of the
+        body uneditable. This merges the cb's real effects over the full Setup
+        part list — cb parts keep their swaps/dyes, every other part becomes an
+        identity slot — so the entire creature is editable, like Derpy's tool.
+
+        Always returns a table the editor seeds directly (no DAT round-trip), so
+        a synthesised-id creature can never hit a "not found in the DAT" load.
+        """
+        from pathlib import Path
+        from aceforge.dat_loader import (DatDatabase, parse_clothing_table_full,
+                                         synthesize_clothing_table_from_setup,
+                                         BODY_SETUPS)
+        from aceforge import clothing_json as cj
+
+        def _id(s, d=0):
+            s = str(s or "").strip()
+            try:
+                return int(s, 16) if s.lower().startswith("0x") else int(s, 10)
+            except (ValueError, TypeError):
+                return d
+
+        setup = _id(setup_hex)
+        if (setup >> 24) != 0x02:
+            return {"success": False, "error": "Not a Setup id (0x02......)"}
+        cb = _id(cb_hex)
+
+        path = self._resolve_portal_dat()
+        if not path or not Path(path).exists():
+            return {"success": False, "error": "client_portal.dat not configured"}
+        db = None
+        try:
+            db = DatDatabase(path)
+            in_dat = cb in set(db.files_by_type(0x10)) if (cb >> 24) == 0x10 else False
+            # Synthetic id is derived from the Setup so it's stable per creature
+            # (reopening reuses it) and distinct between creatures (no collision).
+            cid = cb if (cb and (cb >> 24) == 0x10) else (0x10F00000 | (setup & 0xFFFFF))
+
+            synth = synthesize_clothing_table_from_setup(db, setup, cid)
+            if synth is None:
+                return {"success": False,
+                        "error": "This creature is solid-coloured — its model "
+                                 "has no body-part textures to swap. (A handful "
+                                 "of creatures like the Knath are flat colours, "
+                                 "not textures, so there's nothing to edit here.)"}
+
+            if in_dat:
+                table = parse_clothing_table_full(db, cb)
+                covered = {o["index"] for o in table["base_effects"].get(setup, [])}
+                extra = [o for o in synth["base_effects"][setup]
+                         if o["index"] not in covered]
+                objs = table["base_effects"].setdefault(setup, [])
+                objs.extend(extra)
+                objs.sort(key=lambda o: o["index"])
+                table["id"] = cid
+            else:
+                table = synth        # no cb (or cb absent from DAT): pure synthesis
+
+            n = len(table["base_effects"].get(setup, []))
+            return {"success": True,
+                    "json": cj.table_to_json(table),
+                    "filename": cj.json_filename(cid),
+                    "id": f"0x{cid:08X}",
+                    "has_cb": bool(in_dat),
+                    "setup": f"0x{setup:08X}",
+                    "part_count": n,
+                    "humanoid": setup in BODY_SETUPS,
+                    "templates": sorted(table["subpal_effects"]),
+                    "warnings": cj.validate_table(table)}
+        except Exception as e:
+            return {"success": False, "error": f"Exception: {e}"}
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
+    def clothingbase_validate(self, text: str) -> dict:
+        """Check editor JSON without rendering. Returns parse errors or warnings."""
+        from aceforge import clothing_json as cj
+        try:
+            table = cj.table_from_json(text if isinstance(text, str)
+                                       else json.dumps(text))
+        except cj.ClothingJsonError as e:
+            return {"success": False, "error": str(e)}
+        return {"success": True,
+                "id": f"0x{table['id']:08X}",
+                "filename": cj.json_filename(table["id"]),
+                "setups": [f"0x{s:08X}" for s in sorted(table["base_effects"])],
+                "templates": sorted(table["subpal_effects"]),
+                "warnings": cj.validate_table(table)}
+
+    def clothingbase_part_palette_runs(self, part_textures: dict) -> dict:
+        """Which palette indices each body part's texture samples, so the Colors
+        tab can say which parts a dye range recolours.
+
+        part_textures: {part_index(str/int): [SurfaceTexture hex, ...]} — the
+        NewTextures currently on each part (passed from the live doc so it
+        follows texture swaps). Returns {parts: {idx: {name, runs:[[s,e],...]}}}.
+
+        Memoised on the exact texture set: the Colors tab re-renders on every
+        dye tweak but the textures rarely change, so this opens the DAT once.
+        """
+        from pathlib import Path
+        from aceforge.dat_loader import (DatDatabase, texture_used_indices,
+                                         indices_to_runs, body_part_name)
+
+        def _id(s):
+            s = str(s or "").strip()
+            try:
+                return int(s, 16) if s.lower().startswith("0x") else int(s, 10)
+            except (ValueError, TypeError):
+                return 0
+
+        norm = {}
+        for k, texlist in (part_textures or {}).items():
+            try:
+                idx = int(k)
+            except (ValueError, TypeError):
+                continue
+            ids = tuple(sorted({_id(t) for t in (texlist or []) if _id(t)}))
+            if ids:
+                norm[idx] = ids
+
+        sig = tuple(sorted(norm.items()))
+        cache = getattr(self, "_cb_runs_cache", None)
+        if cache is None:
+            cache = self._cb_runs_cache = {}
+        if sig in cache:
+            return cache[sig]
+
+        path = self._resolve_portal_dat()
+        if not path or not Path(path).exists():
+            return {"success": False, "error": "client_portal.dat not configured"}
+        db = None
+        try:
+            db = DatDatabase(path)
+            tex_cache = {}
+            parts = {}
+            for idx, ids in norm.items():
+                used = set()
+                for tid in ids:
+                    if tid not in tex_cache:
+                        tex_cache[tid] = texture_used_indices(db, tid) or set()
+                    used |= tex_cache[tid]
+                parts[str(idx)] = {"name": body_part_name(idx),
+                                   "runs": indices_to_runs(used)}
+            result = {"success": True, "parts": parts}
+            cache[sig] = result
+            return result
+        except Exception as e:
+            return {"success": False, "error": f"Exception: {e}"}
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
+    def clothingbase_palette_strips(self, entries: list, shade: float = 0.0) -> dict:
+        """Swatch strips for subpalette rows / the dye picker.
+
+        entries: [{"paletteset": hex, "offset": int, "num_colors": int}] —
+        offset/num_colors matter because a subpalette only paints that slice,
+        so the swatch has to come from the same slice or it lies about the dye.
+        Batched: one DAT open (~700ms) per call, not per swatch.
+        """
+        from pathlib import Path
+        from aceforge.dat_loader import (DatDatabase, palette_strip,
+                                         PALETTE_TEMPLATE_NAMES)
+
+        def _id(s, d=0):
+            s = str(s or "").strip()
+            try:
+                return int(s, 16) if s.lower().startswith("0x") else int(s, 10)
+            except (ValueError, TypeError):
+                return d
+
+        try:
+            shade = min(max(float(shade or 0.0), 0.0), 1.0)
+        except (ValueError, TypeError):
+            shade = 0.0
+
+        path = self._resolve_portal_dat()
+        if not path or not Path(path).exists():
+            return {"success": False, "error": "client_portal.dat not configured"}
+        db = None
+        try:
+            db = DatDatabase(path)
+            out = []
+            for e in (entries or []):
+                ps = _id((e or {}).get("paletteset"))
+                off = int((e or {}).get("offset") or 0)
+                num = int((e or {}).get("num_colors") or 0)
+                out.append({"paletteset": f"0x{ps:08X}",
+                            "colors": palette_strip(db, ps, shade, off, num, 24)})
+            return {"success": True, "strips": out}
+        except Exception as e:
+            return {"success": False, "error": f"Exception: {e}"}
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
+    def clothingbase_dye_options(self, shade: float = 0.0, offset: int = 0,
+                                 num_colors: int = 0) -> dict:
+        """The named dye palettes for the PaletteSet picker, plus every
+        PaletteSet clothing uses as a fallback list.
+
+        The 94 canonical 0x0F0000NN palettes are the only ones with real names
+        (Blue, Red, Forest Green…), which is what someone recolouring armor is
+        actually shopping for. They are *not* what most tables reference — only
+        13% of retail primaries follow that convention — so this is a curated
+        starter set, not a filter, and "all" stays available.
+        """
+        from pathlib import Path
+        from aceforge.dat_loader import (DatDatabase, palette_strip,
+                                         clothing_paletteset_index,
+                                         PALETTE_TEMPLATE_NAMES)
+        try:
+            shade = min(max(float(shade or 0.0), 0.0), 1.0)
+            offset = int(offset or 0)
+            num_colors = int(num_colors or 0)
+        except (ValueError, TypeError):
+            shade, offset, num_colors = 0.0, 0, 0
+
+        path = self._resolve_portal_dat()
+        if not path or not Path(path).exists():
+            return {"success": False, "error": "client_portal.dat not configured"}
+        db = None
+        try:
+            db = DatDatabase(path)
+            named = []
+            for tpl, name in sorted(PALETTE_TEMPLATE_NAMES.items()):
+                ps = 0x0F000000 | tpl
+                cols = palette_strip(db, ps, shade, offset, num_colors, 12)
+                if cols:
+                    named.append({"paletteset": f"0x{ps:08X}", "name": name,
+                                  "template": tpl, "colors": cols})
+            idx = clothing_paletteset_index(db)
+            return {"success": True, "named": named,
+                    "all": [f"0x{i:08X}" for i in idx["all"]]}
+        except Exception as e:
+            return {"success": False, "error": f"Exception: {e}"}
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
+    # Retail ClothingTables stop at 0x100012AE. Custom ids start well clear of
+    # that block so a glance at an id says whether it is ours, and so the mod's
+    # stub path (which only fires for ids absent from the DAT) always applies.
+    CB_CUSTOM_BASE = 0x10F00000
+
+    def _cb_usage(self):
+        """{clothing_id: [wcid, ...]} across the gear catalog. Memoized."""
+        if getattr(self, "_cb_usage_cache", None) is None:
+            out = {}
+            for w in self._doll_load_wearables():
+                # gear_full.json stores ClothingBase as a hex string ("0x100004E2").
+                cid = self._doll_parse_cid(w.get("clothing_id"))
+                if cid:
+                    out.setdefault(cid, []).append(w.get("wcid"))
+            self._cb_usage_cache = out
+        return self._cb_usage_cache
+
+    def clothingbase_id_info(self, clothing_id_hex: str) -> dict:
+        """Is this id in the DAT, and which weenies point at it?
+
+        Editing a retail id in place is a merge, so it silently restyles every
+        item that shares it — which for a common ClothingBase can be dozens.
+        The editor needs to say so before the user saves, not after.
+        """
+        from pathlib import Path
+        from aceforge.dat_loader import DatDatabase
+        from aceforge import clothing_json as cj
+
+        s = str(clothing_id_hex or "").strip()
+        try:
+            cid = int(s, 16) if s.lower().startswith("0x") else int(s, 10)
+        except (ValueError, TypeError):
+            return {"success": False, "error": f"Invalid id: {s!r}"}
+
+        path = self._resolve_portal_dat()
+        if not path or not Path(path).exists():
+            return {"success": False, "error": "client_portal.dat not configured"}
+        db = None
+        try:
+            db = DatDatabase(path)
+            in_dat = cid in set(db.files_by_type(0x10))
+        except Exception as e:
+            return {"success": False, "error": f"Exception: {e}"}
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
+        wcids = self._cb_usage().get(cid, [])
+        return {"success": True, "id": f"0x{cid:08X}", "in_dat": in_dat,
+                "wcids": wcids[:200], "wcid_count": len(wcids),
+                "legal": cj.range_ok(cid)}
+
+    def clothingbase_suggest_id(self) -> dict:
+        """The next free custom ClothingBase id."""
+        from pathlib import Path
+        from aceforge.dat_loader import DatDatabase
+
+        path = self._resolve_portal_dat()
+        if not path or not Path(path).exists():
+            return {"success": False, "error": "client_portal.dat not configured"}
+        db = None
+        try:
+            db = DatDatabase(path)
+            used = set(db.files_by_type(0x10))
+        except Exception as e:
+            return {"success": False, "error": f"Exception: {e}"}
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
+        # Skip ids already exported to the output folder, so two custom pieces
+        # made in one sitting don't collide on the same number.
+        out_dir = self._cb_output_dir()
+        if out_dir:
+            for f in Path(out_dir).glob("*.json"):
+                try:
+                    used.add(int(f.stem, 16))
+                except ValueError:
+                    pass
+
+        cid = self.CB_CUSTOM_BASE
+        while cid in used and cid <= 0x10FFFFFF:
+            cid += 1
+        if cid > 0x10FFFFFF:
+            return {"success": False, "error": "No free ClothingBase ids left"}
+        return {"success": True, "id": f"0x{cid:08X}"}
+
+    def _cb_output_dir(self) -> str:
+        return (self.config.get("clothingbase_output_dir", "")
+                or str(self.config.output_dir or "")).strip()
+
+    def clothingbase_get_output_dir(self) -> dict:
+        """Where exports go, and whether it's a dedicated setting or a fallback.
+
+        Falls back to the general output_dir so the tool isn't dead before the
+        user sets a folder, but the UI should say which it is — a fallback drops
+        the JSON somewhere unexpected for a server mod.
+        """
+        explicit = (self.config.get("clothingbase_output_dir", "") or "").strip()
+        return {"success": True,
+                "path": self._cb_output_dir(),
+                "explicit": bool(explicit)}
+
+    def clothingbase_set_output_dir(self, path: str) -> dict:
+        """Persist the ClothingBase JSON output folder. Blank clears it."""
+        from pathlib import Path
+        p = str(path or "").strip()
+        if p:
+            try:
+                Path(p).mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                return {"success": False, "error": f"Cannot use that folder: {e}"}
+        self.config.set("clothingbase_output_dir", p)
+        self.config.save()
+        return {"success": True, "path": p}
+
+    def clothingbase_browse_output_dir(self) -> dict:
+        """Native folder picker → persist as the ClothingBase output folder."""
+        r = self.browse_folder()
+        if not r.get("path"):
+            return r
+        return self.clothingbase_set_output_dir(r["path"])
+
+    def _cb_weenie_sql(self, wcids: list, cid: int) -> str:
+        """SQL patching weenies to point at a ClothingBase (DID 7).
+
+        A patch, not a full weenie dump: the item already exists and only its
+        appearance changes. DELETE-then-INSERT so re-running is safe.
+        """
+        from datetime import datetime
+        # ASCII only: this file gets fed to whatever MySQL client the user has,
+        # with whatever charset settings, and a stray em-dash in a comment is a
+        # pointless thing to lose an import over.
+        lines = [
+            f"/* ACEForge - point {len(wcids)} weenie(s) at "
+            f"ClothingBase 0x{cid:08X} */",
+            f"/* Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}. "
+            f"Requires the CustomClothingBase mod and 0x{cid:08X}.json "
+            f"in its json/ folder. */",
+            "",
+        ]
+        for w in wcids:
+            lines.append(f"DELETE FROM `weenie_properties_d_i_d` "
+                         f"WHERE `object_Id` = {w} AND `type` = 7;")
+            lines.append("INSERT INTO `weenie_properties_d_i_d` "
+                         "(`object_Id`, `type`, `value`)")
+            lines.append(f"VALUES ({w}, 7, 0x{cid:08X}) /* ClothingBase */;")
+            lines.append("")
+        return "\n".join(lines)
+
+    def clothingbase_export(self, clothing_id_hex: str, text: str,
+                            save_as: str = "", wcids: list = None) -> dict:
+        """Write an edited ClothingBase as a CustomClothingBase mod file, and
+        optionally the weenie SQL that points items at it.
+
+        Named {id:X}.json to match what the mod looks for (PatchClass.GetFilename)
+        — the name is load-bearing, not cosmetic.
+
+        save_as: write under a different (new) ClothingBase id instead of the
+        one the table was loaded from. A new id has no DAT entry, so the mod
+        stubs an empty table and the JSON must stand alone — which it does,
+        because the editor always loads the whole table.
+
+        wcids: emit a .sql alongside pointing these weenies at the id. Only
+        meaningful with save_as; editing a retail id in place needs no SQL,
+        since the weenies already reference it.
+        """
+        from pathlib import Path
+        from aceforge import clothing_json as cj
+
+        try:
+            table = cj.table_from_json(text if isinstance(text, str)
+                                       else json.dumps(text))
+        except cj.ClothingJsonError as e:
+            return {"success": False, "error": str(e)}
+
+        if save_as:
+            s = str(save_as).strip()
+            try:
+                new_id = int(s, 16) if s.lower().startswith("0x") else int(s, 10)
+            except (ValueError, TypeError):
+                return {"success": False, "error": f"Invalid new id: {save_as!r}"}
+            if not cj.range_ok(new_id):
+                return {"success": False,
+                        "error": f"0x{new_id:08X} is outside the ClothingBase "
+                                 f"range 0x10000001–0x10FFFFFF."}
+            table["id"] = new_id
+
+        out_dir = self._cb_output_dir()
+        if not out_dir:
+            return {"success": False,
+                    "error": "No output folder configured — set one in Settings."}
+
+        clean = []
+        for w in (wcids or []):
+            try:
+                clean.append(int(str(w).strip()))
+            except (ValueError, TypeError):
+                continue
+
+        try:
+            d = Path(out_dir)
+            d.mkdir(parents=True, exist_ok=True)
+            p = d / cj.json_filename(table["id"])
+            p.write_text(cj.table_to_json(table), encoding="utf-8")
+            sql_path = None
+            if clean:
+                sql_path = d / f"{table['id']:X}_weenies.sql"
+                sql_path.write_text(self._cb_weenie_sql(clean, table["id"]),
+                                    encoding="utf-8")
+        except OSError as e:
+            return {"success": False, "error": f"Could not write file: {e}"}
+
+        return {"success": True, "path": str(p), "filename": p.name,
+                "sql_path": str(sql_path) if sql_path else None,
+                "sql_filename": sql_path.name if sql_path else None,
+                "wcids": clean,
+                "id": f"0x{table['id']:08X}",
+                "warnings": cj.validate_table(table)}
+
     def get_doll_glb(self, body_setup_hex: str, outfit: list,
-                     motion_id_hex: str = "") -> dict:
+                     motion_id_hex: str = "", overrides: list = None) -> dict:
         """Return a base64 GLB of a body setup wearing an outfit.
 
         outfit: list of dicts, one per equipped item, each with
@@ -3170,6 +3969,12 @@ Start with: /* ===== FILE: {fname} ===== */
           item_type, valid_locations, clothing_priority, top_layer.
         Items are ordered and composited the way ACE's CalculateObjDesc does,
         so overlapping pieces layer the same way they would in game.
+
+        overrides: optional list of edited ClothingTables in CustomClothingBase
+        JSON form. Each is merged over the DAT entry the way the server mod
+        merges it, so the preview matches what players would see. Renders with
+        an override skip the disk cache — live editing would otherwise leave a
+        ~1MB GLB behind per keystroke.
         """
         import base64, traceback
         from pathlib import Path
@@ -3219,17 +4024,24 @@ Start with: /* ===== FILE: {fname} ===== */
             })
 
         from aceforge.dat_loader import (cached_glb_path, DatDatabase,
-                                         get_or_export_glb, order_outfit)
+                                         export_setup_glb, get_or_export_glb,
+                                         order_outfit)
+
+        ov, ov_errs = self._parse_cb_overrides(overrides)
+        if ov_errs:
+            return {"success": False, "error": "; ".join(ov_errs)}
 
         # "pieces" is always present; "layers" only when the order was actually
         # computed (a cache hit skips the DB, and re-opening it just to derive
-        # the order would defeat the cache).
-        cached = cached_glb_path(setup_id, motion_id=motion_id, outfit=clean)
-        if cached.exists():
-            return {"success": True,
-                    "data_b64": base64.b64encode(cached.read_bytes()).decode(),
-                    "pieces": len(clean),
-                    "info": f"{len(clean)} piece(s), cached"}
+        # the order would defeat the cache). Edited tables are never cached, so
+        # they always take the render path below.
+        if not ov:
+            cached = cached_glb_path(setup_id, motion_id=motion_id, outfit=clean)
+            if cached.exists():
+                return {"success": True,
+                        "data_b64": base64.b64encode(cached.read_bytes()).decode(),
+                        "pieces": len(clean),
+                        "info": f"{len(clean)} piece(s), cached"}
 
         path = self._resolve_portal_dat()
         if not path or not Path(path).exists():
@@ -3239,17 +4051,22 @@ Start with: /* ===== FILE: {fname} ===== */
         try:
             db = DatDatabase(path)
             layers = [f"0x{i['clothing_id']:08X}" for i in order_outfit(db, clean)]
-            glb_path = get_or_export_glb(db, setup_id, motion_id=motion_id,
-                                         outfit=clean)
-            if glb_path is None:
+            if ov:
+                glb = export_setup_glb(db, setup_id, motion_id=motion_id,
+                                       outfit=clean, overrides=ov)
+            else:
+                glb_path = get_or_export_glb(db, setup_id, motion_id=motion_id,
+                                             outfit=clean)
+                glb = glb_path.read_bytes() if glb_path is not None else None
+            if glb is None:
                 return {"success": False,
                         "error": "Could not build the doll — the body setup "
                                  "has no renderable geometry."}
-            glb = glb_path.read_bytes()
+            edited = (f", {len(ov)} edited" if ov else "")
             return {"success": True,
                     "data_b64": base64.b64encode(glb).decode(),
                     "pieces": len(clean),
-                    "info": f"{len(clean)} piece(s), glb={len(glb):,}B",
+                    "info": f"{len(clean)} piece(s){edited}, glb={len(glb):,}B",
                     "layers": layers}
         except Exception as e:
             return {"success": False,

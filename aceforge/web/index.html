@@ -842,6 +842,11 @@ table.bp tr:hover td{background:rgba(200,184,152,.12)}
             <input type="text" id="sEventOutputDir" placeholder="(default)" style="flex:1">
             <button type="button" class="settings-browse-btn" onclick="browseOutputDir('sEventOutputDir')">Browse…</button>
           </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:66px;flex-shrink:0;font-family:var(--ui-font);font-size:11px;font-weight:700;color:var(--ink-dim)" title="ClothingBase JSON files for OptimShi's CustomClothingBase mod — point this at the mod's json/ folder">Skins</span>
+            <input type="text" id="sClothingBaseOutputDir" placeholder="…\Mods\CustomClothingBase\json (default)" style="flex:1">
+            <button type="button" class="settings-browse-btn" onclick="browseOutputDir('sClothingBaseOutputDir')">Browse…</button>
+          </div>
         </div>
       </div>
 
@@ -9122,7 +9127,7 @@ function buildAdvanced(){
       // DID type 1 = Setup — add 3D preview button, plus a model dropdown
       // listing every base-game Setup for the current CreatureType.
       if(arrRef==='extraDID' && parseInt(r.type)===1){
-        var _csDD='';
+        var _csDD=''; var _isCreatureRow=false;
         // The WeenieType decides which catalog to offer. Types with an item
         // catalog (weapons/armor/portals/…) use the item dropdown below; only
         // genuine creature types (absent from the item catalog) use the
@@ -9132,6 +9137,7 @@ function buildAdvanced(){
         var _ctRow=extraInt.find(function(x){return parseInt(x.type)===2;});
         var _csL=(!_isItemType&&_CSETUPS&&_ctRow)?_CSETUPS[String(parseInt(_ctRow.value))]:null;
         if(_csL&&_csL.length){
+          _isCreatureRow=true;
           var _cur=String(r.value||'').toUpperCase();
           function _u(x){return x?String(x.value||'').toUpperCase():'';}
           var _curCB=_u(extraDID.find(function(x){return parseInt(x.type)===7;}));
@@ -9198,9 +9204,17 @@ function buildAdvanced(){
               +'</select>';
           }
         }
+        var _cbBtn = _isCreatureRow
+          ? '<button onclick="creatureCustomizeTextures()" '
+            +'title="Edit this creature\'s body-part textures and colours" '
+            +'style="font-family:var(--ui-font);font-size:8px;font-weight:700;'
+            +'padding:2px 8px;border:1px solid var(--crimson);background:transparent;'
+            +'color:var(--crimson);cursor:pointer;white-space:nowrap;flex-shrink:0">'
+            +'&#x1F3A8; SKIN</button>'
+          : '';
         valCtrl='<div style="display:flex;align-items:center;gap:6px;">'
           +_setupPreviewBtnHtml(String(r.value||'0x00000000'))
-          +_csDD
+          +_csDD+_cbBtn
           +valCtrl+'</div>';
       }
       // (ClothingBase DID-7 dropdown temporarily removed pending categorization
@@ -11505,6 +11519,7 @@ function openSettings(){
       setV('sRecipeOutputDir',cfg.recipe_output_dir||'');
       setV('sQuestOutputDir',cfg.quest_output_dir||'');
       setV('sEventOutputDir',cfg.event_output_dir||'');
+      setV('sClothingBaseOutputDir',cfg.clothingbase_output_dir||'');
       _baseWcidRanges=(Array.isArray(cfg.base_wcid_ranges)&&cfg.base_wcid_ranges.length
         ?cfg.base_wcid_ranges:DEFAULT_BASE_WCID_RANGES).map(function(r){return Object.assign({},r);});
       renderWcidRanges();
@@ -11727,7 +11742,7 @@ function collectWcidRanges(){
 })();
 function saveSettings(){
   const data={provider:$('sProvider').value,model:$('sModel').value.trim(),base_url:($('sBaseUrl').value||'').trim(),server_name:$('sServerName').value.trim()||'Server Name',author:$('sAuthor').value.trim(),output_dir:$('sOutputDir').value.trim(),
-    weenie_output_dir:$('sWeenieOutputDir').value.trim(),recipe_output_dir:$('sRecipeOutputDir').value.trim(),quest_output_dir:$('sQuestOutputDir').value.trim(),event_output_dir:$('sEventOutputDir').value.trim()};
+    weenie_output_dir:$('sWeenieOutputDir').value.trim(),recipe_output_dir:$('sRecipeOutputDir').value.trim(),quest_output_dir:$('sQuestOutputDir').value.trim(),event_output_dir:$('sEventOutputDir').value.trim(),clothingbase_output_dir:$('sClothingBaseOutputDir').value.trim()};
   const apiKey=$('sApiKey').value.trim();if(apiKey)data.api_key=apiKey;
   const wcidRanges=collectWcidRanges();
   if(!wcidRanges){toast('⚠ Fix the Base WCID Ranges before saving.',3000);return;}
@@ -15710,7 +15725,7 @@ function openModelPreview(setup_id_hex, label, opts){
   // so the parse/WebGL/2D-fallback path below is shared.
   _mpRenderDollBar(opts);
   var _req = (opts && opts.doll)
-    ? window.pywebview.api.get_doll_glb(setup_id_hex, opts.doll, _motHex)
+    ? window.pywebview.api.get_doll_glb(setup_id_hex, opts.doll, _motHex, _cbOverrides())
     : window.pywebview.api.get_model_glb(setup_id_hex, _cloHex, _motHex, _palTpl, _shade);
 
   _req.then(function(r){
@@ -15827,8 +15842,9 @@ var _dollCurBody = null;     // body setup the active mode is dressing
 // immutable DAT/catalog caches (_dollPalCache, _dollBodies, _dollBaseClothing)
 // and the panel size are shared, because those aren't per-doll state.
 var _dollSaved = {
-  gear:   {outfit:null, clothing:null, body:null},
-  weenie: {outfit:null, clothing:null, body:null}
+  gear:     {outfit:null, clothing:null, body:null},
+  weenie:   {outfit:null, clothing:null, body:null},
+  creature: {outfit:null, clothing:null, body:null}
 };
 
 function _dollDefaultClothing(){ return {on:true, template:4}; }  // 4 = Brown
@@ -15841,6 +15857,8 @@ function _dollEnterMode(mode){
   _dollClothing = s.clothing || _dollDefaultClothing();
   _dollCurBody  = s.body || null;
   _dollMode     = mode;
+  // Creatures never use the humanoid part scheme; the armor dolls always do.
+  _cbHumanoid   = (mode !== 'creature');
 }
 
 function _gearProp(it, sec, key){
@@ -15983,6 +16001,9 @@ function _dollRefresh(){
 // (every dye tweak re-opens the preview).
 var _dollSize = {w: 1060, h: 520};
 var _MP_BASE = {w: 480, h: 340, cw: 478, ch: 338};
+var _CB_PANEL_W = 360;   // width the editor adds beside the wardrobe (matches
+                         // mpCbPanel's flex-basis), so opening it widens the
+                         // panel rather than squeezing the viewport.
 
 // Keep the panel inside the window — the default is bigger than some app
 // windows, and a resize can be stranded off-screen if the user shrinks the app.
@@ -15995,14 +16016,28 @@ function _mpApplyDollSize(on){
   var panel=document.getElementById('modelPreviewPanel');
   var vp   =document.getElementById('mpViewport');
   var wr   =document.getElementById('mpWardrobe');
+  var cb   =document.getElementById('mpCbPanel');
   var cv   =document.getElementById('modelPreviewCanvas');
   var grip =document.getElementById('mpResizeGrip');
   if(!panel) return;
   if(on) _mpClampDollSize();
   if(grip) grip.style.display = on ? '' : 'none';
-  panel.style.width = (on ? _dollSize.w : _MP_BASE.w) + 'px';
+  // Single owner of the three panels' visibility, so nothing fights over them:
+  // wardrobe shows whenever the doll is up; the editor sits beside it (not in
+  // its place) whenever a piece is being customised. The editor adds its own
+  // width so opening it never resizes the viewport or distorts the model.
+  var editing = on && !!_cbCid;
+  // Creatures have no wardrobe (you edit the body itself, not worn gear) — the
+  // editor takes the whole side panel in that mode.
+  var creature = (_dollMode === 'creature');
+  if(wr) wr.style.display = (on && !creature) ? 'flex' : 'none';
+  if(cb) cb.style.display = editing ? 'flex' : 'none';
+  var extra = editing ? _CB_PANEL_W : 0;
+  var pw = on ? Math.min(_dollSize.w + extra, window.innerWidth - 40) : _MP_BASE.w;
+  panel.style.width = pw + 'px';
   if(vp) vp.style.height = (on ? _dollSize.h : _MP_BASE.h) + 'px';
   if(wr) wr.style.height = (on ? _dollSize.h : _MP_BASE.h) + 'px';
+  if(cb) cb.style.height = (on ? _dollSize.h : _MP_BASE.h) + 'px';
   if(!cv) return;
   if(on){
     // Match the GL drawing buffer to the on-screen viewport, else the model
@@ -16048,8 +16083,8 @@ function _mpRenderDollBar(opts){
   if(!bar) return;
   var on = !!(opts && opts.doll);
   bar.style.display = on ? 'flex' : 'none';
-  if(wr) wr.style.display = on ? 'flex' : 'none';
-  // The wardrobe needs room; every other preview keeps the original size.
+  // Panel visibility (wardrobe + editor) is owned entirely by _mpApplyDollSize
+  // so the two never fight over the wardrobe's display the way they used to.
   _mpResizeInit();
   _mpApplyDollSize(on);
   if(!on) return;
@@ -16186,6 +16221,8 @@ function _dollClothingPieces(){
 
 // What actually gets rendered: underclothes first, then everything worn.
 function _dollFullOutfit(){
+  // A creature is its own subject — no underclothes layered underneath.
+  if(_dollMode === 'creature') return _dollOutfit || [];
   return _dollClothingPieces().concat(_dollOutfit || []);
 }
 
@@ -16482,6 +16519,12 @@ function _dollRenderWorn(){
         '<span title="'+escHtml(p.name)+'" style="font-family:var(--ui-font);font-size:11px;'+
         'font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;'+
         'white-space:nowrap">'+escHtml(p.name)+'</span>'+
+        (p.clothing_id
+          ? '<button onclick="_cbOpen(\''+p.clothing_id+'\')" title="Customize textures"'+
+            ' style="background:none;border:none;cursor:pointer;font-size:11px;'+
+            'line-height:1;padding:0;flex:0 0 auto;color:'+
+            (_cbIsDirty(p.clothing_id)?'var(--crimson)':'var(--ink-faint)')+'">&#9998;</button>'
+          : '')+
         '<button onclick="_dollRemove('+i+')" title="Remove"'+
         ' style="background:none;border:none;color:var(--ink-faint);cursor:pointer;'+
         'font-size:13px;line-height:1;padding:0;flex:0 0 auto">&times;</button>'+
@@ -16504,9 +16547,920 @@ function _dollRenderWorn(){
   }).join('');
 }
 
+// ── ClothingBase editor ─────────────────────────────────────────────────────
+// Texture swapping. The live document IS the CustomClothingBase JSON the server
+// mod eats, so what the doll shows and what we export cannot drift apart — the
+// same object goes to get_doll_glb as an override and to the export button.
+// The editor swaps into the wardrobe's slot so the doll stays visible beside it.
+var _cbEdits  = {};     // clothing_id hex -> live JSON doc
+var _cbOrig   = {};     // clothing_id hex -> pristine doc as loaded from the DAT
+var _cbCid    = null;   // which ClothingBase the panel is showing
+var _cbCovers = null;   // {covers, missing_bodies} from clothingbase_parts
+var _cbThumbs = {};     // texture hex -> b64 png, session memo
+var _cbPick   = null;   // {part, old} while the picker grid is open
+var _cbView   = 'tex';  // 'tex' | 'col'
+var _cbIdInfo = null;   // {info, suggested} while the export view is open
+var _cbBusy   = false;
+
+// Only genuinely-edited tables go over as overrides. An unedited one would
+// render identically but force the doll off its GLB disk cache for nothing.
+function _cbIsDirty(cid){
+  return !!(_cbEdits[cid] && _cbOrig[cid] &&
+            JSON.stringify(_cbEdits[cid]) !== JSON.stringify(_cbOrig[cid]));
+}
+
+function _cbOverrides(){
+  var v=[]; for(var k in _cbEdits){ if(_cbIsDirty(k)) v.push(_cbEdits[k]); }
+  return v;
+}
+
+// Index is a hex string in the file ("0x00000009") because the mod runs a hex
+// converter over every uint. Part indices are small numbers everywhere else —
+// in the UI and in the part-scoped texture lookup — so convert at the boundary.
+function _cbPartNum(o){ return parseInt(o.Index, 16) || 0; }
+
+// Setup part index -> body region. Mirrors dat_loader.BODY_PART_NAMES (which is
+// grounded in the game's own coverage mapping). Paired indices are the two
+// sides of one region; they almost always share a texture, so no L/R split.
+var _CB_PART_NAMES = {
+  0:'Girth', 1:'Upper Legs', 5:'Upper Legs', 2:'Lower Legs', 6:'Lower Legs',
+  3:'Feet', 4:'Feet', 7:'Feet', 8:'Feet', 9:'Chest',
+  10:'Upper Arms', 13:'Upper Arms', 11:'Lower Arms', 14:'Lower Arms',
+  12:'Hands', 15:'Hands', 16:'Head'
+};
+// Only playable body setups follow the humanoid part scheme. A creature's part
+// 16 is not a "Head" — so outside a known body, fall back to "Part N".
+var _cbHumanoid = true;
+function _cbPartName(idx){
+  return (_cbHumanoid && _CB_PART_NAMES[idx]) ? _CB_PART_NAMES[idx] : ('Part '+idx);
+}
+
+function _cbSetupKey(doc, setupHex){
+  // Match on value, not string — key casing/width varies between producers.
+  var want = parseInt(setupHex, 16);
+  var eff = (doc && doc.ClothingBaseEffects) || {};
+  for(var k in eff){ if(parseInt(k, 16) === want) return k; }
+  return null;
+}
+
+// Creatures without a ClothingBase get a synthesised one; track those ids so
+// export knows it must write a NEW cb and point the weenie's DID 7 at it.
+var _cbSynthIds = {};
+
+// Entry point from Create Items: customise the CURRENT creature's body-part
+// textures. Reads its Setup (DID 1) and ClothingBase (DID 7); if it has no cb,
+// synthesises one from the Setup so it's still editable.
+function creatureCustomizeTextures(){
+  if(!window.pywebview){ toast('3D editing needs the desktop app.',3000); return; }
+  var sRow=extraDID.find(function(x){return parseInt(x.type)===1;});
+  var cRow=extraDID.find(function(x){return parseInt(x.type)===7;});
+  var setupHex=sRow?String(sRow.value||'').trim():'';
+  if(!setupHex){ toast('Pick a Creature Type / model first — no Setup DID yet.',4000); return; }
+  var cbHex=cRow?String(cRow.value||'').trim():'';
+  var nm=(document.getElementById('fClassName')||{}).value||'Creature';
+
+  _dollEnterMode('creature');
+  _dollCurBody=setupHex;
+
+  // One path for both cases: the backend merges the cb (if any) over the FULL
+  // setup so the whole body is editable, and always hands back a doc we seed —
+  // so a creature is never subject to a "not found in the DAT" load.
+  window.pywebview.api.clothingbase_creature_load(setupHex, cbHex).then(function(r){
+    if(!r.success){ toast('Could not read the creature: '+r.error,5000); return; }
+    var doc=JSON.parse(r.json);
+    _cbOrig[r.id]=JSON.parse(r.json);           // pristine, for Reset
+    if(!_cbEdits[r.id]) _cbEdits[r.id]=doc;     // preserve in-session edits on reopen
+    if(!r.has_cb) _cbSynthIds[r.id]=true;       // no real cb → export must make one
+    _dollOutfit=[{name:nm, wcid:gi('fWcid',0)||0, clothing_id:String(r.id),
+      palette_template:_cbCreaturePT(), shade:0,
+      item_type:0, valid_locations:0, clothing_priority:0}];
+    _mpOpenDoll(setupHex);
+    _cbOpen(String(r.id));
+  }).catch(function(e){ toast('Error: '+e,4000); });
+}
+
+// Write DID type 7 (ClothingBase) onto the Create Items weenie and regen, so
+// the exported creature weenie references its new/edited ClothingBase.
+function _cbSetWeenieClothingBase(idHex){
+  if(typeof extraDID==='undefined') return;
+  var v=String(idHex||'').trim(); if(!v) return;
+  var idx=extraDID.findIndex(function(x){return parseInt(x.type)===7;});
+  if(idx>=0) extraDID[idx].value=v; else extraDID.push({type:7, value:v});
+  try{ rebuildPanel('properties'); }catch(e){}
+  try{ regen(); }catch(e){}
+}
+
+// The creature's PaletteTemplate (Int type 3) tints its shared setup — needed
+// so the dye preview matches what the weenie will actually show.
+function _cbCreaturePT(){
+  var r=(typeof extraInt!=='undefined'?extraInt:[]).find(function(x){return parseInt(x.type)===3;});
+  return r?(parseInt(r.value)||0):0;
+}
+
+function _cbOpen(cidHex){
+  if(!window.pywebview) return;
+  _cbCid = cidHex; _cbPick = null; _cbIdInfo = null;
+  // Show the editor beside the wardrobe (not replacing it) and resize/redraw in
+  // one place, so switching pieces never leaves the model stretched.
+  _mpApplyDollSize(true);
+  _cbStatus('Loading '+cidHex+'…');
+  var body = _dollPickBody();
+  var need = _cbEdits[cidHex]
+    ? Promise.resolve(null)
+    : window.pywebview.api.clothingbase_load(cidHex);
+  Promise.all([need, window.pywebview.api.clothingbase_parts(cidHex, body)])
+    .then(function(res){
+      var loaded=res[0], parts=res[1];
+      if(loaded && !loaded.success){ _cbStatus('Error: '+loaded.error, true); return; }
+      if(loaded){
+        _cbEdits[cidHex] = JSON.parse(loaded.json);
+        _cbOrig[cidHex]  = JSON.parse(loaded.json);   // pristine, for dirty/revert
+      }
+      _cbCovers = (parts && parts.success) ? parts : null;
+      _cbRender();
+    })
+    .catch(function(e){ _cbStatus('Error: '+e, true); });
+}
+
+function _cbClose(){
+  _cbCid=null; _cbPick=null; _cbIdInfo=null;
+  _mpApplyDollSize(true);   // hides the editor, restores the viewport width
+  _dollRenderWorn();
+}
+
+function _cbStatus(msg, bad){
+  var b=document.getElementById('mpCbBody');
+  if(b) b.innerHTML='<div style="padding:16px 8px;font-family:var(--ui-font);font-size:10px;'+
+    'font-style:italic;text-align:center;color:'+(bad?'var(--crimson)':'var(--ink-faint)')+'">'+
+    escHtml(msg)+'</div>';
+}
+
+// Every texture id on screen, fetched in one call — the DAT open is ~700ms, so
+// per-thumbnail round trips would make the grid crawl.
+function _cbFetchThumbs(ids, then){
+  var need = ids.filter(function(t){ return t && !(t in _cbThumbs); });
+  if(!need.length){ then && then(); return; }
+  window.pywebview.api.clothingbase_texture_thumbs(need, 48).then(function(r){
+    if(r && r.success){
+      for(var k in r.thumbs) _cbThumbs[k]=r.thumbs[k];
+      (r.missing||[]).forEach(function(m){ _cbThumbs[m]=null; });  // don't refetch
+    }
+    then && then();
+  }).catch(function(){ then && then(); });
+}
+
+function _cbSwatch(hex, size){
+  var s=size||48;
+  var b=_cbThumbs[hex];
+  var box='width:'+s+'px;height:'+s+'px;flex:0 0 auto;border:1px solid var(--border);';
+  if(b) return '<img src="data:image/png;base64,'+b+'" title="'+escHtml(hex)+'" '+
+    'style="'+box+'image-rendering:pixelated;display:block">';
+  return '<span title="'+escHtml(hex)+'" style="'+box+'display:inline-block;'+
+    'background:repeating-conic-gradient(#3a3a3a 0 25%,#2a2a2a 0 50%) 0/8px 8px"></span>';
+}
+
+// The NewTexture this row had when loaded, or null if the row is new.
+function _cbOrigTex(key, oi, ti){
+  try{
+    return _cbOrig[_cbCid].ClothingBaseEffects[key]
+             .CloObjectEffects[oi].CloTextureEffects[ti].NewTexture;
+  }catch(e){ return null; }
+}
+
+function _cbRender(){
+  var doc=_cbEdits[_cbCid];
+  if(!doc){ _cbStatus('Nothing loaded.'); return; }
+  var body=_dollPickBody();
+  var key=_cbSetupKey(doc, body);
+  var ttl=document.getElementById('mpCbTitle');
+  if(ttl) ttl.textContent=_cbCid;
+  // The export view carries its own WRITE FILES button; leaving the footer's
+  // EXPORT JSON up alongside it reads as two competing actions.
+  var foot=document.getElementById('mpCbFoot');
+  if(foot) foot.style.display = _cbIdInfo ? 'none' : '';
+
+  if(_cbIdInfo){ _cbRenderExport(); return; }
+  if(_cbPick){ _cbRenderPicker(); return; }
+  // Colours are keyed by PaletteTemplate, not by setup, so they are editable
+  // regardless of which body the doll is showing — unlike textures below.
+  if(_cbView==='col'){ _cbRenderColors(); return; }
+
+  var objs = key ? (doc.ClothingBaseEffects[key].CloObjectEffects||[]) : [];
+  // Warn when this ClothingBase simply doesn't dress the body on screen — the
+  // edits would be real but invisible, which reads as a broken editor.
+  if(!key){
+    _cbStatus('This ClothingBase has no entry for the body currently shown, so '+
+      'edits here would not appear. Switch BODY above to one it covers'+
+      (_cbCovers && _cbCovers.covers && _cbCovers.covers.length
+        ? ': '+_cbCovers.covers.filter(function(c){return c.is_body;})
+              .map(function(c){return c.name;}).slice(0,4).join(', ')
+        : '.'), true);
+    return;
+  }
+
+  var ids=[];
+  objs.forEach(function(o){ (o.CloTextureEffects||[]).forEach(function(t){
+    ids.push(t.OldTexture); ids.push(t.NewTexture); }); });
+
+  _cbFetchThumbs(ids, function(){
+    var html = objs.map(function(o, oi){
+      var tex=(o.CloTextureEffects||[]);
+      var rows = tex.length ? tex.map(function(t, ti){
+        // Against the pristine table, not Old vs New — retail armor already
+        // remaps nearly every texture, so Old!==New would mark every row.
+        var was   = _cbOrigTex(key, oi, ti);
+        var dirty = was !== null && parseInt(was,16)!==parseInt(t.NewTexture,16);
+        return '<div style="display:flex;align-items:center;gap:6px;margin-top:5px">'+
+          _cbSwatch(t.OldTexture,36)+
+          '<span style="font-family:var(--ui-font);font-size:12px;color:var(--ink-faint)">&rarr;</span>'+
+          '<button onclick="_cbPickOpen('+oi+','+ti+')" title="Choose a replacement texture"'+
+            ' style="padding:0;border:1px solid '+(dirty?'var(--crimson)':'var(--border)')+
+            ';background:none;cursor:pointer;line-height:0">'+_cbSwatch(t.NewTexture,36)+'</button>'+
+          '<div style="flex:1;min-width:0;font-family:var(--ui-font);font-size:8px;'+
+            'color:var(--ink-faint);overflow:hidden">'+escHtml(t.NewTexture)+
+            (dirty?'<br><span style="color:var(--crimson)">changed</span>':'')+'</div>'+
+          (dirty?'<button onclick="_cbRevert('+oi+','+ti+')" title="Revert this texture"'+
+            ' style="background:none;border:none;color:var(--ink-faint);cursor:pointer;'+
+            'font-size:11px;padding:0">&#8634;</button>':'')+
+        '</div>';
+      }).join('') : '<div style="font-family:var(--ui-font);font-size:9px;font-style:italic;'+
+          'color:var(--ink-faint);margin-top:4px">No texture effects on this part.</div>';
+      var pn=_cbPartNum(o);
+      return '<div style="border:1px solid var(--border);background:var(--parch-dk);'+
+        'padding:6px 7px;margin-top:6px">'+
+        '<div style="font-family:var(--ui-font);font-size:10px;font-weight:700;'+
+          'color:var(--ink);text-transform:uppercase;letter-spacing:.03em">'+
+          escHtml(_cbPartName(pn))+
+          '<span style="font-weight:400;text-transform:none;letter-spacing:0;'+
+          'color:var(--ink-faint)"> &middot; '+
+          (_cbHumanoid?('part '+pn+' &middot; '):'')+'model '+
+          escHtml(o.ModelId)+'</span></div>'+rows+'</div>';
+    }).join('');
+
+    var miss = (_cbCovers && _cbCovers.missing_bodies) || [];
+    var warn = miss.length
+      ? '<div style="margin-top:8px;padding:6px 7px;border:1px solid var(--border);'+
+        'background:rgba(160,80,40,.08);font-family:var(--ui-font);font-size:9px;'+
+        'color:var(--ink-dim);line-height:1.4">This ClothingBase does not cover '+
+        miss.length+' body type'+(miss.length>1?'s':'')+' ('+
+        escHtml(miss.slice(0,3).map(function(m){return m.name;}).join(', '))+
+        (miss.length>3?', …':'')+'). Players on those bodies will see it unchanged.</div>'
+      : '';
+    var b=document.getElementById('mpCbBody');
+    if(b) b.innerHTML=(html||'')+warn;
+  });
+}
+
+// Picker groups. "Part" is the safe default — textures other armor already
+// uses here. The rest open the whole DAT up: Terrain is where the fun lives
+// (Volcano1/2, SeaSlime, ObsidianPlain) and is the only named group, because
+// the Region file is the one place in the DAT that names a texture.
+var _CB_PAGE = 60;      // thumbnails per page; a 512² decode is ~200ms in pure
+                        // Python, so rendering all 7240 at once would take
+                        // minutes on a cold cache.
+
+function _cbPickOpen(oi, ti){
+  var doc=_cbEdits[_cbCid], key=_cbSetupKey(doc, _dollPickBody());
+  var o=doc.ClothingBaseEffects[key].CloObjectEffects[oi];
+  var pn=_cbPartNum(o);
+  _cbPick={oi:oi, ti:ti, part:pn, cur:o.CloTextureEffects[ti].NewTexture,
+           sets:null, group:'part', page:1, q:''};
+  _cbStatus('Loading textures for part '+pn+'…');
+  window.pywebview.api.clothingbase_textures_for_part(_dollPickBody(), pn)
+    .then(function(r){
+      if(!r.success){ _cbStatus('Error: '+r.error, true); return; }
+      var named={}; (r.terrain||[]).forEach(function(t){ named[t.id.toUpperCase()]=t.name; });
+      _cbPick.sets={
+        part:     (r.for_part||[]).map(function(i){ return {id:i}; }),
+        clothing: (r.all_clothing||[]).map(function(i){ return {id:i}; }),
+        terrain:  (r.terrain||[]).map(function(t){ return {id:t.id, name:t.name}; }),
+        every:    (r.every||[]).map(function(i){
+                    return {id:i, name:named[i.toUpperCase()]}; })
+      };
+      if(!_cbPick.sets.part.length) _cbPick.group='clothing';
+      _cbRenderPicker();
+    }).catch(function(e){ _cbStatus('Error: '+e, true); });
+}
+
+function _cbPickList(){
+  var all=(_cbPick.sets[_cbPick.group]||[]);
+  var q=(_cbPick.q||'').trim().toLowerCase();
+  if(!q) return all;
+  return all.filter(function(t){
+    return t.id.toLowerCase().indexOf(q)>=0 ||
+           (t.name && t.name.toLowerCase().indexOf(q)>=0);
+  });
+}
+
+function _cbPickGroup(g){ _cbPick.group=g; _cbPick.page=1; _cbRenderPicker(); }
+function _cbPickSearch(v){ _cbPick.q=v; _cbPick.page=1; _cbRenderPicker(); }
+function _cbPickMore(){ _cbPick.page++; _cbRenderPicker(); }
+
+function _cbRenderPicker(){
+  if(!_cbPick || !_cbPick.sets) return;
+  var full=_cbPickList();
+  var shown=full.slice(0, _cbPick.page*_CB_PAGE);
+  _cbFetchThumbs(shown.map(function(t){ return t.id; }), function(){
+    var grid = shown.map(function(t){
+      var sel = parseInt(t.id,16)===parseInt(_cbPick.cur,16);
+      var cap = t.name
+        ? '<div style="font-family:var(--ui-font);font-size:7px;color:var(--ink-faint);'+
+          'max-width:44px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+
+          'line-height:1.2">'+escHtml(t.name)+'</div>' : '';
+      return '<button onclick="_cbSetTexture(\''+t.id+'\')" title="'+
+        escHtml(t.name?(t.name+'  '+t.id):t.id)+'"'+
+        ' style="padding:1px;border:1px solid '+(sel?'var(--crimson)':'transparent')+
+        ';background:none;cursor:pointer;line-height:0">'+_cbSwatch(t.id,44)+cap+'</button>';
+    }).join('');
+
+    var tab=function(g,label,n){
+      var on=_cbPick.group===g;
+      return '<button onclick="_cbPickGroup(\''+g+'\')" style="font-family:var(--ui-font);'+
+        'font-size:8px;padding:2px 5px;cursor:pointer;background:none;border:1px solid '+
+        (on?'var(--crimson)':'var(--border)')+';color:'+(on?'var(--crimson)':'var(--ink-dim)')+
+        '">'+label+' '+n+'</button>';
+    };
+    var s=_cbPick.sets;
+    var b=document.getElementById('mpCbBody');
+    if(!b) return;
+    b.innerHTML=
+      '<div style="display:flex;align-items:center;gap:6px;margin:6px 0 5px">'+
+        '<button onclick="_cbPick=null;_cbRender()" style="font-family:var(--ui-font);'+
+        'font-size:9px;padding:2px 7px;border:1px solid var(--border);background:none;'+
+        'color:var(--ink-dim);cursor:pointer">&#8249; Back</button>'+
+        '<span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint)">'+
+        'Part '+_cbPick.part+'</span>'+
+      '</div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px">'+
+        tab('part','This part', s.part.length)+
+        tab('clothing','Clothing', s.clothing.length)+
+        tab('terrain','Terrain', s.terrain.length)+
+        tab('every','All', s.every.length)+
+      '</div>'+
+      '<input value="'+escHtml(_cbPick.q||'')+'" oninput="_cbPickSearch(this.value)"'+
+        ' placeholder="&#x1F50D; name or id (try: volcano, slime, 0x0500)"'+
+        ' style="width:100%;box-sizing:border-box;font-family:var(--ui-font);font-size:9px;'+
+        'padding:3px 5px;margin-bottom:5px;background:var(--parch-dk);'+
+        'border:1px solid var(--border);color:var(--ink)">'+
+      (_cbPick.group==='terrain'
+        ? '<div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);'+
+          'margin-bottom:4px;line-height:1.4">Landscape textures from the Region file — '+
+          'the only named textures in the DAT. These are 512&times;512, so the first '+
+          'load is slow; after that they are cached.</div>' : '')+
+      (full.length
+        ? '<div style="display:flex;flex-wrap:wrap;gap:2px;align-items:flex-start">'+grid+'</div>'
+        : '<div style="font-family:var(--ui-font);font-size:9px;font-style:italic;'+
+          'color:var(--ink-faint);padding:10px 0;text-align:center">No match.</div>')+
+      (shown.length < full.length
+        ? '<button onclick="_cbPickMore()" style="width:100%;margin-top:6px;'+
+          'font-family:var(--ui-font);font-size:9px;padding:4px;border:1px solid var(--border);'+
+          'background:none;color:var(--ink-dim);cursor:pointer">Load more &mdash; showing '+
+          shown.length+' of '+full.length+'</button>'
+        : (full.length>_CB_PAGE
+            ? '<div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);'+
+              'text-align:center;margin-top:5px">All '+full.length+' shown</div>' : ''));
+  });
+}
+
+// ── COLORS view: subpalette / range editing ─────────────────────────────────
+// A CloSubPalEffect keyed by PaletteTemplate holds subpalettes, each painting
+// one PaletteSet over [offset, offset+numColors) of the 2048-colour texture
+// palette. Editing those ranges + palette sets is what "custom colours" means.
+var _CB_PAL_SPACE = 2048;
+var _cbStrips = {};     // "palset|off|num|shade" -> ['#rrggbb', ...]
+var _cbDyes   = null;   // cached clothingbase_dye_options result
+var _cbDyePick= null;   // {tpl, si} while the dye picker is open
+
+function _cbSetView(v){
+  _cbView=v; _cbPick=null; _cbDyePick=null; _cbIdInfo=null;
+  var a=document.getElementById('mpCbTabTex'), b=document.getElementById('mpCbTabCol');
+  if(a){ a.style.borderBottomColor = v==='tex'?'var(--crimson)':'transparent';
+         a.style.color = v==='tex'?'var(--ink)':'var(--ink-faint)'; }
+  if(b){ b.style.borderBottomColor = v==='col'?'var(--crimson)':'transparent';
+         b.style.color = v==='col'?'var(--ink)':'var(--ink-faint)'; }
+  _cbRender();
+}
+
+// The worn piece for the ClothingBase being edited — its shade and dye slot
+// are what the doll is actually showing.
+function _cbWornItem(){
+  return (_dollOutfit||[]).filter(function(p){ return p.clothing_id===_cbCid; })[0];
+}
+
+// Preview at the shade the doll is actually wearing — a dye looks completely
+// different at shade 0 vs 1, so a fixed preview shade would mislead.
+function _cbShade(){
+  var o=_cbWornItem();
+  return o ? (parseFloat(o.shade)||0) : 0;
+}
+
+// The dye slot (PaletteTemplate) the worn item currently uses — the one the
+// doll renders, so the one worth flagging in the list.
+function _cbWornTemplate(){
+  var o=_cbWornItem();
+  return o ? (parseInt(o.palette_template)||0) : -1;
+}
+
+function _cbStripKey(ps, off, num){ return ps+'|'+off+'|'+num+'|'+_cbShade(); }
+
+function _cbSubpals(doc){
+  var eff=(doc && doc.ClothingSubPalEffects) || {};
+  return Object.keys(eff).map(function(k){ return {tpl:parseInt(k,10), key:k, eff:eff[k]}; })
+    .filter(function(x){ return !isNaN(x.tpl); })
+    .sort(function(a,b){ return a.tpl-b.tpl; });
+}
+
+function _cbSnap8(n){ return Math.max(0, Math.min(_CB_PAL_SPACE, Math.floor(n/8)*8)); }
+
+// ── Dye-to-body-part context ────────────────────────────────────────────────
+// A dye overwrites a palette range; a body part is recoloured iff its texture
+// samples an index in that range. The backend returns each part's sampled
+// index runs (once, cached), and we intersect ranges against them in JS so the
+// "recolours …" label updates live as the offset/len are dragged.
+var _cbRuns = null;      // {partIdx: {name, runs:[[s,e],...]}} for current setup
+var _cbRunsKey = null;   // cache guard: setup + texture signature
+
+// The NewTexture on each part for the body currently shown — passed to the API
+// so coverage follows texture swaps, not just the DAT original.
+function _cbPartTextures(){
+  var doc=_cbEdits[_cbCid], key=_cbSetupKey(doc, _dollPickBody());
+  var out={};
+  if(key) (doc.ClothingBaseEffects[key].CloObjectEffects||[]).forEach(function(o){
+    out[_cbPartNum(o)]=(o.CloTextureEffects||[]).map(function(t){ return t.NewTexture; });
+  });
+  return out;
+}
+
+// Canonical top-to-bottom body order for readable labels.
+var _CB_PART_ORDER=['Head','Chest','Upper Arms','Lower Arms','Hands','Girth',
+                    'Upper Legs','Lower Legs','Feet'];
+function _cbPartsForRange(off, num){
+  if(!_cbRuns) return null;                 // not loaded yet
+  var lo=off, hi=off+num, hit={};
+  for(var idx in _cbRuns){
+    var p=_cbRuns[idx];
+    for(var i=0;i<p.runs.length;i++){
+      if(p.runs[i][0] < hi && p.runs[i][1] >= lo){ hit[p.name]=1; break; }
+    }
+  }
+  var names=Object.keys(hit);
+  names.sort(function(a,b){
+    var ia=_CB_PART_ORDER.indexOf(a), ib=_CB_PART_ORDER.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib);
+  });
+  return names;
+}
+
+// Fetch the runs for the current item+body once; re-fetch only if the textures
+// changed (a swap invalidates coverage). then() re-renders when they arrive.
+function _cbLoadRuns(then){
+  var pt=_cbPartTextures();
+  var key=_dollPickBody()+'|'+JSON.stringify(pt);
+  if(_cbRunsKey===key && _cbRuns){ then&&then(); return; }
+  window.pywebview.api.clothingbase_part_palette_runs(pt).then(function(r){
+    if(r && r.success){ _cbRuns=r.parts; _cbRunsKey=key; }
+    then&&then();
+  }).catch(function(){ then&&then(); });
+}
+
+// Dye names, without waiting on the picker: the doll already fetched this
+// item's palette list (template -> name) to build its dye dropdown.
+function _cbTplName(tpl){
+  var pals=_dollPalCache[_cbCid]||[];
+  for(var i=0;i<pals.length;i++) if(pals[i].template===tpl) return pals[i].name||'';
+  return (_cbDyes&&_cbDyes.names&&_cbDyes.names[tpl])||'';
+}
+
+// One-line "recolours: Chest, Upper Arms" under a subpalette bar. null runs
+// (still loading) shows nothing; empty overlap says the range is inert here.
+function _cbCoverLine(off, num){
+  var parts=_cbPartsForRange(off, num);
+  if(parts===null) return '';
+  if(!parts.length)
+    return '<div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);'+
+      'margin-top:2px;font-style:italic">recolours nothing on this body</div>';
+  return '<div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-dim);'+
+    'margin-top:2px">recolours: <b style="color:var(--ink)">'+
+    escHtml(parts.join(', '))+'</b></div>';
+}
+
+function _cbRenderColors(){
+  var doc=_cbEdits[_cbCid];
+  var rows=_cbSubpals(doc);
+  if(!rows.length){
+    _cbStatus('This ClothingBase has no dye templates, so it has no colours to edit.');
+    return;
+  }
+  if(_cbDyePick){ _cbRenderDyePicker(); return; }
+
+  // One batched call for every swatch on screen.
+  var need=[];
+  rows.forEach(function(r){
+    (r.eff.CloSubPalettes||[]).forEach(function(sp){
+      (sp.Ranges||[]).forEach(function(rg){
+        var off=parseInt(rg.Offset,16), num=parseInt(rg.NumColors,16);
+        if(!(_cbStripKey(sp.PaletteSet,off,num) in _cbStrips))
+          need.push({paletteset:sp.PaletteSet, offset:off, num_colors:num});
+      });
+    });
+  });
+
+  var draw=function(){
+    var html=rows.map(function(r){
+      var subs=(r.eff.CloSubPalettes||[]).map(function(sp, si){
+        var rg=(sp.Ranges||[])[0]||{Offset:'0x0',NumColors:'0x0'};
+        var off=parseInt(rg.Offset,16), num=parseInt(rg.NumColors,16);
+        var cols=_cbStrips[_cbStripKey(sp.PaletteSet,off,num)]||[];
+        var strip=cols.length
+          ? cols.map(function(c){ return '<span style="flex:1;background:'+c+'"></span>'; }).join('')
+          : '<span style="flex:1;background:repeating-linear-gradient(45deg,#3a3a3a 0 4px,#2a2a2a 0 8px)"></span>';
+        var pct=function(n){ return (n/_CB_PAL_SPACE*100).toFixed(2)+'%'; };
+        var orig=_cbOrigSub(r.key, si);
+        var dirty=orig && (orig.PaletteSet.toUpperCase()!==sp.PaletteSet.toUpperCase()
+                  || parseInt((orig.Ranges[0]||{}).Offset,16)!==off
+                  || parseInt((orig.Ranges[0]||{}).NumColors,16)!==num);
+        return '<div style="margin-top:5px;padding:5px;border:1px solid '+
+            (dirty?'var(--crimson)':'var(--border)')+';background:var(--parch)">'+
+          '<div style="display:flex;height:14px;border:1px solid var(--border);cursor:pointer"'+
+            ' onclick="_cbDyeOpen('+r.tpl+','+si+')" title="Change palette">'+strip+'</div>'+
+          '<div style="display:flex;align-items:center;gap:4px;margin-top:4px">'+
+            '<span style="font-family:monospace;font-size:8px;color:var(--ink-faint);flex:1">'+
+              escHtml(sp.PaletteSet)+'</span>'+
+            (dirty?'<button onclick="_cbSubRevert('+r.tpl+','+si+')" title="Revert"'+
+              ' style="background:none;border:none;color:var(--ink-faint);cursor:pointer;'+
+              'font-size:10px;padding:0">&#8634;</button>':'')+
+          '</div>'+
+          // Where in the 2048-colour palette this subpalette paints.
+          '<div style="position:relative;height:6px;background:var(--parch-dk);'+
+            'border:1px solid var(--border);margin-top:3px">'+
+            '<div style="position:absolute;top:0;bottom:0;left:'+pct(off)+';width:'+pct(num)+';'+
+            'background:var(--crimson);opacity:.75"></div></div>'+
+          // Which body parts this range actually recolours — the context link
+          // back to the Textures tab's part list.
+          _cbCoverLine(off, num)+
+          '<div style="display:flex;align-items:center;gap:4px;margin-top:3px">'+
+            '<label style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint)">off</label>'+
+            '<input type="number" min="0" max="'+_CB_PAL_SPACE+'" step="8" value="'+off+'"'+
+              ' onchange="_cbSetRange('+r.tpl+','+si+',\'Offset\',this.value)"'+
+              ' style="width:52px;font-family:var(--ui-font);font-size:9px;padding:1px 3px;'+
+              'background:var(--parch-dk);border:1px solid var(--border);color:var(--ink)">'+
+            '<label style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint)">len</label>'+
+            '<input type="number" min="0" max="'+_CB_PAL_SPACE+'" step="8" value="'+num+'"'+
+              ' onchange="_cbSetRange('+r.tpl+','+si+',\'NumColors\',this.value)"'+
+              ' style="width:52px;font-family:var(--ui-font);font-size:9px;padding:1px 3px;'+
+              'background:var(--parch-dk);border:1px solid var(--border);color:var(--ink)">'+
+            '<span style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);'+
+              'flex:1;text-align:right">'+off+'&ndash;'+(off+num)+'</span>'+
+          '</div>'+
+        '</div>';
+      }).join('') || '<div style="font-family:var(--ui-font);font-size:9px;font-style:italic;'+
+          'color:var(--ink-faint);margin-top:4px">No subpalettes.</div>';
+      var nm=_cbTplName(r.tpl);
+      var worn=(r.tpl===_cbWornTemplate());
+      return '<div style="border:1px solid '+(worn?'var(--crimson)':'var(--border)')+';'+
+        'background:var(--parch-dk);padding:6px 7px;margin-top:6px">'+
+        '<div style="font-family:var(--ui-font);font-size:9px;font-weight:700;color:var(--ink)">'+
+          (nm?escHtml(nm):'Template '+r.tpl)+
+          '<span style="font-weight:400;color:var(--ink-faint)"> &middot; dye slot '+r.tpl+'</span>'+
+          (worn?'<span style="float:right;color:var(--crimson);font-size:8px">◀ WORN NOW</span>':'')+
+        '</div>'+subs+'</div>';
+    }).join('');
+    var b=document.getElementById('mpCbBody');
+    if(b) b.innerHTML=
+      '<div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-dim);'+
+      'margin-top:6px;line-height:1.5;background:var(--parch);border:1px solid var(--border-lt);'+
+      'padding:6px 7px">'+
+      '<b style="color:var(--ink)">How dyeing works.</b> Each block below is one '+
+      '<b>dye slot</b> (what the game calls a PaletteTemplate) — the colour choices this '+
+      'armor offers, like "Blue" or "Red". A player dyeing the item picks one slot; the '+
+      'one they are wearing now is outlined and marked <b style="color:var(--crimson)">WORN NOW</b>. '+
+      'Inside each slot, every <b>bar</b> recolours one region of the model\'s palette: the '+
+      'strip shows the colour, the thin red gauge shows <i>where</i> in the 2048-slot palette it '+
+      'lands (so two bars can tint different areas — body vs. trim). Click a strip to swap its '+
+      'palette; drag the off/len numbers to move or resize the region (they snap to 8).</div>'+html;
+  };
+
+  // Load per-part index runs in the background so the "recolours …" lines fill
+  // in; re-draw when they arrive (guarded so a stale async doesn't clobber a
+  // view the user has since navigated away from).
+  var redrawIfCurrent=function(){
+    if(_cbView==='col' && !_cbDyePick && !_cbPick && !_cbIdInfo && _cbEdits[_cbCid]) draw();
+  };
+  if(!need.length){ draw(); _cbLoadRuns(redrawIfCurrent); return; }
+  window.pywebview.api.clothingbase_palette_strips(need, _cbShade()).then(function(r){
+    if(r && r.success) r.strips.forEach(function(s, i){
+      _cbStrips[_cbStripKey(need[i].paletteset, need[i].offset, need[i].num_colors)] = s.colors;
+    });
+    draw();
+    _cbLoadRuns(redrawIfCurrent);
+  }).catch(function(e){ _cbStatus('Error: '+e, true); });
+}
+
+function _cbOrigSub(key, si){
+  try{ return _cbOrig[_cbCid].ClothingSubPalEffects[key].CloSubPalettes[si]; }
+  catch(e){ return null; }
+}
+
+function _cbSubRevert(tpl, si){
+  var doc=_cbEdits[_cbCid], key=String(tpl);
+  var orig=_cbOrigSub(key, si);
+  if(!orig) return;
+  doc.ClothingSubPalEffects[key].CloSubPalettes[si] = JSON.parse(JSON.stringify(orig));
+  _cbRender(); _dollRefresh();
+}
+
+function _cbSetRange(tpl, si, field, val){
+  var doc=_cbEdits[_cbCid];
+  var sp=doc.ClothingSubPalEffects[String(tpl)].CloSubPalettes[si];
+  var rg=(sp.Ranges||[])[0]; if(!rg) return;
+  // AC palette subranges align to 8 — every one of the 114 distinct ranges in
+  // retail does. An unaligned range is silently wrong rather than an error.
+  var n=_cbSnap8(parseInt(val,10)||0);
+  rg[field]='0x'+('00000000'+n.toString(16).toUpperCase()).slice(-8);
+  _cbRender(); _dollRefresh();
+}
+
+function _cbDyeOpen(tpl, si){
+  _cbDyePick={tpl:tpl, si:si};
+  var doc=_cbEdits[_cbCid];
+  var sp=doc.ClothingSubPalEffects[String(tpl)].CloSubPalettes[si];
+  var rg=(sp.Ranges||[])[0]||{Offset:'0x0',NumColors:'0x0'};
+  var off=parseInt(rg.Offset,16), num=parseInt(rg.NumColors,16);
+  if(_cbDyes && _cbDyes._off===off && _cbDyes._num===num && _cbDyes._shade===_cbShade()){
+    _cbRenderDyePicker(); return;
+  }
+  _cbStatus('Loading dye palettes…');
+  window.pywebview.api.clothingbase_dye_options(_cbShade(), off, num).then(function(r){
+    if(!r.success){ _cbStatus('Error: '+r.error, true); return; }
+    r._off=off; r._num=num; r._shade=_cbShade();
+    r.names={}; r.named.forEach(function(d){ r.names[d.template]=d.name; });
+    _cbDyes=r; _cbRenderDyePicker();
+  }).catch(function(e){ _cbStatus('Error: '+e, true); });
+}
+
+function _cbRenderDyePicker(){
+  if(!_cbDyes) return;
+  var doc=_cbEdits[_cbCid];
+  var cur=doc.ClothingSubPalEffects[String(_cbDyePick.tpl)]
+             .CloSubPalettes[_cbDyePick.si].PaletteSet;
+  var list=_cbDyes.named.map(function(d){
+    var sel=parseInt(d.paletteset,16)===parseInt(cur,16);
+    var strip=d.colors.map(function(c){
+      return '<span style="flex:1;background:'+c+'"></span>'; }).join('');
+    return '<button onclick="_cbSetDye(\''+d.paletteset+'\')" title="'+escHtml(d.paletteset)+'"'+
+      ' style="display:block;width:100%;text-align:left;padding:3px;margin-top:3px;cursor:pointer;'+
+      'border:1px solid '+(sel?'var(--crimson)':'var(--border)')+';background:var(--parch)">'+
+      '<div style="display:flex;height:12px;border:1px solid var(--border)">'+strip+'</div>'+
+      '<div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-dim);margin-top:2px">'+
+      escHtml(d.name)+'</div></button>';
+  }).join('');
+  var b=document.getElementById('mpCbBody');
+  if(b) b.innerHTML=
+    '<div style="display:flex;align-items:center;gap:6px;margin:6px 0 4px">'+
+      '<button onclick="_cbDyePick=null;_cbRender()" style="font-family:var(--ui-font);'+
+      'font-size:9px;padding:2px 7px;border:1px solid var(--border);background:none;'+
+      'color:var(--ink-dim);cursor:pointer">&#8249; Back</button>'+
+      '<span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint)">'+
+      'Template '+_cbDyePick.tpl+' &middot; '+_cbDyes.named.length+' named dyes</span>'+
+    '</div>'+
+    '<div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);margin-bottom:4px">'+
+    'Named dye palettes, previewed at this item\'s shade. Any of the '+_cbDyes.all.length+
+    ' clothing palettes can be typed in below.</div>'+
+    '<div style="display:flex;gap:4px;margin-bottom:5px">'+
+      '<input id="mpCbDyeHex" placeholder="0x0F0000xx" style="flex:1;font-family:monospace;'+
+      'font-size:9px;padding:2px 4px;background:var(--parch-dk);border:1px solid var(--border);'+
+      'color:var(--ink)">'+
+      '<button onclick="_cbSetDye(document.getElementById(\'mpCbDyeHex\').value.trim())"'+
+      ' style="font-family:var(--ui-font);font-size:9px;padding:2px 7px;border:1px solid '+
+      'var(--border);background:none;color:var(--ink-dim);cursor:pointer">Set</button>'+
+    '</div>'+list;
+}
+
+function _cbSetDye(hex){
+  if(!_cbDyePick) return;              // only meaningful while the picker is open
+  if(!/^0x[0-9a-fA-F]{1,8}$/.test(hex||'')){ alert('Enter a palette id like 0x0F000002'); return; }
+  var v=parseInt(hex,16)>>>24;
+  // The mod patches PaletteSet.Unpack so a raw Palette works here too.
+  if(v!==0x0F && v!==0x04){
+    alert('That is not a PaletteSet (0x0F......) or Palette (0x04......).'); return;
+  }
+  var doc=_cbEdits[_cbCid];
+  doc.ClothingSubPalEffects[String(_cbDyePick.tpl)].CloSubPalettes[_cbDyePick.si]
+     .PaletteSet='0x'+('00000000'+parseInt(hex,16).toString(16).toUpperCase()).slice(-8);
+  _cbDyePick=null;
+  _cbRender(); _dollRefresh();
+}
+
+function _cbSetTexture(hex){
+  var doc=_cbEdits[_cbCid], key=_cbSetupKey(doc, _dollPickBody());
+  doc.ClothingBaseEffects[key].CloObjectEffects[_cbPick.oi]
+     .CloTextureEffects[_cbPick.ti].NewTexture = hex;
+  _cbPick=null;
+  _cbRender();
+  _dollRefresh();        // re-render the doll through the override path
+}
+
+function _cbRevert(oi, ti){
+  var doc=_cbEdits[_cbCid], key=_cbSetupKey(doc, _dollPickBody());
+  var was=_cbOrigTex(key, oi, ti);
+  if(was===null) return;
+  // Back to what the DAT had, not to OldTexture — OldTexture is the body's
+  // base skin, so that would silently discard the armor's own texture.
+  doc.ClothingBaseEffects[key].CloObjectEffects[oi].CloTextureEffects[ti].NewTexture = was;
+  _cbRender(); _dollRefresh();
+}
+
+function _cbResetAll(){
+  if(!_cbCid) return;
+  var cid=_cbCid;
+  _cbPick=null; _cbDyePick=null; _cbIdInfo=null;
+  // Restore from the pristine copy in place — never delete-and-reload. A
+  // synthesised creature cb isn't in the DAT, so a reload would fail with
+  // "not found in the DAT"; and even a real cb reload would drop the
+  // full-body merge. _cbOrig always holds exactly what was first loaded.
+  if(_cbOrig[cid]){
+    _cbEdits[cid]=JSON.parse(JSON.stringify(_cbOrig[cid]));
+    _cbRuns=null; _cbRunsKey=null;              // recompute coverage
+    _cbRender(); _dollRefresh();
+    return;
+  }
+  // No pristine copy (a real DAT cb opened outside creature mode): reload it.
+  delete _cbEdits[cid]; _cbCovers=null;
+  _cbOpen(cid); _dollRefresh();
+}
+
+// ── Export: in place, or as a new ClothingBase + weenie SQL ─────────────────
+// The choice matters and is not reversible by accident: editing a retail id in
+// place is a merge, so it restyles every weenie already pointing at it. A new
+// id touches nothing until SQL points an item at it.
+function _cbExport(){
+  if(!_cbCid || !window.pywebview || _cbBusy) return;
+  if(!_cbIsDirty(_cbCid)){ alert('No changes to export yet.'); return; }
+  _cbBusy=true;
+  Promise.all([window.pywebview.api.clothingbase_id_info(_cbCid),
+               window.pywebview.api.clothingbase_suggest_id(),
+               window.pywebview.api.clothingbase_get_output_dir()])
+    .then(function(res){
+      _cbBusy=false;
+      var info=res[0], sug=res[1], dir=res[2];
+      if(!info.success){ alert('Export failed:\n'+info.error); return; }
+      _cbIdInfo={info:info, suggested:(sug&&sug.success)?sug.id:'',
+                 outDir:(dir&&dir.path)||'', outExplicit:!!(dir&&dir.explicit)};
+      _cbRender();          // dispatches to _cbRenderExport and hides the footer
+    }).catch(function(e){ _cbBusy=false; alert('Export failed:\n'+e); });
+}
+
+function _cbChangeOutputDir(){
+  if(!window.pywebview) return;
+  window.pywebview.api.clothingbase_browse_output_dir().then(function(r){
+    if(r && r.success && r.path){
+      _cbIdInfo.outDir=r.path; _cbIdInfo.outExplicit=true; _cbRenderExport();
+    }
+  });
+}
+
+function _cbRenderExport(){
+  var info=_cbIdInfo.info, sug=_cbIdInfo.suggested;
+  var wcids=_cbWcidsFor(_cbCid);
+  var n=info.wcid_count;
+  var b=document.getElementById('mpCbBody');
+  if(!b) return;
+  b.innerHTML=
+    '<div style="display:flex;align-items:center;gap:6px;margin:6px 0 4px">'+
+      '<button onclick="_cbIdInfo=null;_cbRender()" style="font-family:var(--ui-font);'+
+      'font-size:9px;padding:2px 7px;border:1px solid var(--border);background:none;'+
+      'color:var(--ink-dim);cursor:pointer">&#8249; Back</button>'+
+      '<span style="font-family:var(--ui-font);font-size:9px;color:var(--ink-faint)">'+
+      'Export '+escHtml(_cbCid)+'</span>'+
+    '</div>'+
+    // Option A — overwrite the existing table.
+    '<div style="border:1px solid var(--border);background:var(--parch-dk);padding:7px;'+
+      'margin-top:5px">'+
+      '<label style="display:flex;gap:6px;align-items:flex-start;cursor:pointer">'+
+      '<input type="radio" name="cbmode" value="inplace" checked '+
+        'onchange="_cbExportMode(\'inplace\')" style="margin-top:2px">'+
+      '<span><b style="font-family:var(--ui-font);font-size:10px;color:var(--ink)">'+
+      'Edit '+escHtml(info.id)+' in place</b>'+
+      '<div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-dim);'+
+      'line-height:1.4;margin-top:2px">'+
+      (info.in_dat
+        ? 'Merges over the retail table. '+
+          (n>0 ? '<b style="color:var(--crimson)">Restyles all '+n+' item'+
+                 (n===1?'':'s')+'</b> that already use this ClothingBase'+
+                 (wcids.length?' (wcid '+wcids.slice(0,4).join(', ')+
+                   (n>4?', …':'')+')':'')+'. No SQL needed.'
+               : 'No catalog item uses this id. No SQL needed.')
+        : 'This id is not in the DAT, so the mod will create it as a new table.')+
+      '</div></span></label>'+
+    '</div>'+
+    // Option B — new id, leaves retail alone.
+    '<div style="border:1px solid var(--border);background:var(--parch-dk);padding:7px;'+
+      'margin-top:5px">'+
+      '<label style="display:flex;gap:6px;align-items:flex-start;cursor:pointer">'+
+      '<input type="radio" name="cbmode" value="new" onchange="_cbExportMode(\'new\')" '+
+        'style="margin-top:2px">'+
+      '<span><b style="font-family:var(--ui-font);font-size:10px;color:var(--ink)">'+
+      'Save as a new ClothingBase</b>'+
+      '<div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-dim);'+
+      'line-height:1.4;margin-top:2px">Leaves the original untouched. Needs SQL to '+
+      'point an item at the new id.</div></span></label>'+
+      '<div id="cbNewFields" style="display:none;margin-top:6px">'+
+        '<div style="display:flex;align-items:center;gap:4px">'+
+          '<label style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);'+
+          'width:34px">id</label>'+
+          '<input id="cbNewId" value="'+escHtml(sug)+'" style="flex:1;font-family:monospace;'+
+          'font-size:9px;padding:2px 4px;background:var(--parch);border:1px solid var(--border);'+
+          'color:var(--ink)"></div>'+
+        '<div style="display:flex;align-items:center;gap:4px;margin-top:4px">'+
+          '<label style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);'+
+          'width:34px">wcid</label>'+
+          '<input id="cbNewWcids" value="'+escHtml(wcids.join(', '))+'" '+
+          'placeholder="comma-separated, blank = no SQL" style="flex:1;'+
+          'font-family:monospace;font-size:9px;padding:2px 4px;background:var(--parch);'+
+          'border:1px solid var(--border);color:var(--ink)"></div>'+
+        '<div style="font-family:var(--ui-font);font-size:8px;color:var(--ink-faint);'+
+        'margin-top:4px;line-height:1.4">Writes both the mod JSON and a .sql that points '+
+        'these weenies at the new id.</div>'+
+      '</div>'+
+    '</div>'+
+    // Output folder — where the JSON (and SQL) land. Must be the mod's json/
+    // folder to take effect, so it's shown here at the point of writing.
+    '<div style="border:1px solid var(--border);background:var(--parch-dk);padding:7px;'+
+      'margin-top:5px">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px">'+
+        '<span style="font-family:var(--ui-font);font-size:9px;font-weight:700;color:var(--ink)">'+
+        'Output folder</span>'+
+        '<button onclick="_cbChangeOutputDir()" style="font-family:var(--ui-font);font-size:8px;'+
+        'padding:2px 7px;border:1px solid var(--border);background:none;color:var(--ink-dim);'+
+        'cursor:pointer">Change…</button>'+
+      '</div>'+
+      '<div style="font-family:monospace;font-size:8px;color:var(--ink-dim);margin-top:3px;'+
+        'word-break:break-all">'+(_cbIdInfo.outDir?escHtml(_cbIdInfo.outDir):'(not set)')+'</div>'+
+      (_cbIdInfo.outExplicit
+        ? ''
+        : '<div style="font-family:var(--ui-font);font-size:8px;color:var(--crimson);'+
+          'margin-top:3px;line-height:1.4">Not a ClothingBase folder yet — this falls back to '+
+          'your general output dir. Point it at the mod\'s '+
+          '<span style="font-family:monospace">CustomClothingBase/json/</span> folder.</div>')+
+    '</div>'+
+    '<button onclick="_cbDoExport()" style="font-family:var(--ui-font);font-size:9px;'+
+      'font-weight:700;letter-spacing:.06em;padding:6px 10px;border:1px solid var(--crimson);'+
+      'background:var(--crimson);color:#fff;cursor:pointer;width:100%;margin-top:8px">'+
+      '&#9660; WRITE FILES</button>';
+}
+
+function _cbExportMode(m){
+  var f=document.getElementById('cbNewFields');
+  if(f) f.style.display = (m==='new') ? '' : 'none';
+}
+
+// Which catalog items wear this ClothingBase, as far as the doll knows.
+function _cbWcidsFor(cid){
+  return (_dollOutfit||[]).filter(function(p){ return p.clothing_id===cid && p.wcid; })
+    .map(function(p){ return p.wcid; });
+}
+
+function _cbDoExport(){
+  if(_cbBusy) return;
+  var mode=(document.querySelector('input[name=cbmode]:checked')||{}).value||'inplace';
+  var saveAs='', wcids=[];
+  if(mode==='new'){
+    saveAs=(document.getElementById('cbNewId')||{}).value||'';
+    saveAs=saveAs.trim();
+    if(!/^0x[0-9a-fA-F]{1,8}$/.test(saveAs)){ alert('Enter an id like 0x10F00000'); return; }
+    var raw=((document.getElementById('cbNewWcids')||{}).value||'').trim();
+    if(raw) wcids=raw.split(/[,\s]+/).filter(Boolean);
+  }
+  _cbBusy=true;
+  window.pywebview.api.clothingbase_export(_cbCid, JSON.stringify(_cbEdits[_cbCid]),
+                                           saveAs, wcids)
+    .then(function(r){
+      _cbBusy=false;
+      if(!r.success){ alert('Export failed:\n'+r.error); return; }
+      var msg='Wrote '+r.filename+(r.sql_filename?'\n      '+r.sql_filename:'')+
+        '\n\n'+r.path+'\n\nNext:\n'+
+        '  1. Copy '+r.filename+' into Mods/CustomClothingBase/json/\n'+
+        '  2. Run /clear-clothing-cache on the server';
+      if(r.sql_filename) msg+='\n  3. Import '+r.sql_filename+
+        ' and reload weenie '+(r.wcids||[]).join(', ');
+      // Creature: point the weenie being built at this ClothingBase (DID 7) so
+      // the Create Items SQL carries it — no separate weenie SQL needed.
+      if(_dollMode==='creature' && r.id){
+        _cbSetWeenieClothingBase(r.id);
+        msg+='\n\nSet this creature\'s ClothingBase (DID 7) to '+r.id+
+             ' in Create Items — regenerate/export the weenie to apply.';
+      }
+      if(r.warnings&&r.warnings.length) msg+='\n\nWarnings:\n  '+r.warnings.slice(0,5).join('\n  ');
+      alert(msg);
+      _cbIdInfo=null; _cbRender();
+    }).catch(function(e){ _cbBusy=false; alert('Export failed:\n'+e); });
+}
+
 function closeModelPreview(){
   var panel=document.getElementById('modelPreviewPanel');
   var _db=document.getElementById('mpDollBar');
+  _cbCid=null; _cbPick=null;
+  var _cp=document.getElementById('mpCbPanel'); if(_cp) _cp.style.display='none';
   if(_db) _db.style.display='none';
   if(panel) panel.style.display='none';
   if(_mp.animFrame){ cancelAnimationFrame(_mp.animFrame); _mp.animFrame=null; }
@@ -16954,6 +17908,57 @@ document.addEventListener('DOMContentLoaded', function(){
         style="font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;
         padding:6px 10px;border:1px solid var(--crimson);background:var(--crimson);color:#fff;
         cursor:pointer;width:100%">&#9654; GENERATE</button>
+    </div>
+  </div>
+
+  <!-- CLOTHINGBASE EDITOR (swaps into the wardrobe's slot; doll stays live) -->
+  <div id="mpCbPanel" style="display:none;flex:0 0 360px;width:360px;height:340px;
+    border-left:1px solid var(--border);background:var(--parch);
+    flex-direction:column;overflow:hidden">
+    <div style="flex:0 0 auto;padding:7px 9px;border-bottom:1px solid var(--border-lt);
+      display:flex;align-items:center;gap:6px">
+      <button onclick="_cbClose()" title="Back to wardrobe"
+        style="background:none;border:none;color:var(--ink-dim);cursor:pointer;
+        font-size:13px;line-height:1;padding:0">&#8249;</button>
+      <span style="font-family:var(--ui-font);font-size:9px;font-weight:700;
+        letter-spacing:.06em;color:var(--ink-dim)">CUSTOMIZE</span>
+      <span id="mpCbTitle" style="flex:1;min-width:0;font-family:var(--ui-font);
+        font-size:9px;color:var(--ink-faint);overflow:hidden;text-overflow:ellipsis;
+        white-space:nowrap"></span>
+      <button onclick="_cbResetAll()" title="Discard all edits to this ClothingBase"
+        style="font-family:var(--ui-font);font-size:9px;padding:2px 6px;
+        border:1px solid var(--border);background:none;color:var(--ink-dim);
+        cursor:pointer">Reset</button>
+    </div>
+    <!-- Outside mpCbBody on purpose: this must not scroll out of sight. -->
+    <div style="flex:0 0 auto;padding:6px 9px;border-bottom:1px solid var(--border-lt);
+      background:rgba(160,80,40,.08);font-family:var(--ui-font);font-size:8px;
+      line-height:1.45;color:var(--ink-dim)">
+      <b style="color:var(--crimson)">Server mod required.</b> These edits are a
+      preview only. To use them in game your ACE server needs the
+      <b>CustomClothingBase</b> mod
+      (<span style="font-family:monospace">github.com/OptimShi/CustomClothingBase</span>) —
+      export drops a JSON file into its <span style="font-family:monospace">json/</span>
+      folder, then run <span style="font-family:monospace">/clear-clothing-cache</span>.
+      Without that mod the export does nothing. Players need no downloads.
+    </div>
+    <div style="flex:0 0 auto;display:flex;border-bottom:1px solid var(--border-lt)">
+      <button id="mpCbTabTex" onclick="_cbSetView('tex')"
+        style="flex:1;font-family:var(--ui-font);font-size:9px;font-weight:700;
+        letter-spacing:.06em;padding:5px 0;border:none;border-bottom:2px solid var(--crimson);
+        background:none;color:var(--ink);cursor:pointer">TEXTURES</button>
+      <button id="mpCbTabCol" onclick="_cbSetView('col')"
+        style="flex:1;font-family:var(--ui-font);font-size:9px;font-weight:700;
+        letter-spacing:.06em;padding:5px 0;border:none;border-bottom:2px solid transparent;
+        background:none;color:var(--ink-faint);cursor:pointer">COLORS</button>
+    </div>
+    <div id="mpCbBody" style="flex:1;min-height:0;overflow-y:auto;padding:0 9px 9px"></div>
+    <div id="mpCbFoot" style="flex:0 0 auto;padding:7px 9px;border-top:1px solid var(--border-lt)">
+      <button onclick="_cbExport()"
+        style="font-family:var(--ui-font);font-size:9px;font-weight:700;
+        letter-spacing:.06em;padding:6px 10px;border:1px solid var(--crimson);
+        background:var(--crimson);color:#fff;cursor:pointer;width:100%">
+        &#9660; EXPORT JSON</button>
     </div>
   </div>
   </div>
@@ -18456,6 +19461,7 @@ const TOWN_TOOLS = [
   { c:'server', n:'AutoLoot', a:'Raajik', d:'ACE server mod for automatic corpse looting.', u:'https://github.com/Raajik/AutoLoot', t:['mod','looting'] },
   { c:'server', n:'Loremaster', a:'Raajik', d:'ACE mod adding bonus XP quest points.', u:'https://github.com/Raajik/Loremaster', t:['mod','xp'] },
   { c:'server', n:'ACE-SinglePlayer', a:'titaniumweiner', d:'Windows single-player launcher bundling ACE with a local MariaDB world — solo Dereth in one download.', u:'https://github.com/titaniumweiner/ACE-SinglePlayer', t:['emulator','singleplayer'] },
+  { c:'server', n:'OpenDereth', a:'titaniumweiner', d:'One-button private single-player ACE for Windows — bundles MariaDB, ACE.Server, and the AC client, no .NET install. Its Custom Weenies importer reads an ACEForge output folder directly: it previews each WCID, validates the weenie ops, backs up ace_world, and imports in one transaction. Can also install OptimShi’s CustomClothingBase. The successor to ACE-SinglePlayer.', u:'https://github.com/titaniumweiner/OpenDereth', t:['emulator','singleplayer','aceforge','essential'] },
 
   // ── Content Creation & World Building ──
   { c:'content', n:'WorldBuilder — ACME Edition', a:'Vanquish-6', d:'World building tool: edit terrain, dungeons, spells, skills and more, exporting directly to DAT files. Requires Windows 10/11 + .NET 8.', u:'https://github.com/Vanquish-6/WorldBuilder-ACME-Edition', t:['world-editor','dat','essential'] },
