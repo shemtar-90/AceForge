@@ -251,6 +251,11 @@ def alloc_wcids(config, ranges: list[tuple[str, int]]) -> dict[str, list[int]]:
     newly_allocated: list[int] = []
     for key in order:
         count = totals[key]
+        # Callers request 0 of a category when it doesn't apply (e.g. no
+        # kill_contracts for NPC-giver quests) — nothing to allocate.
+        if count <= 0:
+            result[key] = []
+            continue
 
         base = _find_base_range(config, key)
         if base:
