@@ -2857,6 +2857,111 @@ const BP_KEY_NAMES={
   23:'Lower Tentacle',24:'Cloak'
 };
 
+// Part names as they appear in the SQL /* comment */. Unspaced, matching
+// BP_KEY_NAMES in json_to_sql.py — BP_KEY_NAMES above keeps the spaced form for
+// UI labels, but the generated SQL has to read identically in both forges.
+const BP_SQL_NAMES={
+  0:'Head',1:'Chest',2:'Abdomen',3:'UpperArm',4:'LowerArm',5:'Hand',
+  6:'UpperLeg',7:'LowerLeg',8:'Foot',9:'Horn',10:'FrontLeg',11:'FrontFoot',
+  12:'RearLeg',13:'RearFoot',14:'Torso',15:'Tail',16:'Arm',17:'Leg',
+  18:'Claw',19:'Wings',20:'Breath',21:'Tentacle',22:'UpperTentacle',
+  23:'LowerTentacle',24:'Cloak',25:'LowerTentacle'
+};
+
+// Hit-location fractions per body-part key: [b_h, hlf,mlf,llf, hrf,mrf,lrf,
+// hlb,mlb,llb, hrb,mrb,lrb]. Mirrors _BP_FRACS in json_to_sql.py — QuestForge
+// and WeenieForge must emit identical geometry for the same part.
+const BP_FRACS={
+  0: [1, 0.33,0,   0,    0.33,0,   0,    0.33,0,   0,    0.33,0,   0   ], // Head
+  1: [2, 0.44,0.17,0,    0.44,0.17,0,    0.44,0.17,0,    0.44,0.17,0   ], // Chest
+  2: [3, 0,   0.17,0,    0,   0.17,0,    0,   0.17,0,    0,   0.17,0   ], // Abdomen
+  3: [1, 0.23,0.03,0,    0.23,0.03,0,    0.23,0.03,0,    0.23,0.03,0   ], // UpperArm
+  4: [2, 0,   0.3, 0,    0,   0.3, 0,    0,   0.3, 0,    0,   0.3, 0   ], // LowerArm
+  5: [2, 0,   0.2, 0,    0,   0.2, 0,    0,   0.2, 0,    0,   0.2, 0   ], // Hand
+  6: [3, 0,   0.13,0.18, 0,   0.13,0.18, 0,   0.13,0.18, 0,   0.13,0.18], // UpperLeg
+  7: [3, 0,   0,   0.6,  0,   0,   0.6,  0,   0,   0.6,  0,   0,   0.6 ], // LowerLeg
+  8: [3, 0,   0,   0.22, 0,   0,   0.22, 0,   0,   0.22, 0,   0,   0.22], // Foot
+  9: [2, 0.5, 0.5, 0,    0.5, 0.5, 0,    0,   0,   0,    0,   0,   0   ], // Horn
+  10:[2, 0.2, 0.4, 0.5,  0.2, 0.4, 0.5,  0,   0,   0,    0,   0,   0   ], // FrontLeg
+  11:[3, 0,   0,   0.25, 0,   0,   0.25, 0,   0,   0,    0,   0,   0   ], // FrontFoot
+  12:[3, 0,   0,   0.25, 0,   0,   0.25, 0,   0,   0,    0,   0,   0   ], // RearLeg
+  13:[3, 0,   0,   0.25, 0,   0,   0.25, 0,   0,   0,    0,   0,   0   ], // RearFoot
+  14:[2, 0.3, 0.4, 0.25, 0.3, 0.4, 0.25, 0.6, 0.5, 0.25, 0.6, 0.5, 0.25], // Torso
+  15:[3, 0,   0,   0.5,  0,   0,   0.5,  0,   0,   0,    0,   0,   0   ], // Tail
+  16:[1, 0.25,0.5, 0,    0.25,0.5, 0,    0,   0,   0,    0,   0,   0   ], // Arm
+  17:[2, 0,   0.25,0.5,  0,   0.25,0.5,  0,   0,   0,    0,   0,   0   ], // Leg
+  18:[2, 0.5, 0.5, 0,    0,   0,   0,    0,   0,   0,    0,   0,   0   ], // Claw
+  19:[1, 0.5, 0,   0,    0,   0,   0,    0.5, 0,   0,    0,   0,   0   ], // Wings
+  20:[2, 0.1, 0.1, 0,    0.1, 0.1, 0,    0.1, 0.1, 0,    0.1, 0.1, 0   ], // Breath
+  21:[2, 0.3, 0.3, 0.3,  0.3, 0.3, 0.3,  0,   0,   0,    0,   0,   0   ], // Tentacle
+  22:[2, 0.5, 0.5, 0,    0.5, 0.5, 0,    0,   0,   0,    0,   0,   0   ], // UpperTentacle
+  23:[3, 0,   0,   0.5,  0,   0,   0.5,  0,   0,   0,    0,   0,   0   ], // LowerTentacle
+  24:[1, 0.33,0,   0,    0.33,0,   0,    0.33,0,   0,    0.33,0,   0   ], // Cloak
+};
+
+// Body-part keys that actually strike — only these carry damage. Derived from
+// 3,286 retail creature weenies: each key below has a nonzero d_Val in >=50% of
+// its rows, while Head sits at 28% and Chest/Abdomen/limbs at 3-4%.
+// Keep in sync with BP_DAMAGE_KEYS / BP_DVAR in json_to_sql.py.
+const BP_DAMAGE_KEYS={5:1,8:1,9:1,10:1,12:1,13:1,15:1,16:1,17:1,18:1,19:1,20:1,21:1,22:1,23:1,25:1};
+const BP_DVAR={9:0.5,10:0.5,13:0.5,16:0.5,18:0.5,19:0,21:0.5,22:0.5};
+
+// base_Armor and natural-weapon d_Val scale linearly with creature level,
+// uncapped: 75/4 at L1, 349/141 at L275.
+function bpArmorForLevel(lv){ lv=parseInt(lv); if(!lv||lv<1) lv=1; return Math.max(1, 74+lv); }
+function bpDValForLevel(lv){ lv=parseInt(lv); if(!lv||lv<1) lv=1; return Math.max(1, Math.floor(lv/2+4)); }
+
+// Shared body-part SQL emission — used by the WeenieForge regen emitter and the
+// Creature Mob template so both stay byte-consistent with QuestForge's
+// _emit_body_parts_ref in json_to_sql.py.
+const BP_SQL_COLS_LINE = 'INSERT INTO `weenie_properties_body_part` (`object_Id`, `key`, `d_Type`, `d_Val`, `d_Var`, `base_Armor`, `armor_Vs_Slash`, `armor_Vs_Pierce`, `armor_Vs_Bludgeon`, `armor_Vs_Cold`, `armor_Vs_Fire`, `armor_Vs_Acid`, `armor_Vs_Electric`, `armor_Vs_Nether`, `b_h`, `h_l_f`, `m_l_f`, `l_l_f`, `h_r_f`, `m_r_f`, `l_r_f`, `h_l_b`, `m_l_b`, `l_l_b`, `h_r_b`, `m_r_b`, `l_r_b`)';
+
+// The 26 column values for one body part at a given level, before any user edits.
+function bpCellsFor(key, level){
+  var isDmg = !!BP_DAMAGE_KEYS[key];
+  var al    = bpArmorForLevel(level);
+  var dVal  = isDmg ? bpDValForLevel(level) : 0;
+  var dVar  = isDmg ? (BP_DVAR[key]!==undefined?BP_DVAR[key]:0.75) : 0;
+  var fr    = BP_FRACS[key] || BP_FRACS[0];
+  return [key, 4, dVal, dVar, al, al, al, al, al, al, al, al, 0].concat(fr);
+}
+
+// Render rows ([{name, cells}]) as an aligned INSERT block. Each column is
+// right-padded to its widest value so the table lines up for eyeball edits.
+function bpAlignedRowsSQL(wcid, rows){
+  if(!rows||!rows.length) return [];
+  var cells=rows.map(function(r){ return r.cells.map(function(v){return String(v);}); });
+  var w=cells[0].map(function(_,c){
+    return Math.max.apply(null, cells.map(function(x){ return x[c].length; }));
+  });
+  var out=[BP_SQL_COLS_LINE];
+  rows.forEach(function(r,i){
+    var prefix=i===0?'VALUES ':'     , ';
+    var vals=cells[i].map(function(v,c){ return v.padStart(w[c]); }).join(', ');
+    out.push(prefix+'('+wcid+', '+vals+') /* '+r.name+' */'+(i===rows.length-1?';':''));
+  });
+  return out;
+}
+
+// The creature's Level. There is NO #fLevel element — Level lives in extraInt as
+// Int property 25 and is edited on the Int32 tab (see _INT_FORM_MAP, which
+// deliberately omits 25). Anything calling gi('fLevel',…) silently got the
+// literal default instead of the real level, so read it from extraInt here.
+function _creatureLevel(dflt){
+  var d = (dflt===undefined) ? 100 : dflt;
+  try{
+    if(typeof extraInt!=='undefined' && extraInt && extraInt.length){
+      var row = extraInt.find(function(r){ return parseInt(r.type)===25; });
+      var lv  = row ? parseInt(row.value) : NaN;
+      if(!isNaN(lv) && lv>0) return lv;
+    }
+  }catch(e){}
+  // Fall back to a form field if one is ever reintroduced.
+  var el = (typeof document!=='undefined') ? document.getElementById('fLevel') : null;
+  var fv = el ? parseInt(el.value) : NaN;
+  return (!isNaN(fv) && fv>0) ? fv : d;
+}
+
 // Primary body part setup per CreatureType ID (from ACE World DB, 8313 weenies)
 const CREATURE_BP_MAP={
   0:  [0,1,2,3,4,5,6,7,8],              // None/Default → full humanoid
@@ -3097,14 +3202,11 @@ function onCTypeChange(){
   var _csEnt=(_csList&&_csList.length)?_csList[0]:null;
   _pickedSetupKey=_csEnt?(_csEnt.k||_csEnt.s):'';
   if(_csEnt) _applyCreatureSetupEntry(_csEnt);
-  // Body parts: use the model's actual scraped keys when available (they vary
-  // per model — Olthoi have Breath, some types have Tail, etc.)
-  bodyParts=getBodyParts(cType, _csEnt&&_csEnt.bp);
-  var bpPanel=document.querySelector('.sub-panel[data-sub="bodyparts"]');
-  if(bpPanel){
-    bpPanel.innerHTML=buildBodyPartsTab();
-    bpPanel.querySelectorAll('input,select').forEach(function(e){e.addEventListener('input',onFieldInput);});
-  }
+  // Body parts: rebuild for the new type at the current level. Uses the model's
+  // actual scraped keys when available (they vary per model — Olthoi have
+  // Breath, Wisps are Head/Horn/Torso/Tail/Wings, humanoids are the 0-8 set).
+  // relayout=true: the part LIST changes here, not just the values.
+  refreshBodyPartsForLevel(undefined, true);
   // Rebuild the full Properties panel so DID / Int / Bool sub-tabs all refresh
   rebuildPanel('properties');
   regen();
@@ -3490,7 +3592,7 @@ function removeCoreSkill(id){
 }
 
 function buildSkills(){
-  const level=gi('fLevel',100);
+  const level=_creatureLevel(100);
   const base=Math.floor(level*2.2);
   const skillSelect=ALL_SKILLS_FULL.map(([id,name])=>`<option value="${id}">${id} · ${name}</option>`).join('');
   // Slider + editable number pair for a skill's init value (0-800 visual range; type a higher value to exceed it)
@@ -3546,7 +3648,7 @@ function filterSkillSearch(q){
 }
 
 function addSkillById(id){
-  const level=gi('fLevel',100);
+  const level=_creatureLevel(100);
   const base=Math.floor(level*2.2);
   if(!extraSkills.find(s=>s.id===id)){
     extraSkills.push({id,sac:2,init:base});
@@ -3747,7 +3849,9 @@ function _bpColAllS(col, val){
 function buildBodyPartsTab(){
   // Weenie mode: render from importedBodyParts[] with all 27 columns
   if(curType==='weenie' && typeof importedBodyParts!=='undefined' && importedBodyParts.length){
-    var BPK={0:'Head',1:'Chest',2:'Abdomen',3:'UpperArm',4:'LowerArm',5:'Hand',6:'UpperLeg',7:'LowerLeg',8:'Foot'};
+    // Covers every key, not just the humanoid 0-8 — a Wisp/Olthoi has Horn,
+    // Torso, Tail, Wings, Breath and Tentacles, which used to render "undefined".
+    var BPK=BP_SQL_NAMES;
     var DT_NAMES={0:'Undef',1:'Slash',2:'Pierce',4:'Bludge',8:'Fire',16:'Cold',32:'Acid',64:'Electric',128:'Nether'};
     function _f(v){
       var n=parseFloat(v);
@@ -3764,7 +3868,7 @@ function buildBodyPartsTab(){
       }
       var dtOpts=[0,1,2,4,8,16,32,64,128].map(function(v){return '<option value="'+v+'"'+(bp.dt===v?' selected':'')+'>'+v+' · '+(DT_NAMES[v]||v)+'</option>';}).join('');
       return '<tr style="border-bottom:1px solid var(--border-lt);height:32px">'
-        +'<td style="font-family:var(--ui-font);font-size:9px;font-weight:700;color:var(--ink-mid);white-space:nowrap;padding:4px">'+BPK[bp.key]+'</td>'
+        +'<td style="font-family:var(--ui-font);font-size:9px;font-weight:700;color:var(--ink-mid);white-space:nowrap;padding:4px">'+(BPK[bp.key]||('Part '+bp.key))+'</td>'
         +'<td><select oninput="importedBodyParts['+i+'].dt=parseInt(this.value);regen()" style="font-family:var(--ui-font);font-size:9px;padding:2px 3px;background:var(--parch-dk);border:1px solid var(--border);color:var(--ink)">'+dtOpts+'</select></td>'
         +'<td>'+inp('dv',SN)+'</td>'
         +'<td>'+inp('dvar',SN)+'</td>'
@@ -5738,6 +5842,33 @@ const LEVEL_SCALE_TIERS = [
   {min:226, max:275, attrMin:250, attrMax:290, skillMin:290, skillMax:360},
 ];
 
+// Attributes/skills for a level, uncapped in both directions.
+//
+// Inside the table (1–275) this interpolates within the matching retail tier,
+// exactly as before. Past 275 it keeps going on the final tier's slope rather
+// than refusing to scale — body-part armor/damage are uncapped, so the rest of
+// the stat block has to be able to follow a creature above retail's ceiling.
+// Returns {attr, skill, extrapolated}.
+function levelScaleValues(level){
+  var lv = parseInt(level); if(isNaN(lv)||lv<1) lv=1;
+  var T  = LEVEL_SCALE_TIERS;
+  var tier=null;
+  T.forEach(function(t){ if(lv>=t.min&&lv<=t.max) tier=t; });
+  if(tier){
+    var frac = tier.max===tier.min ? 1 : Math.max(0,Math.min(1,(lv-tier.min)/(tier.max-tier.min)));
+    return {attr:  Math.round(tier.attrMin  + frac*(tier.attrMax  - tier.attrMin)),
+            skill: Math.round(tier.skillMin + frac*(tier.skillMax - tier.skillMin)),
+            extrapolated:false};
+  }
+  // Above the table — continue at the last tier's per-level rate.
+  var last = T[T.length-1];
+  var span = Math.max(1, last.max - last.min);
+  var over = lv - last.max;
+  return {attr:  Math.round(last.attrMax  + over*(last.attrMax  - last.attrMin)/span),
+          skill: Math.round(last.skillMax + over*(last.skillMax - last.skillMin)/span),
+          extrapolated:true};
+}
+
 // Skill ID → category: 'defense'|'melee'|'missile'|'magic'
 
 function scaleCreatureStats(){
@@ -5745,14 +5876,14 @@ function scaleCreatureStats(){
   var lvEntry = extraInt.find(function(r){ return parseInt(r.type)===25; });
   var level = lvEntry ? parseInt(lvEntry.value) : 100;
 
-  var tier = null;
-  LEVEL_SCALE_TIERS.forEach(function(t){ if(level>=t.min&&level<=t.max) tier=t; });
-  if(!tier){ toast('Level '+level+' is outside the 1\u2013275 scaling range'); return; }
+  // Body parts follow the model + level; rescale them alongside everything else.
+  var bpArmor = refreshBodyPartsForLevel(level);
 
-  // Linear interpolation within tier (clamp to [0,1])
-  var frac = tier.max===tier.min ? 1 : Math.max(0,Math.min(1,(level-tier.min)/(tier.max-tier.min)));
-  var attrVal = Math.round(tier.attrMin + frac*(tier.attrMax-tier.attrMin));
-  var skillVal = Math.round(tier.skillMin + frac*(tier.skillMax-tier.skillMin));
+  // Attributes/skills scale at ANY level \u2014 past 275 levelScaleValues continues
+  // on the last tier's slope instead of refusing, so the whole stat block stays
+  // consistent with the uncapped body-part curve.
+  var sv = levelScaleValues(level);
+  var attrVal = sv.attr, skillVal = sv.skill;
 
   // Set all 6 primary attributes (Self = Willpower in user terminology)
   for(var ai=1;ai<=6;ai++){
@@ -5784,7 +5915,156 @@ function scaleCreatureStats(){
 
   regen();
   toast('\u21af Stats auto-scaled to Level '+level+
-        ' \u2014 Attr '+attrVal+' / Skills '+skillVal);
+        ' \u2014 Attr '+attrVal+' / Skills '+skillVal+
+        (bpArmor?' / Body AL '+bpArmor:'')+
+        (sv.extrapolated?' (extrapolated past retail\u2019s level 275)':''));
+}
+
+// ── Body-part layout: ground truth ───────────────────────────────────────────
+// A creature's body parts follow its MODEL (Setup), not its CreatureType — two
+// creatures of the same type can have different parts, and creature_setups.json
+// records exactly that. build_creature_setups.py scrapes each entry's `bp` from
+// the real weenie_properties_body_part rows of the retail weenie using that
+// Setup ("actual per-creature data beats any static map"), so the catalog IS
+// the ground truth. CREATURE_BP_MAP is only a hand-built approximation and is
+// used solely when the catalog has nothing for this model.
+//
+// Resolution order, most authoritative first:
+//   1. the weenie's own Setup DID (DID type 1) — what it actually looks like
+//   2. the model picked in the Setup dropdown
+//   3. the first model of the creature type
+//   4. CREATURE_BP_MAP (static fallback)
+function _didToInt(v){
+  if(v===undefined||v===null) return NaN;
+  var s=String(v).trim();
+  return /^0x/i.test(s) ? parseInt(s,16) : parseInt(s,10);
+}
+function _bodyPartSourceEntry(cType){
+  if(typeof _CSETUPS==='undefined'||!_CSETUPS) return null;
+  var csList=_CSETUPS[String(cType)];
+
+  // 1. Match the weenie's actual Setup DID. Search this creature type first,
+  //    then every type — an imported weenie's CreatureType and Setup can
+  //    disagree, and the Setup is what determines the body it has.
+  var setupRow=(typeof extraDID!=='undefined'&&extraDID)
+    ? extraDID.find(function(r){ return parseInt(r.type)===1; }) : null;
+  var want=setupRow?_didToInt(setupRow.value):NaN;
+  if(!isNaN(want)){
+    var bySetup=function(list){
+      return (list||[]).find(function(e){ return _didToInt(e.s)===want && e.bp && e.bp.length; });
+    };
+    var hit=bySetup(csList);
+    if(hit) return hit;
+    var keys=Object.keys(_CSETUPS);
+    for(var i=0;i<keys.length;i++){
+      hit=bySetup(_CSETUPS[keys[i]]);
+      if(hit) return hit;
+    }
+  }
+  if(!csList||!csList.length) return null;
+  // 2. The explicitly picked model, then 3. the type's first model.
+  return csList.find(function(e){ return (e.k||e.s)===_pickedSetupKey && e.bp && e.bp.length; })
+      || csList.find(function(e){ return e.bp && e.bp.length; })
+      || null;
+}
+
+// The body-part key list this weenie should have, from the ground-truth catalog.
+function _bodyPartKeysFor(cType, level){
+  var csEnt=_bodyPartSourceEntry(cType);
+  if(csEnt&&csEnt.bp&&csEnt.bp.length) return csEnt.bp.slice();
+  return (CREATURE_BP_MAP[cType]||CREATURE_BP_MAP[31]).slice();
+}
+
+// One importedBodyParts row (weenie-editor shape) from bpCellsFor's cell array.
+function _bpCellsToRow(cells){
+  var F=['key','dt','dv','dvar','al','sl','pi','bl','co','fi','ac','el','nt','bh',
+         'hlf','mlf','llf','hrf','mrf','lrf','hlb','mlb','llb','hrb','mrb','lrb'];
+  var row={};
+  F.forEach(function(f,i){ row[f]=cells[i]; });
+  return row;
+}
+
+// Repaint whichever container is hosting the Body Parts table. The weenie
+// editor renders it into #pst_bodyparts; the creature builder uses its own
+// sub-panel. Both have to be refreshed or edits appear to do nothing.
+function _repaintBodyPartsTab(){
+  var p=document.getElementById('pst_bodyparts')
+     || document.querySelector('.sub-panel[data-sub="bodyparts"]');
+  if(!p) return;
+  p.innerHTML=buildBodyPartsTab();
+  p.querySelectorAll('input,select').forEach(function(e){
+    if(typeof onFieldInput==='function') e.addEventListener('input',onFieldInput);
+  });
+}
+
+// Rebuild bodyParts for the current model + level and repaint the Body Parts
+// tab. Returns the new base_Armor (or 0 if there was nothing to redraw).
+//
+// The weenie editor keeps its own 27-column model in importedBodyParts (that's
+// what its table renders AND what buildSQL emits), so it has to be rebuilt too
+// — updating only `bodyParts` left the visible table and the Live Preview
+// untouched, which is exactly what "changing CreatureType did nothing" was.
+function refreshBodyPartsForLevel(level, relayout){
+  if(typeof bodyParts==='undefined') return 0;
+  var lv = (level===undefined||level===null||level==='') ? _creatureLevel(100) : parseInt(level);
+  var ctEntry = (typeof extraInt!=='undefined' && extraInt)
+    ? extraInt.find(function(r){ return parseInt(r.type)===2; }) : null;
+  var cType = ctEntry ? parseInt(ctEntry.value) : 31;
+  var csEnt = _bodyPartSourceEntry(cType);
+  bodyParts=getBodyParts(cType, csEnt&&csEnt.bp, lv);
+
+  if(typeof importedBodyParts!=='undefined' && importedBodyParts){
+    var keys=_bodyPartKeysFor(cType, lv);
+    var sameLayout = importedBodyParts.length===keys.length
+      && importedBodyParts.every(function(bp,i){ return parseInt(bp.key)===keys[i]; });
+    if(relayout || !sameLayout){
+      // Layout changed (new CreatureType/Setup) — replace the rows wholesale.
+      importedBodyParts.length=0;
+      keys.forEach(function(k){ importedBodyParts.push(_bpCellsToRow(bpCellsFor(k,lv))); });
+    }else if(importedBodyParts.length){
+      // Same parts, new level — rescale armor + natural-weapon damage in place,
+      // leaving hit geometry and any chosen damage type alone.
+      importedBodyParts.forEach(function(bp){
+        var d=bpCellsFor(parseInt(bp.key), lv);
+        bp.dv=d[2]; bp.dvar=d[3];
+        bp.al=d[4]; bp.sl=d[5]; bp.pi=d[6]; bp.bl=d[7];
+        bp.co=d[8]; bp.fi=d[9]; bp.ac=d[10]; bp.el=d[11];
+      });
+    }
+  }
+  _repaintBodyPartsTab();
+  return bpArmorForLevel(lv);
+}
+
+// Weenie-editor equivalent of scaleCreatureStats(). That function drives the
+// creature builder's form inputs (attr_N / vital_N / sk_init_N), which don't
+// exist in the weenie editor — there the data lives in importedAttribs,
+// importedAttribs2nd and extraSkills. Rescales all of them plus body parts,
+// then repaints the panel and refreshes the Live Preview.
+function rescaleWeenieForLevel(level){
+  var lv=parseInt(level); if(isNaN(lv)||lv<1) lv=_creatureLevel(100);
+  var sv=levelScaleValues(lv);
+  var bpArmor=refreshBodyPartsForLevel(lv);
+
+  if(typeof importedAttribs!=='undefined')
+    importedAttribs.forEach(function(a){ a.initLevel=sv.attr; });
+
+  // Vitals track attributes the same way the creature builder scales them.
+  var VIT={1:10, 3:8, 5:5};   // MaxHealth, MaxStamina, MaxMana
+  if(typeof importedAttribs2nd!=='undefined')
+    importedAttribs2nd.forEach(function(a){
+      var v=Math.round(sv.attr*(VIT[parseInt(a.type)]||5));
+      a.initLevel=v; a.currentLevel=v;
+    });
+
+  if(typeof extraSkills!=='undefined')
+    extraSkills.forEach(function(sk){ if((sk.sac||2)>=2) sk.init=sv.skill; });
+
+  rebuildPanel('properties');
+  regen();
+  toast('↯ Scaled to Level '+lv+' — Attr '+sv.attr+' / Skills '+sv.skill+
+        ' / Body AL '+bpArmor+
+        (sv.extrapolated?' (extrapolated past retail’s level 275)':''));
 }
 
 
@@ -6314,13 +6594,22 @@ function buildGeneratorProps(){
 
 
 
-function getBodyParts(cType, keysOverride){
+function getBodyParts(cType, keysOverride, level){
   // Scraped per-model keys (from the creature-setup catalog) beat the static
   // per-type map — body parts differ even between models of the same type.
   const keys=keysOverride||CREATURE_BP_MAP[cType]||CREATURE_BP_MAP[31];
+  // Armor and natural-weapon damage both follow the creature's level. Falling
+  // back to the Level field keeps the Body Parts tab in step with the form even
+  // when a caller doesn't pass one explicitly.
+  const lv = (level!==undefined && level!==null && level!=='')
+    ? parseInt(level) : _creatureLevel(100);
+  const al = bpArmorForLevel(lv), dmg = bpDValForLevel(lv);
   return keys.map(function(k){
+    // Only striking parts carry damage; the rest are armor/hit-location only.
+    const isDmg = !!BP_DAMAGE_KEYS[k];
     return {k:k, name:BP_KEY_NAMES[k]||('Part '+k),
-      dType:4, dVal:0, dVar:0.25, baseAL:0, sl:0, pi:0, bl:0, co:0, fi:0, ac:0, el:0, nt:0};
+      dType:4, dVal:isDmg?dmg:0, dVar:isDmg?(BP_DVAR[k]!==undefined?BP_DVAR[k]:0.75):0,
+      baseAL:al, sl:al, pi:al, bl:al, co:al, fi:al, ac:al, el:al, nt:0};
   });
 }
 
@@ -8114,7 +8403,8 @@ function _tmplRenderOptions(){
   if(_tmplType === 'creature_mob'){
     html = `
       <div class="fl" style="margin-bottom:4px">Level (used to auto-scale attributes &amp; skills)</div>
-      <input type="number" id="tmplMobLevel" value="50" min="1" max="275"
+      <input type="number" id="tmplMobLevel" value="50" min="1"
+        title="Levels above retail's 275 ceiling are allowed — stats extrapolate on the top tier's slope."
         style="width:100%;margin-bottom:10px">
       <div class="fl" style="margin-bottom:4px">Creature Type</div>
       <select id="tmplMobCreatureType" style="width:100%;margin-bottom:10px">${_tmplCreatureTypeOpts(0)}</select>
@@ -8378,6 +8668,11 @@ function importSQLString(sql){
     // Now rebuild properties panel — fields are correct so summary shows right values
     if(typeof rebuildPanel==='function') rebuildPanel('properties');
     regen();
+    // Clear the import guard. It suppresses level auto-scaling so loading a file
+    // doesn't stomp its stored stats \u2014 but this path used to leave it latched
+    // true forever, which silently disabled Level rescaling for the rest of the
+    // session (editing Level changed the number and nothing else).
+    window._isImported = false;
     toast('\u2713 Template loaded.',2000);
   },150);
 }
@@ -8433,9 +8728,21 @@ function _tmplStaticSQL(type){
 // Creature Mob Template (WCID 800000) — stats scale with level
 // Base: Tumerok L50 values from 800000_Creature_Mob_Template.sql
 // Scale linearly: stat = base_l50 + (cap_l275 - base_l50) * (level - 50) / 225
+// Body parts for the Creature Mob template. Setup 0x02001410 is a humanoid, so
+// it uses the standard 0-8 layout; armor and natural-weapon damage scale with
+// the same level that drives every other stat in this template (they used to be
+// hardcoded flat at AL 100 / d_Val 50 regardless of level).
+function _tmplMobBodyParts(wcid, level){
+  return bpAlignedRowsSQL(wcid, [0,1,2,3,4,5,6,7,8].map(function(k){
+    return {name: BP_SQL_NAMES[k], cells: bpCellsFor(k, level)};
+  })).join('\n');
+}
+
 function _tmplMobSQL(now){
-  var level = Math.max(1, Math.min(275, parseInt((document.getElementById('tmplMobLevel')||{}).value||50)||50));
-  var t = Math.max(0, (level - 50) / 225);  // 0 at L50, 1 at L275
+  // No upper clamp: above L275 `t` simply exceeds 1 and every scale() call
+  // extrapolates on the same slope, matching the uncapped body-part curve.
+  var level = Math.max(1, parseInt((document.getElementById('tmplMobLevel')||{}).value||50)||50);
+  var t = Math.max(0, (level - 50) / 225);  // 0 at L50, 1 at L275, >1 beyond
 
   function scale(base, cap){ return Math.round(base + (cap - base) * t); }
 
@@ -8542,16 +8849,7 @@ VALUES (800000,   1, 0x02001410) /* Setup */
      , (800000,  22, 0x34000026) /* PhysicsEffectTable */
      , (800000,  35,       2111) /* DeathTreasureType - Loot Tier: 6 */;
 
-INSERT INTO \`weenie_properties_body_part\` (\`object_Id\`, \`key\`, \`d_Type\`, \`d_Val\`, \`d_Var\`, \`base_Armor\`, \`armor_Vs_Slash\`, \`armor_Vs_Pierce\`, \`armor_Vs_Bludgeon\`, \`armor_Vs_Cold\`, \`armor_Vs_Fire\`, \`armor_Vs_Acid\`, \`armor_Vs_Electric\`, \`armor_Vs_Nether\`, \`b_h\`, \`h_l_f\`, \`m_l_f\`, \`l_l_f\`, \`h_r_f\`, \`m_r_f\`, \`l_r_f\`, \`h_l_b\`, \`m_l_b\`, \`l_l_b\`, \`h_r_b\`, \`m_r_b\`, \`l_r_b\`)
-VALUES (800000, 0, 4, 0, 0, 100, 85, 85, 85, 85, 85, 85, 85, 0, 1, 0.33,    0,    0, 0.33,    0,    0, 0.33,    0,    0, 0.33,    0,    0) /* Head */
-     , (800000, 1, 4, 0, 0, 100, 85, 85, 85, 85, 85, 85, 85, 0, 2, 0.44, 0.17,    0, 0.44, 0.17,    0, 0.44, 0.17,    0, 0.44, 0.17,    0) /* Chest */
-     , (800000, 2, 4, 0, 0, 100, 85, 85, 85, 85, 85, 85, 85, 0, 3,    0, 0.17,    0,    0, 0.17,    0,    0, 0.17,    0,    0, 0.17,    0) /* Abdomen */
-     , (800000, 3, 4, 0, 0, 100, 85, 85, 85, 85, 85, 85, 85, 0, 1, 0.23, 0.03,    0, 0.23, 0.03,    0, 0.23, 0.03,    0, 0.23, 0.03,    0) /* UpperArm */
-     , (800000, 4, 4, 0, 0, 100, 85, 85, 85, 85, 85, 85, 85, 0, 2,    0,  0.3,    0,    0,  0.3,    0,    0,  0.3,    0,    0,  0.3,    0) /* LowerArm */
-     , (800000, 5, 2, 50, 0.75, 100, 85, 85, 85, 85, 85, 85, 85, 0, 2,   0,  0.2,    0,    0,  0.2,    0,    0,  0.2,    0,    0,  0.2,    0) /* Hand */
-     , (800000, 6, 4, 0, 0, 100, 85, 85, 85, 85, 85, 85, 85, 0, 3,    0, 0.13, 0.18,    0, 0.13, 0.18,    0, 0.13, 0.18,    0, 0.13, 0.18) /* UpperLeg */
-     , (800000, 7, 4, 0, 0, 100, 85, 85, 85, 85, 85, 85, 85, 0, 3,    0,    0,  0.6,    0,    0,  0.6,    0,    0,  0.6,    0,    0,  0.6) /* LowerLeg */
-     , (800000, 8, 2, 50, 0.75, 100, 85, 85, 85, 85, 85, 85, 85, 0, 3,   0,    0, 0.22,    0,    0, 0.22,    0,    0, 0.22,    0,    0, 0.22) /* Foot */;
+${_tmplMobBodyParts(800000, level)}
 
 INSERT INTO \`weenie_properties_attribute\` (\`object_Id\`, \`type\`, \`init_Level\`, \`level_From_C_P\`, \`c_P_Spent\`)
 VALUES (800000, 1, ${str},  0, 0) /* Strength */
@@ -9308,7 +9606,10 @@ function buildAdvanced(){
           +'<span id="'+_sid+'" style="width:30px;text-align:right;font-family:JetBrains Mono,monospace;font-size:12px;font-weight:600;color:var(--ink)">'+_sVal.toFixed(1)+'</span>'
           +'</div>';
       } else {
-        valCtrl='<input type="text" value="'+String(r.value||'').replace(/"/g,'&quot;')+'" oninput="updateExtraProp(\''+arrRef+'\','+i+',this.value)" style="width:120px;text-align:right;font-family:JetBrains Mono,monospace;font-size:14px;font-weight:600;border-bottom:1px solid var(--border);flex-shrink:0">';
+        // oninput keeps the value + Live Preview current on every keystroke;
+        // onchange (blur/Enter) additionally commits, which is what triggers
+        // Level auto-scaling without stealing focus while you're still typing.
+        valCtrl='<input type="text" value="'+String(r.value||'').replace(/"/g,'&quot;')+'" oninput="updateExtraProp(\''+arrRef+'\','+i+',this.value)" onchange="updateExtraProp(\''+arrRef+'\','+i+',this.value,true)" style="width:120px;text-align:right;font-family:JetBrains Mono,monospace;font-size:14px;font-weight:600;border-bottom:1px solid var(--border);flex-shrink:0">';
       }
       if(arrRef==='extraDID'&&(new Set([8,50,51,52])).has(parseInt(r.type))){
         // 8=Icon  50=IconOverlay  51=IconOverlaySecondary  52=IconUnderlay
@@ -10094,7 +10395,7 @@ function buildSQL(){
       [6, -1, 'ItemsCapacity'],
       [7, -1, 'ContainersCapacity'],
       [16, t==='npc'?32:1, 'ItemUseable'],
-      [25, gi('fLevel',100), 'Level'],
+      [25, _creatureLevel(100), 'Level'],   // same source the body parts scale off
     );
     if(t==='creature'){
       IR.push(
@@ -10412,6 +10713,41 @@ function buildSQL(){
   })();
   emitDID(DR);
 
+  // ── Body parts ───────────────────────────────────────────────────────────
+  // Emitted between DID and Attributes to match QuestForge's section order —
+  // the two forges must produce byte-comparable creature files.
+  if(isCreature && $('bp_dt_0')){
+    const bpLv = _creatureLevel(100);
+    const bpRows = bodyParts.map((bp,i)=>{
+      // Imported values win when present (avoids DOM timing issues on load).
+      var _ibp = window._importedBodyParts && window._importedBodyParts[bp.k];
+      // Level-derived defaults; anything the user typed in the Body Parts tab
+      // still overrides, since gi() reads the live field.
+      const d = bpCellsFor(bp.k, bpLv);
+      const dDV=d[2], dVar=d[3], dAL=d[4];
+      const dt = _ibp ? parseInt(_ibp.dt) : gi('bp_dt_'+i,4);
+      const dv = _ibp ? parseInt(_ibp.dv) : gi('bp_dv_'+i,dDV);
+      const al = _ibp ? parseInt(_ibp.al) : gi('bp_al_'+i,dAL);
+      const sl = _ibp ? parseInt(_ibp.sl) : gi('bp_sl_'+i,dAL);
+      const pi = _ibp ? parseInt(_ibp.pi) : gi('bp_pi_'+i,dAL);
+      const bl = _ibp ? parseInt(_ibp.bl) : gi('bp_bl_'+i,dAL);
+      const co = _ibp ? parseInt(_ibp.co) : gi('bp_co_'+i,dAL);
+      const fi = _ibp ? parseInt(_ibp.fi) : gi('bp_fi_'+i,dAL);
+      const ac = _ibp ? parseInt(_ibp.ac) : gi('bp_ac_'+i,dAL);
+      const el = _ibp ? parseInt(_ibp.el) : gi('bp_el_'+i,dAL);
+      const nt = _ibp ? parseInt(_ibp.nt) : gi('bp_nt_'+i,0);
+      // Per-key hit geometry (d.slice(13)). This used to emit Head's fractions
+      // (1,0.33,0,0…) for EVERY part, so a Foot claimed a head's hit locations.
+      const dVr = _ibp && _ibp.dvar!==undefined ? parseFloat(_ibp.dvar) : dVar;
+      return {name: BP_SQL_NAMES[bp.k]||bp.name||bp.k,
+              cells: [bp.k, dt, dv, dVr, al, sl, pi, bl, co, fi, ac, el, nt].concat(d.slice(13))};
+    });
+    if(bpRows.length){
+      bpAlignedRowsSQL(wcid, bpRows).forEach(l=>lines.push(l));
+      lines.push('');
+    }
+  }
+
   // ── Attributes ────────────────────────────────────────────────────────────
   if(isCreature && $('attr_1')){
     const attrs=[[1,'Strength'],[2,'Endurance'],[3,'Quickness'],[4,'Coordination'],[5,'Focus'],[6,'Self']];
@@ -10474,30 +10810,6 @@ function buildSQL(){
     lines.push('');
   }
 
-  // ── Body parts ───────────────────────────────────────────────────────────
-  if(isCreature && $('bp_dt_0')){
-    lines.push(`INSERT INTO \`weenie_properties_body_part\` (\`object_Id\`, \`key\`, \`d_Type\`, \`d_Val\`, \`d_Var\`, \`base_Armor\`, \`armor_Vs_Slash\`, \`armor_Vs_Pierce\`, \`armor_Vs_Bludgeon\`, \`armor_Vs_Cold\`, \`armor_Vs_Fire\`, \`armor_Vs_Acid\`, \`armor_Vs_Electric\`, \`armor_Vs_Nether\`, \`b_h\`, \`h_l_f\`, \`m_l_f\`, \`l_l_f\`, \`h_r_f\`, \`m_r_f\`, \`l_r_f\`, \`h_l_b\`, \`m_l_b\`, \`l_l_b\`, \`h_r_b\`, \`m_r_b\`, \`l_r_b\`)`);
-    bodyParts.forEach((bp,i)=>{
-      // Use imported body part values when available (avoids DOM timing issues)
-      var _ibp = window._importedBodyParts && window._importedBodyParts[bp.k];
-      const dt = _ibp ? parseInt(_ibp.dt) : gi('bp_dt_'+i,4);
-      const dv = _ibp ? parseInt(_ibp.dv) : gi('bp_dv_'+i,0);
-      const al = _ibp ? parseInt(_ibp.al) : gi('bp_al_'+i,80);
-      const sl = _ibp ? parseInt(_ibp.sl) : gi('bp_sl_'+i,64);
-      const pi = _ibp ? parseInt(_ibp.pi) : gi('bp_pi_'+i,56);
-      const bl = _ibp ? parseInt(_ibp.bl) : gi('bp_bl_'+i,120);
-      const co = _ibp ? parseInt(_ibp.co) : gi('bp_co_'+i,40);
-      const fi = _ibp ? parseInt(_ibp.fi) : gi('bp_fi_'+i,120);
-      const ac = _ibp ? parseInt(_ibp.ac) : gi('bp_ac_'+i,80);
-      const el = _ibp ? parseInt(_ibp.el) : gi('bp_el_'+i,80);
-      const nt = _ibp ? parseInt(_ibp.nt) : gi('bp_nt_'+i,0);
-      const prefix=i===0?'VALUES ':'     , ';
-      lines.push(`${prefix}(${wcid}, ${bp.k}, ${dt}, ${dv}, 0, ${al}, ${sl}, ${pi}, ${bl}, ${co}, ${fi}, ${ac}, ${el}, ${nt}, 1, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0, 0.33, 0, 0) /* ${bp.name||bp.k} */${i===bodyParts.length-1?';':''}`);
-    });
-    lines.push('');
-  }
-
-
   // ── Weenie-mode fallback: emit imported attrs/skills/bodyparts when not in creature tab ──
   if(!isCreature || !$('attr_1')){
     // Attributes
@@ -10536,33 +10848,20 @@ function buildSQL(){
     }
     // Body Parts
     if(typeof importedBodyParts!=='undefined' && importedBodyParts.length){
-      var BPK={0:'Head',1:'Chest',2:'Abdomen',3:'UpperArm',4:'LowerArm',5:'Hand',6:'UpperLeg',7:'LowerLeg',8:'Foot'};
-      var DMG_TYPES_BP={0:'Undef',1:'Slash',2:'Pierce',4:'Bludge',5:'Fire_slash',8:'Fire',16:'Cold',32:'Acid',64:'Electric',128:'Nether'};
-      lines.push('INSERT INTO `weenie_properties_body_part` (`object_Id`, `key`, `d_Type`, `d_Val`, `d_Var`, `base_Armor`, `armor_Vs_Slash`, `armor_Vs_Pierce`, `armor_Vs_Bludgeon`, `armor_Vs_Cold`, `armor_Vs_Fire`, `armor_Vs_Acid`, `armor_Vs_Electric`, `armor_Vs_Nether`, `b_h`, `h_l_f`, `m_l_f`, `l_l_f`, `h_r_f`, `m_r_f`, `l_r_f`, `h_l_b`, `m_l_b`, `l_l_b`, `h_r_b`, `m_r_b`, `l_r_b`)');
-      importedBodyParts.forEach(function(bp,i){
-        var pfx=i===0?'VALUES ':'     , ';
-        var sfx=i===importedBodyParts.length-1?';':'';
-        // _f: preserve decimals, strip trailing zeros, never round 0.27 to 0
-        function _fv(v){
-          var n=parseFloat(v);
-          if(isNaN(n)||n===0) return '0';
-          // Use up to 6 significant decimal places, strip trailing zeros
-          return parseFloat(n.toPrecision(6)).toString();
-        }
-        // Emit directly from importedBodyParts[] — no window._importedBodyParts lookup needed
-        lines.push(pfx+'('+wcid+', '+String(bp.key).padStart(2,' ')
-          +', '+_fv(bp.dt)+', '+_fv(bp.dv)+', '+_fv(bp.dvar)
-          +', '+_fv(bp.al)
-          +', '+_fv(bp.sl)+', '+_fv(bp.pi)+', '+_fv(bp.bl)
-          +', '+_fv(bp.co)+', '+_fv(bp.fi)+', '+_fv(bp.ac)
-          +', '+_fv(bp.el)+', '+_fv(bp.nt)
-          +', '+_fv(bp.bh)
-          +', '+_fv(bp.hlf)+', '+_fv(bp.mlf)+', '+_fv(bp.llf)
-          +', '+_fv(bp.hrf)+', '+_fv(bp.mrf)+', '+_fv(bp.lrf)
-          +', '+_fv(bp.hlb)+', '+_fv(bp.mlb)+', '+_fv(bp.llb)
-          +', '+_fv(bp.hrb)+', '+_fv(bp.mrb)+', '+_fv(bp.lrb)
-          +')'+sfx+' /* '+(BPK[bp.key]||bp.key)+' */');
-      });
+      // _fv: preserve decimals, strip trailing zeros, never round 0.27 to 0
+      function _fv(v){
+        var n=parseFloat(v);
+        if(isNaN(n)||n===0) return '0';
+        return parseFloat(n.toPrecision(6)).toString();
+      }
+      var F=['dt','dv','dvar','al','sl','pi','bl','co','fi','ac','el','nt','bh',
+             'hlf','mlf','llf','hrf','mrf','lrf','hlb','mlb','llb','hrb','mrb','lrb'];
+      // Shared aligned emitter, so the weenie editor's output matches the
+      // creature builder's and QuestForge's byte for byte.
+      bpAlignedRowsSQL(wcid, importedBodyParts.map(function(bp){
+        return {name: BP_SQL_NAMES[bp.key]||('Part '+bp.key),
+                cells: [parseInt(bp.key)].concat(F.map(function(f){ return _fv(bp[f]); }))};
+      })).forEach(function(l){ lines.push(l); });
       lines.push('');
     }
   }
@@ -10594,9 +10893,23 @@ function buildSQL(){
       const spV =(a.spellId&&a.spellId!=='')?_n(a.spellId):'NULL';
       const isLoc=LOC_SQL_TYPES.has(at);
       const locV=k=>isLoc&&a[k]?a[k]:'NULL';
-      const _lum112=(at===112||at===113);
-      const _lumVal=_n(a.amount64)||_n(a.heroXP64);
-      return `${prefix}(@parent_id, ${order}, ${at} /* ${tn} */, ${_n(a.delay)||0}, ${(a.extent!==undefined&&a.extent!=='')?Number(a.extent):1}, ${motV}, ${_q(a.message)}, ${_q(a.testString)}, ${_n(a.min)}, ${_n(a.max)}, ${min64}, ${max64}, ${minDblV}, ${maxDblV}, ${stV}, NULL, ${_lum112?'NULL':_n(a.amount)}, ${_lum112?_lumVal:'NULL'}, ${_lum112?'NULL':_n(a.heroXP64)}, ${_n(a.percent)}, ${spV}, NULL, NULL, NULL, NULL, NULL, NULL, ${wcV}, ${_n(a.stackSize)}, NULL, NULL, NULL, ${locV('cell')}, ${locV('ox')}, ${locV('oy')}, ${locV('oz')}, ${locV('aw')}, ${locV('ax')}, ${locV('ay')}, ${locV('az')})`;
+      // amount_64 and hero_X_P_64 both carry 64-bit payloads, and which one a
+      // type uses varies: AwardXP(2)/AwardNoShareXP(62) live in amount_64 (as
+      // does retail), while a QuestForge-generated AwardLuminance(113) lands in
+      // hero_X_P_64. This used to hard-NULL amount_64 for every type except
+      // 112/113, so opening a kill task in WeenieForge silently dropped its
+      // AwardXP / AwardNoShareXP values on the next regen — the YAML still had
+      // them, which is why re-injecting appeared to "restore" them.
+      // Emit each column straight from its own field so an action round-trips
+      // into the exact columns it was parsed from, never relocated.
+      const _isLum=(at===112||at===113);
+      const _a64=_n(a.amount64), _h64=_n(a.heroXP64);
+      // The editor exposes ONE luminance field (amount64), so suppress the
+      // second column for 112/113 rather than awarding the amount twice.
+      const _amountCol = _isLum?'NULL':_n(a.amount);
+      const _amt64Col  = _a64;
+      const _hero64Col = (_isLum && _a64!=='NULL') ? 'NULL' : _h64;
+      return `${prefix}(@parent_id, ${order}, ${at} /* ${tn} */, ${_n(a.delay)||0}, ${(a.extent!==undefined&&a.extent!=='')?Number(a.extent):1}, ${motV}, ${_q(a.message)}, ${_q(a.testString)}, ${_n(a.min)}, ${_n(a.max)}, ${min64}, ${max64}, ${minDblV}, ${maxDblV}, ${stV}, NULL, ${_amountCol}, ${_amt64Col}, ${_hero64Col}, ${_n(a.percent)}, ${spV}, NULL, NULL, NULL, NULL, NULL, NULL, ${wcV}, ${_n(a.stackSize)}, NULL, NULL, NULL, ${locV('cell')}, ${locV('ox')}, ${locV('oy')}, ${locV('oz')}, ${locV('aw')}, ${locV('ax')}, ${locV('ay')}, ${locV('az')})`;
     }
 
     function _branchKeys(a, ownsCtr){
@@ -12053,13 +12366,21 @@ function _getExtraArr(arrRef){
     default: return [];
   }
 }
-function updateExtraProp(arrRef,idx,val){
+// `commit` is true only for the field's change event (blur/Enter), not for each
+// keystroke. Level auto-scaling repaints the whole Properties panel, which would
+// destroy the input mid-typing — and typing "200" would otherwise rescale three
+// times (at 2, 20, 200). Keystrokes still update the value and Live Preview.
+function updateExtraProp(arrRef,idx,val,commit){
   var arr=_getExtraArr(arrRef);
   if(arr&&arr[idx]!==undefined){
     arr[idx].value=String(val);
-    // Auto-scale stats when Level (Int type 25) changes for creature/NPC
-    if(arrRef==='extraInt'&&parseInt(arr[idx].type)===25&&(curType==='creature'||curType==='npc')&&parseInt(val)>0&&!window._isImported){
-      scaleCreatureStats(); return; // scaleCreatureStats calls regen()
+    // Auto-scale stats when Level (Int type 25) changes. The weenie editor was
+    // excluded by this guard, so editing Level on its Int32 tab used to change
+    // nothing but the number itself — body parts, attributes, vitals and skills
+    // all stayed at the old level.
+    if(commit&&arrRef==='extraInt'&&parseInt(arr[idx].type)===25&&parseInt(val)>0&&!window._isImported){
+      if(curType==='creature'||curType==='npc'){ scaleCreatureStats(); return; } // calls regen()
+      if(curType==='weenie'){ rescaleWeenieForLevel(parseInt(val)); return; }    // calls regen()
     }
     regen();
   }
@@ -12169,6 +12490,7 @@ var KILL_TASK_FIELDS = [
     {id:'use_item_giver', label:'Use an Item as the giver (instead of an NPC)', type:'toggle', required:false, help:'Item = a contract you Use to start, then Use again to turn in. No dialogue or personality — plain broadcast messages, based on the Kill Contract template.'},
     {id:'npc_name',       label:'NPC / Item Name',    type:'text',   placeholder:'e.g. Ulgrim the Unpleasant  /  Kill Contract', required:true},
     {id:'npc_description',label:'Personality',        type:'text',   placeholder:'e.g. Gruff, dismissive',     required:false, help:'Used to write NPC dialogue in the right voice.', showWhen:{toggle:'use_item_giver', value:'no'}},
+    {id:'use_ai_dialogue',label:'AI-Written Dialogue', type:'toggle', default:'yes', required:false, help:'Yes: the AI rewrites this NPC’s lines in the personality above (slower, needs an API key). No: use the generic templated dialogue (instant). Ignored when no Personality is given.', showWhen:{toggle:'use_item_giver', value:'no'}},
     {id:'item_icon',      label:'Item Icon',          type:'icon',   placeholder:'0x060030A8',                 required:false, help:'Pick the contract item icon. Falls back to the template icon if left blank.', showWhen:{toggle:'use_item_giver', value:'yes'}},
     {id:'item_wcid',      label:'Item WCID (optional)', type:'number', placeholder:'auto — 860000 range',       required:false, help:'Leave blank to auto-assign in the kill_contracts (860000) range.', showWhen:{toggle:'use_item_giver', value:'yes'}},
   {type:'endsection'},
@@ -12214,6 +12536,7 @@ var ITEM_TURNIN_FIELDS = [
   {type:'section', label:'NPC',      icon:'NPC', id:'s_npc',      open:true},
     {id:'npc_name',          label:'NPC Name',            type:'text',   placeholder:'e.g. Ulgrim the Unpleasant',      required:true},
     {id:'npc_description',   label:'Personality',         type:'text',   placeholder:'e.g. Gruff, impatient',           required:false},
+    {id:'use_ai_dialogue',   label:'AI-Written Dialogue', type:'toggle', default:'yes', required:false, help:'Yes: the AI rewrites this NPC’s lines in the personality above (slower, needs an API key). No: use the generic templated dialogue (instant). Ignored when no Personality is given.'},
     {id:'npc_creature_type', label:'NPC Creature Type',   type:'select', options:_CT, default:'Human (31)',             required:false, help:'NPCs can be any creature type — Human is the standard.'},
     {id:'npc_setup_model',   label:'NPC 3D Model',        type:'model3d', ctypeField:'npc_creature_type',               required:false},
   {type:'endsection'},
@@ -12269,6 +12592,7 @@ var DELIVERY_FIELDS = [
   {type:'section', label:'NPC A — Quest Giver', icon:'NPC', id:'s_npca', open:true},
     {id:'npc_a_name',        label:'NPC Name',            type:'text',   placeholder:'e.g. Merchant Anton',       required:true,  help:'Gives the item and starts the delivery.'},
     {id:'npc_a_description', label:'Personality',         type:'text',   placeholder:'e.g. Anxious merchant',     required:false},
+    {id:'use_ai_dialogue',   label:'AI-Written Dialogue', type:'toggle', default:'yes', required:false, help:'Yes: the AI rewrites every NPC’s lines in their own personality (slower, needs an API key). No: use the generic templated dialogue (instant). Applies to all NPCs in this delivery; ignored for any NPC with no Personality.'},
     {id:'npc_a_creature_type',label:'NPC Creature Type',  type:'select', options:_CT, default:'Human (31)',       required:false},
     {id:'npc_a_setup_model', label:'NPC 3D Model',        type:'model3d', ctypeField:'npc_a_creature_type',       required:false},
   {type:'endsection'},
@@ -12436,19 +12760,23 @@ function _renderField(f){
   }
 
   if(f.type==='toggle'){
-    // Renders a Yes/No pill toggle; value is 'yes' or 'no'
+    // Renders a Yes/No pill toggle; value is 'yes' or 'no'.
+    // `default:'yes'` starts it on — used by opt-out toggles like AI dialogue.
+    var _tOn = (f.default==='yes');
+    var _actS = 'background:var(--border-lt);color:var(--ink)';
+    var _offS = 'background:transparent;color:var(--ink-dim)';
     inp = '<div style="display:flex;gap:0">'
         + '<button id="qf_'+f.id+'_yes" data-qftoggle="'+f.id+'" data-qfval="yes" style="'
         + 'font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;'
         + 'padding:4px 14px;border:1px solid var(--border);border-right:none;'
-        + 'background:transparent;color:var(--ink-dim);cursor:pointer;border-radius:2px 0 0 2px;'
+        + (_tOn?_actS:_offS)+';cursor:pointer;border-radius:2px 0 0 2px;'
         + 'transition:background .12s,color .12s">Yes</button>'
         + '<button id="qf_'+f.id+'_no" data-qftoggle="'+f.id+'" data-qfval="no" style="'
         + 'font-family:var(--ui-font);font-size:9px;font-weight:700;letter-spacing:.06em;'
         + 'padding:4px 14px;border:1px solid var(--border);'
-        + 'background:var(--border-lt);color:var(--ink);cursor:pointer;border-radius:0 2px 2px 0;'
+        + (_tOn?_offS:_actS)+';cursor:pointer;border-radius:0 2px 2px 0;'
         + 'transition:background .12s,color .12s">No</button>'
-        + '<input type="hidden" id="qf_'+f.id+'" value="no">'
+        + '<input type="hidden" id="qf_'+f.id+'" value="'+(_tOn?'yes':'no')+'">'
         + '</div>';
   } else if(f.type==='select'){
     inp = '<select id="qf_'+f.id+'" style="'+_FIELD_STYLES.input+'" onchange="_qfConditionalShow()">'
@@ -12712,7 +13040,10 @@ function _bktModelOpts(ctypeStr, cur){
     +list.map(function(e){var k=e.k||e.s;return '<option value="'+k+'"'+((k===cur||e.s===cur)?' selected':'')+'>'+_esc(e.n)+'</option>';}).join('');
 }
 function _batchKTDefaultShared(){
-  return { repeat_hours:'20', use_reward_xp:'no', xp_type:'AwardXP', use_reward_lum:'no' };
+  // use_ai_dialogue defaults on so NPC givers keep their personality voice;
+  // flip to 'no' for instant generic dialogue across the whole batch.
+  return { repeat_hours:'20', use_reward_xp:'no', xp_type:'AwardXP', use_reward_lum:'no',
+           use_ai_dialogue:'yes' };
 }
 function _batchKTEnsureShared(){ if(!_batchKT.shared) _batchKT.shared=_batchKTDefaultShared(); }
 function _batchKTEnsure(n){
@@ -12760,6 +13091,8 @@ function renderBatchKT(){
       +'<div><div style="'+LBL+'">Reward XP</div>'+pill('use_reward_xp')+'</div>'
       +(useXp?'<div><div style="'+LBL+'">XP Award Type</div><select onchange="_batchKTSharedSet(\'xp_type\',this.value,true)" style="'+INP+'">'+optSel(['AwardXP','AwardNoShareXP','AwardLevelProportionalXP'], s.xp_type)+'</select></div>':'<div></div>')
       +'<div><div style="'+LBL+'">Reward Luminance</div>'+pill('use_reward_lum')+'</div>'
+      +'<div></div>'
+      +'<div title="Yes: the AI rewrites each NPC giver&#39;s lines in their Personality (slower, needs an API key). No: generic templated dialogue (instant). Item givers are unaffected."><div style="'+LBL+'">AI-Written Dialogue</div>'+pill('use_ai_dialogue')+'</div>'
       +'<div></div>'
     +'</div>'
     +'<div style="display:flex;align-items:center;gap:8px;margin-top:10px">'
@@ -12847,6 +13180,8 @@ function _collectBatchKT(){
   var useXp=s.use_reward_xp==='yes', useLum=s.use_reward_lum==='yes', prop=s.xp_type==='AwardLevelProportionalXP';
   var common={ repeat_hours: s.repeat_hours||'20' };
   if(useXp) common.xp_type = s.xp_type||'AwardXP';
+  // Only send the opt-out; absent means "on" (see _rewrite_dialogue_with_ai).
+  if(s.use_ai_dialogue==='no') common.use_ai_dialogue='no';
   var rows=[];
   _batchKT.rows.forEach(function(r,i){
     if(!r.prefix.trim() || !r.creature_name.trim()){
@@ -12993,6 +13328,13 @@ function _collectQuestParams(){
   // Kill-task giver type — the toggle controls visibility only, so read it directly.
   var _giverT = document.getElementById('qf_use_item_giver');
   if(_giverT && _giverT.value==='yes') params['giver_type'] = 'item';
+
+  // AI dialogue opt-out. Unlike the other toggles this one is a real backend
+  // parameter, not just a visibility switch, so collectFields won't carry it.
+  // Only send it when the user turned it OFF — absent means "on", which keeps
+  // the backend default (rewrite whenever a personality was supplied).
+  var _aiDlg = document.getElementById('qf_use_ai_dialogue');
+  if(_aiDlg && _aiDlg.value==='no') params['use_ai_dialogue'] = 'no';
 
   // Collect reward builder rows
   // If a reward item has a name but no WCID, flag it for auto-generation (leave wcid blank)
@@ -18829,7 +19171,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
         <div class="ttk-g2">
           <div class="ttk-field"><label>Creature Name</label><input type="text" id="tcName" placeholder="e.g. Drudge Prowler"></div>
-          <div class="ttk-field"><label>Level</label><input type="number" id="tcLevel" value="50" min="1" max="300"></div>
+          <div class="ttk-field"><label>Level</label><input type="number" id="tcLevel" value="50" min="1" title="Levels above retail's 275 ceiling are allowed — stats extrapolate on the top tier's slope."></div>
         </div>
 
         <div class="ttk-sh"><span class="ttk-st">Vitals</span><div class="ttk-sl"></div></div>

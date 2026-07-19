@@ -316,6 +316,59 @@ BP_KEY_NAMES = {
 }
 
 
+# ── Body-part level scaling ──────────────────────────────────────────────────
+# base_Armor and natural-weapon d_Val both scale linearly with creature level,
+# uncapped, matching how health/stamina/attributes already scale elsewhere in
+# this module. Anchors (verified against hand-authored reference output):
+#   base_Armor :  75 at L1,  349 at L275
+#   d_Val      :   4 at L1,  141 at L275
+def bp_armor_for_level(level) -> int:
+    """base_Armor / armor_Vs_* for a creature of this level."""
+    try:    lv = int(level)
+    except (TypeError, ValueError): lv = 1
+    return max(1, 74 + lv)
+
+
+def bp_dval_for_level(level) -> int:
+    """d_Val for a natural-weapon body part on a creature of this level.
+    floor(level/2 + 4) is level/2 + 3.5 rounded half-up — plain round() would
+    use banker's rounding and make even levels inconsistent with odd ones."""
+    try:    lv = int(level)
+    except (TypeError, ValueError): lv = 1
+    return max(1, int(lv / 2.0 + 4.0))
+
+
+# Body-part keys that actually strike — only these carry damage. Derived from
+# the 3,286 retail creature weenies under references/weenies/Creature: every key
+# below has a nonzero d_Val in >=50% of its rows, and every key omitted has one
+# in <=28%. Notably Hand/Foot/Horn/RearLeg/Tail/Claw/Breath are 100%, while
+# Head is 28% and Chest/Abdomen/limbs are 3-4% — i.e. structural, not weapons.
+BP_DAMAGE_KEYS = {
+    5,   # Hand
+    8,   # Foot
+    9,   # Horn
+    10,  # FrontLeg
+    12,  # RearLeg
+    13,  # RearFoot
+    15,  # Tail
+    16,  # Arm
+    17,  # Leg
+    18,  # Claw
+    19,  # Wings
+    20,  # Breath
+    21,  # Tentacle
+    22,  # UpperTentacle
+    23,  # LowerTentacle
+    25,  # LowerTentacle (retail uses both 23 and 25 for this part)
+}
+
+# d_Var per damage key — the modal value in the retail data above. 0.75 is the
+# default (and what Hand/Foot use, which is what most humanoids emit).
+BP_DVAR = {
+    9: 0.5, 10: 0.5, 13: 0.5, 16: 0.5, 18: 0.5, 21: 0.5, 22: 0.5, 19: 0.0,
+}
+
+
 def _emit_body_parts(wcid: int, armor: int = 80, damage_type: int = 4) -> str:
     parts = [
         (0, "Head"), (1, "Chest"), (2, "Abdomen"),
@@ -336,7 +389,7 @@ def _emit_body_parts(wcid: int, armor: int = 80, damage_type: int = 4) -> str:
 
 
 def _emit_body_parts_ref(wcid: int, parts=None, armor: int = 100,
-                         creature_type_int: int = None) -> str:
+                         creature_type_int: int = None, level: int = None) -> str:
     """Emit body_part rows.
     - If `parts` is an int (creature_type_int), auto-build from CREATURE_BP_MAP.
     - If `parts` is a list of tuples (explicit), emit as-is.
@@ -344,6 +397,10 @@ def _emit_body_parts_ref(wcid: int, parts=None, armor: int = 100,
                      vs_Slash, vs_Pierce, vs_Bludgeon, vs_Cold, vs_Fire, vs_Acid, vs_Electric, vs_Nether,
                      b_h, hlf, mlf, llf, hrf, mrf, lrf, hlb, mlb, llb, hrb, mrb, lrb)
     Supports all 35 creature types via CREATURE_BP_MAP.
+
+    `level` scales base_Armor and natural-weapon d_Val (see bp_armor_for_level /
+    bp_dval_for_level). Pass it for anything level-aware; `armor` alone is kept
+    for callers that want to pin armor directly.
     """
     # Hit-location fractions per key
     _BP_FRACS = {
@@ -373,13 +430,17 @@ def _emit_body_parts_ref(wcid: int, parts=None, armor: int = 100,
         23: (3, 0,    0,    0.5,  0,    0,    0.5,  0,    0,    0,    0,    0,    0   ),  # LowerTentacle
         24: (1, 0.33, 0,    0,    0.33, 0,    0,    0.33, 0,    0,    0.33, 0,    0   ),  # Cloak
     }
-    # d_Val/d_Var per key (damage type 4 = Bludgeoning for most)
-    _BP_DVAL = {5: (2, 0.75), 8: (2, 0.75), 9: (4, 0.75),
-                10: (4, 0), 12: (4, 0), 13: (4, 0),
-                15: (4, 0), 17: (4, 0), 18: (4, 0.75), 20: (64, 0.75)}
-
     if parts is None:
         parts = creature_type_int if creature_type_int is not None else 31
+
+    # Level drives both armor and natural-weapon damage. An explicit `armor`
+    # still wins when no level is given, so older callers keep their behaviour.
+    if level is not None:
+        armor = bp_armor_for_level(level)
+        dmg   = bp_dval_for_level(level)
+    else:
+        dmg   = bp_dval_for_level(max(1, (int(armor) - 74)))
+
     # A plain list of ints = explicit body-part KEYS (e.g. scraped per-model
     # keys from the creature-setup catalog); an int = creature type lookup.
     keys = None
@@ -392,8 +453,13 @@ def _emit_body_parts_ref(wcid: int, parts=None, armor: int = 100,
         parts = []
         for key in keys:
             fracs = _BP_FRACS.get(key, _BP_FRACS[0])
-            dval_pair = _BP_DVAL.get(key, (4, 0))
-            d_Type, d_Val, d_Var = 4, dval_pair[0], dval_pair[1]
+            # Only parts the creature actually strikes with carry damage; the
+            # rest are purely armor/hit-location and stay at 0/0.
+            if key in BP_DAMAGE_KEYS:
+                d_Val, d_Var = dmg, BP_DVAR.get(key, 0.75)
+            else:
+                d_Val, d_Var = 0, 0
+            d_Type = 4
             a = armor
             vs = a  # armor_Vs_* = base_Armor for creatures
             parts.append((key, d_Type, d_Val, d_Var, a, vs, vs, vs, vs, vs, vs, vs, 0) + fracs)
@@ -405,14 +471,20 @@ def _emit_body_parts_ref(wcid: int, parts=None, armor: int = 100,
             "`h_r_f`, `m_r_f`, `l_r_f`, `h_l_b`, `m_l_b`, `l_l_b`, "
             "`h_r_b`, `m_r_b`, `l_r_b`)")
     lines = [f"INSERT INTO `weenie_properties_body_part` {cols}"]
-    for i, p in enumerate(parts):
-        key = p[0]
-        label = BP_KEY_NAMES.get(key, f"key{key}")
+
+    def _f(v):
+        return f"{v:g}" if isinstance(v, float) else str(v)
+
+    # Right-align every value column to its widest entry so the block reads as a
+    # table — the columns line up for eyeball edits across rows.
+    cells  = [[_f(x) for x in p] for p in parts]
+    widths = [max(len(row[c]) for row in cells) for c in range(len(cells[0]))] if cells else []
+
+    for i, (p, row) in enumerate(zip(parts, cells)):
+        label  = BP_KEY_NAMES.get(p[0], f"key{p[0]}")
         prefix = "VALUES" if i == 0 else "     ,"
         end    = ";" if i == len(parts) - 1 else ""
-        def _f(v):
-            return f"{v:g}" if isinstance(v, float) else str(v)
-        vals = ", ".join(_f(x) for x in p)
+        vals   = ", ".join(v.rjust(w) for v, w in zip(row, widths))
         lines.append(f"{prefix} ({wcid}, {vals}) /* {label} */{end}")
     return "\n".join(lines)
 

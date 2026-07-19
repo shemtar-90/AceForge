@@ -469,7 +469,7 @@ def _creature_sql(wcid: int, data: dict, filename: str) -> str:
     sections.append(""); sections.append(_emit_float_props(wcid, float_rows))
     sections.append(""); sections.append(_emit_str_props(wcid, str_rows))
     sections.append(""); sections.append(_emit_did_props(wcid, did_rows))
-    sections.append(""); sections.append(_emit_body_parts_ref(wcid, body_parts, armor=armor))
+    sections.append(""); sections.append(_emit_body_parts_ref(wcid, body_parts, level=level))
     sections.append(""); sections.append(_emit_attributes(wcid, attrs))
     sections.append(""); sections.append(_emit_vitals(wcid, health, stamina, mana))
     sections.append(""); sections.append(_emit_skills(wcid, skill_rows))
@@ -545,13 +545,14 @@ def _npc_base_sql(wcid: int, name: str, class_name: str, filename: str,
     sections = [_file_header(filename), ""]
     sections.append(_emit_header(wcid, name, 10))
 
+    npc_level = 275   # also drives this NPC's body-part armor/damage scaling
     int_rows = [
         (1,   16,       "ItemType - Creature"),
         (2,   31,       "CreatureType - Human"),
         (6,   -1,       "ItemsCapacity"),
         (7,   -1,       "ContainersCapacity"),
         (16,  32,       "ItemUseable - Remote"),
-        (25,  275,      "Level"),
+        (25,  npc_level, "Level"),
         (93,  6292504,  "PhysicsState - ReportCollisions, IgnoreCollisions, Gravity, ReportCollisionsAsEnvironment, EdgeSlide"),
         (95,  8,        "RadarBlipColor - Yellow"),
         (113, 1,        "Gender - Male"),
@@ -654,7 +655,7 @@ def _npc_base_sql(wcid: int, name: str, class_name: str, filename: str,
     sections.append(""); sections.append(_emit_str_props(wcid, str_rows))
     sections.append(""); sections.append(_emit_did_props(wcid, did_rows))
     sections.append(""); sections.append(_emit_body_parts_ref(
-        wcid, return_body_keys if return_body_keys else body_parts, armor=250))
+        wcid, return_body_keys if return_body_keys else body_parts, level=npc_level))
     sections.append(""); sections.append(_emit_attributes(wcid, attrs))
     sections.append(""); sections.append(_emit_vitals(wcid, 326, 456, 396))
     sections.append(""); sections.append(_emit_skills(wcid, skill_rows))

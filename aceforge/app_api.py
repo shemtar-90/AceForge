@@ -1727,6 +1727,13 @@ Start with: /* ===== FILE: {fname} ===== */
         """
         import re, json as _json
 
+        # QuestForge's "AI-Written Dialogue" toggle. Absent means on, so the
+        # default stays "rewrite whenever a personality was supplied" — the UI
+        # only sends this key when the user explicitly opts out, in which case
+        # every NPC keeps its fast, generic templated dialogue.
+        if str(params.get("use_ai_dialogue", "yes")).strip().lower() in ("no", "false", "0"):
+            return files
+
         def _slug(name: str) -> str:
             return re.sub(r'[^a-z0-9]+', '_', (name or '').lower()).strip('_')
 
@@ -1757,12 +1764,15 @@ Start with: /* ===== FILE: {fname} ===== */
         def _escape(s):    return s.replace("'", "''")
 
         # Match each NPC-type file to its (name, personality) pair via the
-        # slugified name embedded in the generated filename.
+        # slugified name embedded in the generated filename. Both sides must be
+        # slugified: filenames are "800023 Test Giver.sql" (spaces) while _slug
+        # yields "test_giver" (underscores), so comparing a slug against the raw
+        # lowercased filename never matched and silently disabled every rewrite.
         file_to_npc = {}  # file_idx -> (name, personality)
         for fi, f in enumerate(files):
             if f.get("type") != "npc":
                 continue
-            fname_slug = f["filename"].lower()
+            fname_slug = _slug(f["filename"])
             for name, personality in npc_pairs:
                 if _slug(name) and _slug(name) in fname_slug:
                     file_to_npc[fi] = (name, personality)
