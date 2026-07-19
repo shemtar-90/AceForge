@@ -2541,7 +2541,8 @@ Start with: /* ===== FILE: {fname} ===== */
 
     def _dat_search_folders(self) -> list:
         """Conventional local folders that may hold the DAT set, most-likely
-        first. Includes the OneDrive-redirected Documents (Known-Folder-Move)."""
+        first. Includes the OneDrive-redirected Documents (Known-Folder-Move)
+        and a real client install, which is the canonical retail set."""
         repo_root = Path(__file__).resolve().parent.parent
         folders = [
             repo_root / "dat",
@@ -2553,6 +2554,15 @@ Start with: /* ===== FILE: {fname} ===== */
         onedrive = os.environ.get("OneDrive") or os.environ.get("OneDriveConsumer")
         if onedrive:
             folders.insert(0, Path(onedrive) / "Documents" / "DAT Files")
+        # A client install is the authoritative retail set — prefer it over
+        # loose copies, which are easy to end up with several of.
+        for drive in ("C:", "D:", "E:"):
+            folders.insert(0, Path(f"{drive}/Turbine/Asheron's Call"))
+        # An explicitly chosen DAT folder (e.g. a custom set built in ACME)
+        # outranks every convention.
+        chosen = self.config.get("dat_folder", "")
+        if chosen:
+            folders.insert(0, Path(chosen))
         return folders
 
     def _resolve_dat(self, which: str = "portal") -> str:
@@ -4516,3 +4526,308 @@ Start with: /* ===== FILE: {fname} ===== */
     def ping(self) -> dict:
         """Connectivity test — confirms new code is loaded."""
         return {"ok": True, "version": "2.1.polling", "queue_ready": hasattr(self, "_chunk_queue")}
+
+
+    # ── World Placement — put weenies in the world ───────────────────────────
+    #
+    # Thin delegation to aceforge.world_api; the terrain comes from cell.dat
+    # (landblock_dat) and placements are written to the server's per-landblock
+    # SQL files (landblock). Every method returns {"error": …} rather than
+    # raising so a failure surfaces in the panel instead of killing the bridge.
+
+    def _world_paths(self) -> tuple:
+        """(cell.dat, portal.dat, landblock SQL folder) as currently configured."""
+        from . import world_api
+        sql_dir = self.config.get(world_api.SQL_DIR_KEY, "")
+        return (self._resolve_dat("cell"), self._resolve_dat("portal"), sql_dir)
+
+    def world_status(self) -> dict:
+        """Whether the editor has everything it needs, and what's missing."""
+        try:
+            from . import world_api
+            cell, portal, sql_dir = self._world_paths()
+            # A stored folder with no landblock files in it is never useful —
+            # fall back to discovery rather than leaving the panel stuck.
+            replaced_from = ""
+            if sql_dir and not world_api.describe_sql_dir(sql_dir)["ok"]:
+                replaced_from, sql_dir = sql_dir, ""
+            if not sql_dir:
+                # Desktop/Documents may be OneDrive-redirected (Known Folder
+                # Move), same as the DAT search in _dat_search_folders.
+                # Walk up from the weenie folder first: a server-content repo
+                # usually holds weenies and landblocks as sibling subtrees, so
+                # its root is the highest-signal place to look.
+                hints = []
+                for start in (self.config.output_dir_for("weenie"),
+                              self.config.output_dir):
+                    if not start:
+                        continue
+                    p = Path(start)
+                    hints.append(str(p))
+                    hints += [str(a) for a in list(p.parents)[:5]]
+                roots = [Path.home()]
+                onedrive = os.environ.get("OneDrive") or os.environ.get("OneDriveConsumer")
+                if onedrive:
+                    roots.insert(0, Path(onedrive))
+                for root in roots:
+                    hints += [str(root / "Documents" / "GitHub"),
+                              str(root / "Desktop"), str(root / "Documents")]
+                sql_dir = world_api.guess_sql_dir(hints)
+                if sql_dir:
+                    self.config.set(world_api.SQL_DIR_KEY, sql_dir)
+                    self.config.save()
+                elif replaced_from:
+                    sql_dir = replaced_from        # nothing better — keep theirs
+            # A folder that exists isn't necessarily a *landblock* folder —
+            # report what's actually in it so a wrong pick explains itself.
+            desc = world_api.describe_sql_dir(sql_dir)
+            if replaced_from and desc["ok"]:
+                desc = dict(desc, reason=desc["reason"] + " (auto-corrected — the "
+                            "previous folder held no landblock files)")
+            return {
+                "cellDat": cell, "cellDatOk": bool(cell and Path(cell).exists()),
+                "portalDat": portal, "portalDatOk": bool(portal and Path(portal).exists()),
+                "sqlDir": sql_dir, "sqlDirOk": desc["ok"],
+                "sqlDirReason": desc["reason"],
+                "sqlDirCount": desc.get("count", 0),
+                "sqlDirSuggestions": desc.get("suggestions", []),
+                "ready": all([cell and Path(cell).exists(),
+                              portal and Path(portal).exists(),
+                              desc["ok"]]),
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+    def world_browse_sql_dir(self) -> dict:
+        """Folder picker for the landblock SQL folder."""
+        try:
+            from . import world_api
+            if self._window is None:
+                return {"error": "Window not ready"}
+            result = self._window.create_file_dialog(dialog_type=20)  # FOLDER_DIALOG
+            if not result:
+                return {"cancelled": True}
+            path = str(result[0] if isinstance(result, (list, tuple)) else result)
+            desc = world_api.describe_sql_dir(path)
+            # If they picked a parent (a repo root, say), accept the landblock
+            # folder underneath rather than making them browse again.
+            if not desc["ok"] and desc.get("suggestions"):
+                path = desc["suggestions"][0]
+                desc = world_api.describe_sql_dir(path)
+            self.config.set(world_api.SQL_DIR_KEY, path)
+            self.config.save()
+            return {"path": path, "ok": desc["ok"], "reason": desc["reason"],
+                    "count": desc.get("count", 0)}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def world_set_sql_dir(self, path: str) -> dict:
+        try:
+            from . import world_api
+            self.config.set(world_api.SQL_DIR_KEY, str(path or "").strip())
+            self.config.save()
+            return {"ok": True, "path": self.config.get(world_api.SQL_DIR_KEY, "")}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def world_list_weenies(self) -> dict:
+        """The user's authored weenies, for the placement picker."""
+        try:
+            from . import world_api
+            # output_dir_for() applies the per-type overrides and falls back to
+            # the default; config.get("output_dir") would miss that default.
+            folders = [self.config.output_dir]
+            folders += [self.config.output_dir_for(t)
+                        for t in ("weenie", "quest", "event")]
+            seen, unique = set(), []
+            for f in folders:
+                if f and f not in seen:
+                    seen.add(f); unique.append(f)
+            return {"weenies": world_api.scan_weenies(unique), "folders": unique}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def world_load_landblock(self, landblock: str) -> dict:
+        """Terrain mesh + existing placements for one landblock."""
+        try:
+            from . import world_api
+            cell, portal, sql_dir = self._world_paths()
+            if not (cell and Path(cell).exists()):
+                return {"error": "client_cell_1.dat not found — set it in Settings"}
+            if not (portal and Path(portal).exists()):
+                return {"error": "client_portal.dat not found — set it in Settings"}
+            lb = world_api.parse_landblock_id(landblock)
+            if lb is None:
+                return {"error": f"'{landblock}' is not a landblock id (try C6A9)"}
+            return world_api.load_landblock(cell, portal, sql_dir, lb)
+        except Exception as e:
+            return {"error": str(e)}
+
+    def world_is_enabled(self) -> dict:
+        """Whether the WorldForge tab should be shown at all."""
+        try:
+            return {"enabled": bool(self.config.get("worldforge_enabled", False))}
+        except Exception as e:
+            return {"enabled": False, "error": str(e)}
+
+    def world_set_enabled(self, on: bool) -> dict:
+        """
+        Show or hide the WorldForge tab, persisted to config.
+
+        Kept as an explicit toggle rather than a build flag so the same binary
+        can ship with the feature dark and still be exercised in place.
+        """
+        try:
+            self.config.set("worldforge_enabled", bool(on))
+            self.config.save()
+            return {"enabled": bool(on)}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def world_dat_info(self) -> dict:
+        """
+        Which DAT set is in use and what's in it.
+
+        The counts let a user tell sets apart — a custom set built in ACME will
+        differ from retail in landblock/cell totals, and several byte-identical
+        copies of retail are easy to accumulate.
+        """
+        try:
+            from . import world_api
+            cell, portal, _sql = self._world_paths()
+            info = {"cellDat": cell, "portalDat": portal,
+                    "folder": self.config.get("dat_folder", ""),
+                    "landblocks": 0, "cells": 0, "sizeMB": 0}
+            if cell and Path(cell).exists():
+                info["sizeMB"] = round(Path(cell).stat().st_size / 1048576)
+                db = world_api._dat(cell)
+                info["landblocks"] = sum(1 for f in db.entries if (f & 0xFFFF) == 0xFFFF)
+                info["cells"] = sum(1 for f in db.entries
+                                    if 0x0100 <= (f & 0xFFFF) < 0xFF00)
+            return info
+        except Exception as e:
+            return {"error": str(e)}
+
+    def world_browse_dat_folder(self) -> dict:
+        """
+        Choose the folder holding the DAT set — a client install, or a custom
+        set built in ACME.
+        """
+        try:
+            from . import world_api
+            if self._window is None:
+                return {"error": "Window not ready"}
+            result = self._window.create_file_dialog(dialog_type=20)  # FOLDER_DIALOG
+            if not result:
+                return {"cancelled": True}
+            folder = Path(result[0] if isinstance(result, (list, tuple)) else result)
+            missing = [name for name, _key in self._DAT_FILES.values()
+                       if name in ("client_cell_1.dat", "client_portal.dat")
+                       and not (folder / name).exists()]
+            if missing:
+                return {"error": f"{folder.name} is missing {', '.join(missing)}"}
+            self.config.set("dat_folder", str(folder))
+            # Drop the resolved per-file paths so they re-resolve from the new
+            # folder, and release open handles or we'd keep reading the old set.
+            for _name, key in self._DAT_FILES.values():
+                self.config.set(key, "")
+            self.config.save()
+            world_api.close_dats()
+            return dict({"path": str(folder)}, **self.world_dat_info())
+        except Exception as e:
+            return {"error": str(e)}
+
+    def world_terrain_atlas(self) -> dict:
+        """
+        The 32 terrain textures as one base64 PNG sheet.
+
+        Fetched once per session — the sheet is the same for every landblock.
+        Building it decodes 32 DXT textures (~6 s), so it is cached on disk;
+        subsequent calls are effectively free.
+        """
+        try:
+            from . import world_api
+            from .landblock_dat import build_terrain_atlas, ATLAS_COLS, ATLAS_ROWS
+            _cell, portal, _sql = self._world_paths()
+            if not (portal and Path(portal).exists()):
+                return {"error": "client_portal.dat not found"}
+            png = build_terrain_atlas(world_api._dat(portal), portal)
+            if png is None:
+                return {"error": "Pillow not installed — terrain textures "
+                                 "unavailable, falling back to flat colours"}
+            import base64 as _b64
+            return {"png": _b64.b64encode(png).decode("ascii"),
+                    "cols": ATLAS_COLS, "rows": ATLAS_ROWS,
+                    "bytes": len(png)}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def world_resolve_cell(self, params: dict) -> dict:
+        """Shortlist the interior cells that could contain a point."""
+        try:
+            from . import world_api
+            cell, portal, _sql = self._world_paths()
+            lb = world_api.parse_landblock_id(params.get("landblock"))
+            if lb is None:
+                return {"error": "Missing or invalid landblock"}
+            return world_api.resolve_cell(
+                cell, portal, lb,
+                float(params.get("x")), float(params.get("y")),
+                float(params.get("z")),
+            )
+        except Exception as e:
+            return {"error": str(e)}
+
+    def world_place(self, params: dict) -> dict:
+        """Write a placement into the landblock's SQL file."""
+        try:
+            from . import world_api
+            cell, portal, sql_dir = self._world_paths()
+            lb = world_api.parse_landblock_id(params.get("landblock"))
+            if lb is None:
+                return {"error": "Missing or invalid landblock"}
+            z = params.get("z")
+            return world_api.place_weenie(
+                sql_dir=sql_dir, landblock=lb,
+                wcid=int(params.get("wcid")),
+                x=float(params.get("x")), y=float(params.get("y")),
+                z=None if z in (None, "") else float(z),
+                heading=float(params.get("heading") or 0.0),
+                name=str(params.get("name") or ""),
+                cell=int(params.get("cell") or 0),
+                cell_dat=cell, portal_dat=portal,
+            )
+        except Exception as e:
+            return {"error": str(e)}
+
+    def world_move(self, params: dict) -> dict:
+        """Reposition an existing placement."""
+        try:
+            from . import world_api
+            cell, portal, sql_dir = self._world_paths()
+            lb = world_api.parse_landblock_id(params.get("landblock"))
+            if lb is None:
+                return {"error": "Missing or invalid landblock"}
+            z, heading = params.get("z"), params.get("heading")
+            return world_api.move_instance(
+                sql_dir=sql_dir, landblock=lb,
+                guid=int(params.get("guid")),
+                x=float(params.get("x")), y=float(params.get("y")),
+                z=None if z in (None, "") else float(z),
+                heading=None if heading in (None, "") else float(heading),
+                cell_dat=cell, portal_dat=portal,
+            )
+        except Exception as e:
+            return {"error": str(e)}
+
+    def world_remove(self, params: dict) -> dict:
+        """Delete a placement from the landblock's SQL file."""
+        try:
+            from . import world_api
+            _cell, _portal, sql_dir = self._world_paths()
+            lb = world_api.parse_landblock_id(params.get("landblock"))
+            if lb is None:
+                return {"error": "Missing or invalid landblock"}
+            return world_api.remove_instance(sql_dir, lb, int(params.get("guid")))
+        except Exception as e:
+            return {"error": str(e)}

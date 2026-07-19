@@ -53,6 +53,11 @@ DEFAULT_CONFIG = {
     "event_output_dir":  "",
     "wcid_ranges": DEFAULT_WCID_RANGES,
     "base_wcid_ranges": DEFAULT_BASE_WCID_RANGES,
+    # WorldForge (visual landblock placement) is still in development. The tab
+    # is hidden unless this is true, so the feature can ship dark in a release
+    # that's cut for unrelated fixes. Unlock in-app with Ctrl+Alt+W, or set this
+    # to true by hand in config.json.
+    "worldforge_enabled": False,
 }
 
 

@@ -104,7 +104,7 @@ def _quest_sql(quest_id: int, name: str, min_delta: int, max_solves: int,
     - id included as quoted string
     - All values quoted as strings
     - No last_Modified column
-    - KT flags: max_solves='100', message='kill counter'
+    - KT flags: max_solves=kill_count, message='kill counter'
     - Completion flags: max_solves='1', min_delta=repeat_seconds
     - Permanent flags: max_solves='-1', min_delta='0'
     """
@@ -729,6 +729,20 @@ def _grant_flag_file(flag_name: str) -> dict:
         "type":     "quest_flag",
     }
 
+def _quest_prefix(params: dict, suffix: str) -> str:
+    """Normalize quest_prefix for a template whose flags all end in `suffix`.
+
+    Each template appends its own marker (KT, QT, ...) to build flag names.
+    Authors — and the QuestForge AI especially — routinely name the prefix
+    "SomethingKT" already, which produced flags like "SomethingKTKTTimer".
+    Strip one redundant trailing marker so the prefix is idempotent.
+    """
+    prefix = params["quest_prefix"].replace(" ", "")
+    if suffix and len(prefix) > len(suffix) and prefix.upper().endswith(suffix.upper()):
+        prefix = prefix[:-len(suffix)]
+    return prefix
+
+
 # ── TEMPLATE 1: Kill Task ─────────────────────────────────────────────────────
 
 def generate_kill_task(params: dict, config) -> list[dict]:
@@ -760,7 +774,7 @@ def generate_kill_task(params: dict, config) -> list[dict]:
 
     Returns list of {"filename": str, "sql": str} dicts.
     """
-    prefix       = params["quest_prefix"].replace(" ", "")
+    prefix       = _quest_prefix(params, "KT")
     # For item-based givers the display name comes from item_name; npc_name is
     # optional in that case (and always supplied by the single-quest form).
     npc_name     = (params.get("npc_name") or params.get("item_name") or "Quest Giver")
@@ -776,7 +790,10 @@ def generate_kill_task(params: dict, config) -> list[dict]:
 
     c_level      = _si(params.get("creature_level", ""), 100)
     c_type_label = params.get("creature_type", "Human")
-    kill_count   = _si(params.get("kill_count", ""), 25)
+    # Boss kill tasks are "kill the named thing once" by default; trash mobs are 25.
+    # Either way an explicit Kill Count field always wins.
+    _is_boss     = "Boss" in params.get("is_boss", "")
+    kill_count   = _si(params.get("kill_count", ""), 1 if _is_boss else 25)
     # reward_xp / reward_lum: JS sends these only when toggle is 'yes'
     # Default to 0 when absent (toggle off)
     reward_xp   = _si(params.get("reward_xp", ""), 0)
@@ -806,11 +823,11 @@ def generate_kill_task(params: dict, config) -> list[dict]:
     item_icon     = _parse_icon(params.get("item_icon", ""))
 
     # Mob/Boss toggle — "Boss" means single spawn, 1.8x scale, 3x HP, 900s respawn
-    is_boss_mode = "Boss" in params.get("is_boss", "")
+    is_boss_mode = _is_boss
     has_boss     = False  # old optional named boss field removed
     boss_name    = ""
     boss_level   = int(c_level * 1.5)
-    boss_kills   = 1
+    boss_kills   = _si(params.get("boss_kill_count", ""), 1)
     # Adjust generator/creature for boss mode
     if is_boss_mode:
         spawn_count = 1
@@ -888,12 +905,14 @@ def generate_kill_task(params: dict, config) -> list[dict]:
                 "sql": f"/* ===== FILE: {_capfn(flag_name)}.sql ===== */\n\n{sql}",
                 "type": "quest_flag"}
 
-    files.append(_qf(kt_flag,  kt_quest_id, '0', '100',              'kill counter'))
+    # max_Solves on the KT flag IS the required kill count — must track the
+    # Kill Count field, not a hardcoded 100.
+    files.append(_qf(kt_flag,  kt_quest_id, '0', str(kill_count),    'kill counter'))
     files.append(_qf(kt_timer, '0',          repeat_sec, max_solves_timer, 'kill task timer'))
     files.append(_qf(kt_done,  '0',          '0', '-1',              'kill task completed'))
     if has_boss:
         boss_quest_id = kt_quest_ids["kill_tasks"][1]
-        files.append(_qf(boss_flag, boss_quest_id, '0', '100', 'boss kill counter'))
+        files.append(_qf(boss_flag, boss_quest_id, '0', str(boss_kills), 'boss kill counter'))
     if grant_flag:
         files.append(_grant_flag_file(grant_flag["name"]))
 
@@ -1470,7 +1489,7 @@ def generate_item_turnin(params: dict, config) -> list[dict]:
         try: s=str(val).strip(); return float(s) if s else default
         except: return default
 
-    prefix       = params["quest_prefix"].replace(" ", "")
+    prefix       = _quest_prefix(params, "QT")
     npc_name     = params["npc_name"]
     npc_desc     = params.get("npc_description", npc_name)
     item_name    = params["item_name"]
